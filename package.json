@@ -9,7 +9,7 @@
     "dev:frontend": "cd frontend && npm run dev",
     "seed": "cd backend && node seed.js",
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
-    "electron:dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npx wait-on http://localhost:5173 && npx electron .\"",
+    "electron:dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npx wait-on http://localhost:9173 && npx electron .\"",
     "build:frontend": "cd frontend && npm run build",
     "build": "npm run build:frontend && npx electron-builder --win"
   },

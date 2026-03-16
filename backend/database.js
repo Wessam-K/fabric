@@ -137,11 +137,166 @@ function initializeDatabase() {
       sort_order      INTEGER DEFAULT 0
     );
 
+    -- BOM Variants
+    CREATE TABLE IF NOT EXISTS bom_variants (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      model_id    INTEGER REFERENCES models(id) ON DELETE CASCADE,
+      name        TEXT NOT NULL,
+      is_default  INTEGER DEFAULT 0,
+      notes       TEXT,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS bom_variant_fabrics (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      variant_id       INTEGER REFERENCES bom_variants(id) ON DELETE CASCADE,
+      fabric_code      TEXT REFERENCES fabrics(code),
+      role             TEXT NOT NULL CHECK(role IN ('main','lining')),
+      meters_per_piece REAL NOT NULL,
+      waste_pct        REAL DEFAULT 5,
+      color_note       TEXT,
+      sort_order       INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS bom_variant_accessories (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      variant_id      INTEGER REFERENCES bom_variants(id) ON DELETE CASCADE,
+      accessory_code  TEXT REFERENCES accessories(code),
+      accessory_name  TEXT,
+      quantity        REAL NOT NULL,
+      unit_price      REAL NOT NULL,
+      notes           TEXT
+    );
+
+    -- Production Stages
+    CREATE TABLE IF NOT EXISTS production_stages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      color      TEXT DEFAULT '#3b82f6',
+      is_active  INTEGER DEFAULT 1
+    );
+
+    -- Work Orders
+    CREATE TABLE IF NOT EXISTS work_orders (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_number       TEXT UNIQUE NOT NULL,
+      model_id        INTEGER REFERENCES models(id),
+      variant_id      INTEGER REFERENCES bom_variants(id),
+      quantity         INTEGER NOT NULL,
+      priority        TEXT DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
+      status          TEXT DEFAULT 'draft' CHECK(status IN ('draft','in_progress','completed','cancelled')),
+      current_stage_id INTEGER REFERENCES production_stages(id),
+      assigned_to     TEXT,
+      due_date        TEXT,
+      start_date      TEXT,
+      end_date        TEXT,
+      notes           TEXT,
+      created_at      TEXT DEFAULT (datetime('now')),
+      updated_at      TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS work_order_stages (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_order_id INTEGER REFERENCES work_orders(id) ON DELETE CASCADE,
+      stage_id      INTEGER REFERENCES production_stages(id),
+      status        TEXT DEFAULT 'pending' CHECK(status IN ('pending','in_progress','completed','skipped')),
+      started_at    TEXT,
+      completed_at  TEXT,
+      notes         TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS work_order_fabric_usage (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_order_id INTEGER REFERENCES work_orders(id) ON DELETE CASCADE,
+      fabric_code   TEXT REFERENCES fabrics(code),
+      planned_meters REAL,
+      actual_meters  REAL,
+      notes         TEXT
+    );
+
+    -- Suppliers
+    CREATE TABLE IF NOT EXISTS suppliers (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      code         TEXT UNIQUE NOT NULL,
+      name         TEXT NOT NULL,
+      contact_person TEXT,
+      phone        TEXT,
+      email        TEXT,
+      address      TEXT,
+      type         TEXT DEFAULT 'fabric' CHECK(type IN ('fabric','accessory','both','other')),
+      payment_terms TEXT,
+      rating       INTEGER DEFAULT 3 CHECK(rating BETWEEN 1 AND 5),
+      status       TEXT DEFAULT 'active' CHECK(status IN ('active','inactive')),
+      notes        TEXT,
+      created_at   TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Purchase Orders
+    CREATE TABLE IF NOT EXISTS purchase_orders (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      po_number       TEXT UNIQUE NOT NULL,
+      supplier_id     INTEGER REFERENCES suppliers(id),
+      status          TEXT DEFAULT 'draft' CHECK(status IN ('draft','sent','partial','received','cancelled')),
+      subtotal        REAL DEFAULT 0,
+      tax_pct         REAL DEFAULT 0,
+      discount        REAL DEFAULT 0,
+      total           REAL DEFAULT 0,
+      expected_date   TEXT,
+      received_date   TEXT,
+      notes           TEXT,
+      created_at      TEXT DEFAULT (datetime('now')),
+      updated_at      TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS purchase_order_items (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      po_id           INTEGER REFERENCES purchase_orders(id) ON DELETE CASCADE,
+      item_type       TEXT NOT NULL CHECK(item_type IN ('fabric','accessory')),
+      item_code       TEXT NOT NULL,
+      description     TEXT,
+      quantity        REAL NOT NULL,
+      unit_price      REAL NOT NULL,
+      total           REAL NOT NULL,
+      received_qty    REAL DEFAULT 0,
+      sort_order      INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS supplier_payments (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      supplier_id   INTEGER REFERENCES suppliers(id),
+      po_id         INTEGER REFERENCES purchase_orders(id),
+      amount        REAL NOT NULL,
+      payment_method TEXT DEFAULT 'cash' CHECK(payment_method IN ('cash','bank_transfer','check','other')),
+      reference     TEXT,
+      notes         TEXT,
+      payment_date  TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Schema version tracking
+    CREATE TABLE IF NOT EXISTS schema_version (
+      version     INTEGER PRIMARY KEY,
+      applied_at  TEXT DEFAULT (datetime('now')),
+      description TEXT
+    );
+
     -- Insert default settings if not exist
     INSERT OR IGNORE INTO settings (key, value) VALUES ('masnaiya_default', '90');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('masrouf_default', '50');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('waste_pct_default', '5');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('margin_default', '30');
+
+    -- Insert default production stages if not exist
+    INSERT OR IGNORE INTO production_stages (id, name, sort_order, color) VALUES (1, 'القص', 1, '#3b82f6');
+    INSERT OR IGNORE INTO production_stages (id, name, sort_order, color) VALUES (2, 'الطباعة / التطريز', 2, '#8b5cf6');
+    INSERT OR IGNORE INTO production_stages (id, name, sort_order, color) VALUES (3, 'الخياطة', 3, '#f59e0b');
+    INSERT OR IGNORE INTO production_stages (id, name, sort_order, color) VALUES (4, 'التشطيب', 4, '#10b981');
+    INSERT OR IGNORE INTO production_stages (id, name, sort_order, color) VALUES (5, 'الكي والتغليف', 5, '#06b6d4');
+    INSERT OR IGNORE INTO production_stages (id, name, sort_order, color) VALUES (6, 'مراقبة الجودة', 6, '#ef4444');
+
+    -- Insert schema version
+    INSERT OR IGNORE INTO schema_version (version, description) VALUES (1, 'Initial schema');
+    INSERT OR IGNORE INTO schema_version (version, description) VALUES (2, 'Added BOM variants, work orders, suppliers, purchase orders');
   `);
 }
 

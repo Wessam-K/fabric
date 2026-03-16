@@ -6,7 +6,7 @@ let mainWindow;
 let backendProcess;
 
 const isDev = !app.isPackaged;
-const BACKEND_PORT = 3001;
+const BACKEND_PORT = 9002;
 
 function getBackendPath() {
   if (isDev) {
@@ -67,7 +67,7 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:9173');
   } else {
     mainWindow.loadURL(`http://localhost:${BACKEND_PORT}`);
   }

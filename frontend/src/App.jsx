@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, Printer, BarChart2, FileText } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, Printer, BarChart2, FileText, Factory, Truck, ShoppingCart } from 'lucide-react';
 import Toast from './components/Toast';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -12,18 +12,48 @@ import InvoicePrint from './pages/InvoicePrint';
 import Reports from './pages/Reports';
 import Invoices from './pages/Invoices';
 import InvoiceView from './pages/InvoiceView';
+import WorkOrders from './pages/WorkOrders';
+import WorkOrderDetail from './pages/WorkOrderDetail';
+import Suppliers from './pages/Suppliers';
+import PurchaseOrders from './pages/PurchaseOrders';
 import GlobalSearch from './components/GlobalSearch';
 import { ToastProvider } from './components/Toast';
 
-const navItems = [
-  { path: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
-  { path: '/models', label: 'الموديلات', icon: List },
-  { path: '/models/new', label: '+ موديل جديد', icon: PlusCircle },
-  { path: '/fabrics', label: 'الأقمشة', icon: Scissors },
-  { path: '/accessories', label: 'الاكسسوارات', icon: Gem },
-  { path: '/reports', label: 'التقارير', icon: BarChart2 },
-  { path: '/invoices', label: 'الفواتير', icon: FileText },
-  { path: '/settings', label: 'الإعدادات', icon: Settings },
+const navGroups = [
+  {
+    items: [
+      { path: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: 'الإنتاج',
+    items: [
+      { path: '/models', label: 'الموديلات', icon: List },
+      { path: '/models/new', label: '+ موديل جديد', icon: PlusCircle },
+      { path: '/workorders', label: 'أوامر الإنتاج', icon: Factory },
+    ],
+  },
+  {
+    label: 'المخزون',
+    items: [
+      { path: '/fabrics', label: 'الأقمشة', icon: Scissors },
+      { path: '/accessories', label: 'الاكسسوارات', icon: Gem },
+    ],
+  },
+  {
+    label: 'المالية والموردين',
+    items: [
+      { path: '/invoices', label: 'الفواتير', icon: FileText },
+      { path: '/purchaseorders', label: 'أوامر الشراء', icon: ShoppingCart },
+      { path: '/suppliers', label: 'الموردين', icon: Truck },
+    ],
+  },
+  {
+    items: [
+      { path: '/reports', label: 'التقارير', icon: BarChart2 },
+      { path: '/settings', label: 'الإعدادات', icon: Settings },
+    ],
+  },
 ];
 
 function AppLayout() {
@@ -32,21 +62,28 @@ function AppLayout() {
       <aside className="w-60 bg-[#1a1a2e] flex flex-col shrink-0 no-print">
         <div className="p-5 border-b border-white/10">
           <h1 className="text-xl font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</h1>
-          <p className="text-[10px] text-gray-400 mt-0.5">نظام إدارة المصنع — v2</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">نظام إدارة المصنع — v3</p>
         </div>
         <div className="px-3 pt-2">
           <GlobalSearch />
         </div>
-        <nav className="flex-1 p-3 space-y-1">
-          {navItems.map(item => (
-            <NavLink key={item.path} to={item.path} end={item.path === '/models'}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors ${
-                  isActive ? 'bg-[#c9a84c]/20 text-[#c9a84c]' : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}>
-              <item.icon size={17} />
-              {item.label}
-            </NavLink>
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {navGroups.map((group, gi) => (
+            <div key={gi}>
+              {group.label && (
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider px-4 pt-3 pb-1">{group.label}</p>
+              )}
+              {group.items.map(item => (
+                <NavLink key={item.path} to={item.path} end={item.path === '/models'}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors ${
+                      isActive ? 'bg-[#c9a84c]/20 text-[#c9a84c]' : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    }`}>
+                  <item.icon size={17} />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
       </aside>
@@ -59,6 +96,10 @@ function AppLayout() {
           <Route path="/models/:code/edit" element={<ModelForm />} />
           <Route path="/fabrics" element={<Fabrics />} />
           <Route path="/accessories" element={<Accessories />} />
+          <Route path="/workorders" element={<WorkOrders />} />
+          <Route path="/workorders/:id" element={<WorkOrderDetail />} />
+          <Route path="/suppliers" element={<Suppliers />} />
+          <Route path="/purchaseorders" element={<PurchaseOrders />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/settings" element={<SettingsPage />} />

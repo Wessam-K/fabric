@@ -13,6 +13,8 @@ const TABS = [
   { key: 'by-fabric', label: 'حسب القماش', icon: Scissors },
   { key: 'by-accessory', label: 'حسب الاكسسوار', icon: Package },
   { key: 'costs', label: 'تحليل التكاليف', icon: PieChart },
+  { key: 'workorders', label: 'أوامر الإنتاج', icon: Layers },
+  { key: 'suppliers', label: 'الموردين', icon: DollarSign },
 ];
 
 function KPICard({ label, value, icon: Icon, color }) {
@@ -49,6 +51,8 @@ export default function Reports() {
   const [byFabric, setByFabric] = useState([]);
   const [byAccessory, setByAccessory] = useState([]);
   const [costsData, setCostsData] = useState(null);
+  const [workOrdersData, setWorkOrdersData] = useState(null);
+  const [suppliersData, setSuppliersData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -81,6 +85,12 @@ export default function Reports() {
         } else if (tab === 'costs') {
           const { data } = await axios.get('/api/reports/costs');
           setCostsData(data);
+        } else if (tab === 'workorders') {
+          const { data } = await axios.get('/api/workorders');
+          setWorkOrdersData(data);
+        } else if (tab === 'suppliers') {
+          const { data } = await axios.get('/api/suppliers');
+          setSuppliersData(data);
         }
       } catch { toast.error('فشل تحميل التقرير'); }
       finally { setLoading(false); }
@@ -324,6 +334,101 @@ export default function Reports() {
     );
   };
 
+  const renderWorkOrders = () => {
+    if (!workOrdersData) return null;
+    const orders = workOrdersData.workOrders || [];
+    const totals = workOrdersData.totals || {};
+    if (orders.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد أوامر إنتاج</div>;
+    const statusCounts = { draft: 0, in_progress: 0, completed: 0, cancelled: 0 };
+    orders.forEach(o => { if (statusCounts[o.status] !== undefined) statusCounts[o.status]++; });
+    const pieData = {
+      labels: ['مسودة', 'جاري', 'مكتمل', 'ملغي'],
+      datasets: [{
+        data: [statusCounts.draft, statusCounts.in_progress, statusCounts.completed, statusCounts.cancelled],
+        backgroundColor: ['#94a3b8', '#3b82f6', '#10b981', '#ef4444'],
+      }],
+    };
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard label="إجمالي الأوامر" value={totals.total || 0} icon={Layers} color="bg-blue-50 text-blue-600" />
+          <KPICard label="أوامر نشطة" value={totals.active || 0} icon={TrendingUp} color="bg-amber-50 text-amber-600" />
+          <KPICard label="مكتملة" value={totals.completed || 0} icon={BarChart2} color="bg-green-50 text-green-600" />
+          <KPICard label="إجمالي القطع" value={fmt(totals.total_qty || 0)} icon={Package} color="bg-purple-50 text-purple-600" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">توزيع الحالات</h3>
+            <div className="h-[250px] flex items-center justify-center">
+              <Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} />
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">آخر الأوامر</h3>
+            <div className="space-y-2">
+              {orders.slice(0, 8).map(o => (
+                <div key={o.id} className="flex items-center gap-3 text-sm py-1.5 border-b border-gray-50">
+                  <span className="font-mono text-xs">{o.wo_number}</span>
+                  <span className="flex-1 text-gray-600">{o.model_code}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                    o.status === 'completed' ? 'bg-green-100 text-green-700' :
+                    o.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                  }`}>{o.status === 'completed' ? 'مكتمل' : o.status === 'in_progress' ? 'جاري' : 'مسودة'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSuppliers = () => {
+    const suppliers = Array.isArray(suppliersData) ? suppliersData : [];
+    if (suppliers.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات موردين</div>;
+    const totalOutstanding = suppliers.reduce((s, sup) => s + (sup.balance || 0), 0);
+    const byType = {};
+    suppliers.forEach(s => { byType[s.type || 'other'] = (byType[s.type || 'other'] || 0) + 1; });
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <KPICard label="إجمالي الموردين" value={suppliers.length} icon={Package} color="bg-blue-50 text-blue-600" />
+          <KPICard label="مستحقات معلقة" value={`${fmt(totalOutstanding)} ج`} icon={DollarSign} color="bg-red-50 text-red-600" />
+          <KPICard label="أنواع الموردين" value={Object.keys(byType).length} icon={Layers} color="bg-purple-50 text-purple-600" />
+        </div>
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(suppliers.map(s => ({ code: s.code, name: s.name, type: s.type, balance: s.balance || 0, rating: s.rating })), 'suppliers-report.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الكود</th>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الاسم</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">النوع</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">التقييم</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">الرصيد المستحق</th>
+              </tr>
+            </thead>
+            <tbody>
+              {suppliers.map(s => (
+                <tr key={s.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-3 font-mono text-xs">{s.code}</td>
+                  <td className="px-4 py-3 font-bold">{s.name}</td>
+                  <td className="px-4 py-3 text-center"><span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded">{s.type || '—'}</span></td>
+                  <td className="px-4 py-3 text-center text-amber-500">{'★'.repeat(s.rating || 0)}{'☆'.repeat(5 - (s.rating || 0))}</td>
+                  <td className={`px-4 py-3 text-center font-mono font-bold ${(s.balance || 0) > 0 ? 'text-red-500' : 'text-green-600'}`}>{fmt(s.balance || 0)} ج</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div>
@@ -375,6 +480,8 @@ export default function Reports() {
           {tab === 'by-fabric' && renderByFabric()}
           {tab === 'by-accessory' && renderByAccessory()}
           {tab === 'costs' && renderCosts()}
+          {tab === 'workorders' && renderWorkOrders()}
+          {tab === 'suppliers' && renderSuppliers()}
         </>
       )}
     </div>

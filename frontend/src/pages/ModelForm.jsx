@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Printer, Plus, Camera, FileText, Layers, Package, Scissors, DollarSign } from 'lucide-react';
+import { Save, Printer, Plus, Camera, FileText, Layers, Package, Scissors, DollarSign, GitBranch } from 'lucide-react';
 import axios from 'axios';
 import ImageUpload from '../components/ImageUpload';
 import FabricBlock from '../components/FabricBlock';
 import SizeGrid from '../components/SizeGrid';
 import AccessoryTable from '../components/AccessoryTable';
 import CostPanel from '../components/CostPanel';
+import BomVariantTabs from '../components/BomVariantTabs';
 import useCostCalc from '../hooks/useCostCalc';
 import { useToast } from '../components/Toast';
 
@@ -323,6 +324,17 @@ export default function ModelForm() {
             </h3>
             <AccessoryTable accessories={accessories} accessoriesList={accessoriesList} onChange={setAccessories} />
           </div>
+
+          {/* BOM Variants — FULL WIDTH */}
+          {isEdit && (
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2">
+                <GitBranch size={16} className="text-indigo-500" /> متغيرات BOM
+                <span className="text-[10px] font-normal text-gray-400">نسخ بديلة من الخامات</span>
+              </h3>
+              <BomVariantTabs modelCode={code} fabricsList={fabricsList} accessoriesList={accessoriesList} />
+            </div>
+          )}
 
           {/* Cost Panel — Full width on mobile, visible in main flow */}
           <div className="lg:hidden bg-white rounded-2xl shadow-sm p-5">

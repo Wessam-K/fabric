@@ -2,7 +2,7 @@ const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 
-const BASE = 'http://localhost:3001';
+const BASE = 'http://localhost:9002';
 const UID = Date.now().toString(36).slice(-4);
 
 function request(method, path, body) {

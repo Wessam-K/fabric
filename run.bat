@@ -21,17 +21,17 @@ if not exist "backend\wk-hub.db" (
     cd backend && node seed.js && cd ..
 )
 
-echo Starting backend server on port 3001...
+echo Starting backend server on port 9002...
 start /B cmd /C "cd backend && node server.js"
 
 :: Wait a moment for backend to be ready
 timeout /t 2 /nobreak >nul
 
-echo Starting frontend on port 5173...
+echo Starting frontend on port 9173...
 echo.
 echo ========================================
-echo   Backend:  http://localhost:3001
-echo   Frontend: http://localhost:5173
+echo   Backend:  http://localhost:9002
+echo   Frontend: http://localhost:9173
 echo ========================================
 echo   Press Ctrl+C to stop
 echo ========================================

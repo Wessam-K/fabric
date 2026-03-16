@@ -258,4 +258,123 @@ router.post('/:code/image', upload.single('image'), (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ═══════════════ BOM Variants ═══════════════
+
+// GET /api/models/:code/variants — list variants for a model
+router.get('/:code/variants', (req, res) => {
+  try {
+    const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
+    if (!model) return res.status(404).json({ error: 'Model not found' });
+    const variants = db.prepare('SELECT * FROM bom_variants WHERE model_id=? ORDER BY is_default DESC, id').all(model.id);
+    for (const v of variants) {
+      v.fabrics = db.prepare(`
+        SELECT bvf.*, f.name AS fabric_name, f.price_per_m, f.fabric_type
+        FROM bom_variant_fabrics bvf LEFT JOIN fabrics f ON f.code = bvf.fabric_code
+        WHERE bvf.variant_id=? ORDER BY bvf.sort_order
+      `).all(v.id);
+      v.accessories = db.prepare(`
+        SELECT bva.*, a.name AS registry_name, a.unit AS registry_unit
+        FROM bom_variant_accessories bva LEFT JOIN accessories a ON a.code = bva.accessory_code
+        WHERE bva.variant_id=?
+      `).all(v.id);
+    }
+    res.json(variants);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/models/:code/variants — create a variant
+router.post('/:code/variants', (req, res) => {
+  try {
+    const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
+    if (!model) return res.status(404).json({ error: 'Model not found' });
+    const { name, is_default, notes, fabrics, accessories } = req.body;
+    if (!name) return res.status(400).json({ error: 'Variant name required' });
+
+    const transaction = db.transaction(() => {
+      if (is_default) {
+        db.prepare('UPDATE bom_variants SET is_default=0 WHERE model_id=?').run(model.id);
+      }
+      const r = db.prepare('INSERT INTO bom_variants (model_id,name,is_default,notes) VALUES (?,?,?,?)')
+        .run(model.id, name, is_default ? 1 : 0, notes || null);
+      const variantId = r.lastInsertRowid;
+
+      if (fabrics && Array.isArray(fabrics)) {
+        const ins = db.prepare('INSERT INTO bom_variant_fabrics (variant_id,fabric_code,role,meters_per_piece,waste_pct,color_note,sort_order) VALUES (?,?,?,?,?,?,?)');
+        fabrics.forEach((f, i) => {
+          if (f.fabric_code && f.meters_per_piece) {
+            ins.run(variantId, f.fabric_code, f.role || 'main', parseFloat(f.meters_per_piece), parseFloat(f.waste_pct) || 5, f.color_note || null, i);
+          }
+        });
+      }
+      if (accessories && Array.isArray(accessories)) {
+        const ins = db.prepare('INSERT INTO bom_variant_accessories (variant_id,accessory_code,accessory_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)');
+        accessories.forEach(a => {
+          if (a.quantity && a.unit_price) {
+            ins.run(variantId, a.accessory_code || null, a.accessory_name || null, parseFloat(a.quantity), parseFloat(a.unit_price), a.notes || null);
+          }
+        });
+      }
+      return variantId;
+    });
+
+    const variantId = transaction();
+    const variant = db.prepare('SELECT * FROM bom_variants WHERE id=?').get(variantId);
+    res.status(201).json(variant);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/models/:code/variants/:vid — update a variant
+router.put('/:code/variants/:vid', (req, res) => {
+  try {
+    const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
+    if (!model) return res.status(404).json({ error: 'Model not found' });
+    const variant = db.prepare('SELECT * FROM bom_variants WHERE id=? AND model_id=?').get(req.params.vid, model.id);
+    if (!variant) return res.status(404).json({ error: 'Variant not found' });
+
+    const { name, is_default, notes, fabrics, accessories } = req.body;
+
+    const transaction = db.transaction(() => {
+      if (is_default) {
+        db.prepare('UPDATE bom_variants SET is_default=0 WHERE model_id=?').run(model.id);
+      }
+      db.prepare('UPDATE bom_variants SET name=COALESCE(?,name), is_default=COALESCE(?,is_default), notes=? WHERE id=?')
+        .run(name || null, is_default != null ? (is_default ? 1 : 0) : null, notes ?? variant.notes, variant.id);
+
+      if (fabrics && Array.isArray(fabrics)) {
+        db.prepare('DELETE FROM bom_variant_fabrics WHERE variant_id=?').run(variant.id);
+        const ins = db.prepare('INSERT INTO bom_variant_fabrics (variant_id,fabric_code,role,meters_per_piece,waste_pct,color_note,sort_order) VALUES (?,?,?,?,?,?,?)');
+        fabrics.forEach((f, i) => {
+          if (f.fabric_code && f.meters_per_piece) {
+            ins.run(variant.id, f.fabric_code, f.role || 'main', parseFloat(f.meters_per_piece), parseFloat(f.waste_pct) || 5, f.color_note || null, i);
+          }
+        });
+      }
+      if (accessories && Array.isArray(accessories)) {
+        db.prepare('DELETE FROM bom_variant_accessories WHERE variant_id=?').run(variant.id);
+        const ins = db.prepare('INSERT INTO bom_variant_accessories (variant_id,accessory_code,accessory_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)');
+        accessories.forEach(a => {
+          if (a.quantity && a.unit_price) {
+            ins.run(variant.id, a.accessory_code || null, a.accessory_name || null, parseFloat(a.quantity), parseFloat(a.unit_price), a.notes || null);
+          }
+        });
+      }
+    });
+
+    transaction();
+    res.json({ message: 'Updated' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/models/:code/variants/:vid — delete a variant
+router.delete('/:code/variants/:vid', (req, res) => {
+  try {
+    const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
+    if (!model) return res.status(404).json({ error: 'Model not found' });
+    const variant = db.prepare('SELECT * FROM bom_variants WHERE id=? AND model_id=?').get(req.params.vid, model.id);
+    if (!variant) return res.status(404).json({ error: 'Variant not found' });
+    db.prepare('DELETE FROM bom_variants WHERE id=?').run(variant.id);
+    res.json({ message: 'Deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
