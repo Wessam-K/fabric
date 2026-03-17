@@ -173,12 +173,12 @@ function getFullWO(id) {
   const totalCompleted = wo.stages.reduce((sum, s) => sum + (s.quantity_completed || 0), 0);
   const totalRejected = wo.stages.reduce((sum, s) => sum + (s.quantity_rejected || 0), 0);
   wo.quantity_integrity = {
+    ok: (totalInStages + totalCompleted + totalRejected) === (wo.quantity || 0),
     total_ordered: wo.quantity || 0,
     total_in_stages: totalInStages,
     total_completed: totalCompleted,
     total_rejected: totalRejected,
-    accounted: totalInStages + totalCompleted + totalRejected,
-    balanced: (totalInStages + totalCompleted + totalRejected) === (wo.quantity || 0),
+    difference: (wo.quantity || 0) - (totalInStages + totalCompleted + totalRejected),
   };
 
   return wo;

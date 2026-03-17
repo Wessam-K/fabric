@@ -79,7 +79,11 @@ function StageAdvanceForm({ stage, onAdvance, onCancel }) {
 }
 
 export default function StageChecklist({ stages = [], editable = false, totalQty = 0, onAdvance, onStart, onSkip }) {
-  const [advancingId, setAdvancingId] = useState(null);
+  // Auto-open the first in_progress stage with items
+  const firstActiveId = stages.find(
+    s => s.status === 'in_progress' && (s.quantity_in_stage || 0) > 0
+  )?.id || null;
+  const [advancingId, setAdvancingId] = useState(firstActiveId);
   const [expandedId, setExpandedId] = useState(null);
 
   // Flow summary
@@ -115,7 +119,7 @@ export default function StageChecklist({ stages = [], editable = false, totalQty
         const stageTotal = (stage.quantity_in_stage || 0) + (stage.quantity_completed || 0) + (stage.quantity_rejected || 0);
         const stagePct = stageTotal > 0 ? Math.round(((stage.quantity_completed || 0) / stageTotal) * 100) : 0;
         const canAdvance = editable && stage.status === 'in_progress' && (stage.quantity_in_stage || 0) > 0;
-        const canStart = editable && stage.status === 'pending';
+        const canStart = editable && stage.status === 'pending' && (stage.quantity_in_stage || 0) > 0;
         const isLast = idx === stages.length - 1;
 
         return (

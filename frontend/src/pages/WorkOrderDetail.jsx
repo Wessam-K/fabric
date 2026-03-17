@@ -8,6 +8,28 @@ import StageChecklist from '../components/StageChecklist';
 import CostPanel from '../components/CostPanel';
 
 const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
+
+function ConfirmModal({ open, title, message, confirmLabel = 'تأكيد', confirmClass = 'bg-red-500 hover:bg-red-600', onConfirm, onCancel }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+        <h3 className="text-base font-bold text-[#1a1a2e] mb-2">{title}</h3>
+        <p className="text-sm text-gray-500 mb-5">{message}</p>
+        <div className="flex gap-3 justify-end">
+          <button onClick={onCancel}
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600">
+            إلغاء
+          </button>
+          <button onClick={onConfirm}
+            className={`px-4 py-2 text-white rounded-lg text-sm font-bold ${confirmClass}`}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 const TABS = [
   { key: 'stages', label: 'المراحل / WIP', icon: Layers },
   { key: 'fabrics', label: 'الأقمشة والدفعات', icon: Scissors },
@@ -24,6 +46,12 @@ export default function WorkOrderDetail() {
   const [wo, setWo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('stages');
+  const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null, confirmLabel: 'تأكيد', confirmClass: 'bg-red-500 hover:bg-red-600' });
+  const [logExpanded, setLogExpanded] = useState(false);
+
+  const openConfirm = (title, message, onConfirm, confirmLabel, confirmClass) =>
+    setConfirmModal({ open: true, title, message, onConfirm, confirmLabel: confirmLabel || 'تأكيد', confirmClass: confirmClass || 'bg-red-500 hover:bg-red-600' });
+  const closeConfirm = () => setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
 
   // Expense form
   const [expDesc, setExpDesc] = useState('');
@@ -52,8 +80,10 @@ export default function WorkOrderDetail() {
   const handleStageAdvance = async (advanceData) => {
     try {
       const { data } = await api.patch(`/work-orders/${id}/stage-advance`, advanceData);
-      setWo(data); toast.success(`تم تمرير ${advanceData.qty_to_pass} قطعة`);
-    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+      setWo(data);
+      toast.success(`تم نقل ${advanceData.qty_to_pass} قطعة للمرحلة التالية`
+        + (advanceData.qty_rejected > 0 ? ` • مرفوض: ${advanceData.qty_rejected}` : ''));
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ في النقل'); }
   };
 
   const handleStageStart = async (stageId) => {
@@ -70,17 +100,16 @@ export default function WorkOrderDetail() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
-  const handleStageQty = async (stageId, field, value) => {
-    try {
-      const { data } = await api.patch(`/work-orders/${id}/stage-quantity`, { stage_id: stageId, [field]: parseInt(value) || 0 });
-      setWo(data);
-    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
-  };
-
-  const handleDelete = async () => {
-    if (!confirm('هل أنت متأكد من إلغاء أمر العمل؟')) return;
-    try { await api.delete(`/work-orders/${id}`); toast.success('تم الإلغاء'); navigate('/work-orders'); }
-    catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  const handleDelete = () => {
+    openConfirm(
+      'إلغاء أمر الشغل',
+      `هل أنت متأكد من إلغاء أمر الشغل ${wo?.wo_number}؟ لا يمكن التراجع عن هذا الإجراء.`,
+      async () => {
+        closeConfirm();
+        try { await api.delete(`/work-orders/${id}`); toast.success('تم الإلغاء'); navigate('/work-orders'); }
+        catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+      }
+    );
   };
 
   const handleStatusChange = async (status) => {
@@ -112,10 +141,19 @@ export default function WorkOrderDetail() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
-  const handleFinalize = async () => {
-    if (!confirm('هل أنت متأكد من إنهاء الإنتاج وتسجيل التكلفة النهائية؟')) return;
-    try { const { data } = await api.post(`/work-orders/${id}/finalize`, {}); setWo(data); toast.success('تم إنهاء الإنتاج بنجاح'); }
-    catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  const handleFinalize = () => {
+    openConfirm(
+      'إنهاء الإنتاج',
+      'هل تريد إنهاء الإنتاج وتسجيل التكلفة النهائية؟ لا يمكن التراجع.',
+      async () => {
+        closeConfirm();
+        try { const { data } = await api.post(`/work-orders/${id}/finalize`, {});
+          setWo(data); toast.success('تم إنهاء الإنتاج بنجاح'); }
+        catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+      },
+      'إنهاء الإنتاج',
+      'bg-green-500 hover:bg-green-600'
+    );
   };
 
   if (loading) return <div className="flex items-center justify-center h-96"><div className="animate-spin h-10 w-10 border-4 border-[#c9a84c] border-t-transparent rounded-full" /></div>;
@@ -128,6 +166,9 @@ export default function WorkOrderDetail() {
   const piecesCompleted = wo.pieces_completed || 0;
   const progressPct = totalPieces > 0 ? Math.round((piecesCompleted / totalPieces) * 100) : 0;
   const alreadyInvoiced = (wo.partial_invoices || []).reduce((s, i) => s + (i.pieces_invoiced || 0), 0);
+  const piecesInProgress = (wo.stages || []).reduce((s, st) => s + (st.quantity_in_stage || 0), 0);
+  const piecesRejected = (wo.stages || []).reduce((s, st) => s + (st.quantity_rejected || 0), 0);
+  const piecesNotStarted = Math.max(0, totalPieces - piecesCompleted - piecesInProgress - piecesRejected);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -183,7 +224,7 @@ export default function WorkOrderDetail() {
                 <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">مراحل الإنتاج</h3>
                 <StageChecklist
                   stages={wo.stages || []}
-                  editable={wo.status === 'in_progress'}
+                  editable={['draft', 'pending', 'in_progress'].includes(wo.status)}
                   totalQty={wo.quantity || 0}
                   onAdvance={handleStageAdvance}
                   onStart={handleStageStart}
@@ -191,34 +232,47 @@ export default function WorkOrderDetail() {
                 />
               </div>
               {/* Quantity Integrity */}
-              {wo.quantity_integrity && !wo.quantity_integrity.balanced && (
+              {wo.quantity_integrity && !wo.quantity_integrity.ok && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-xs text-red-600">
                   <AlertTriangle size={14} />
-                  <span>تحذير: الكميات غير متوازنة — إجمالي الأمر: {wo.quantity_integrity.total_ordered}، في المراحل: {wo.quantity_integrity.total_in_stages}، مكتمل: {wo.quantity_integrity.total_completed}، مرفوض: {wo.quantity_integrity.total_rejected}</span>
+                  <span>تحذير: الكميات غير متوازنة — إجمالي الأمر: {wo.quantity_integrity.total_ordered}، في المراحل: {wo.quantity_integrity.total_in_stages}، مكتمل: {wo.quantity_integrity.total_completed}، مرفوض: {wo.quantity_integrity.total_rejected} (فرق: {wo.quantity_integrity.difference})</span>
                 </div>
               )}
               {/* Movement Log */}
               {wo.movement_log?.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm p-5">
-                  <h3 className="text-sm font-bold text-[#1a1a2e] mb-3 flex items-center gap-2"><History size={16} className="text-indigo-500" /> سجل التحركات</h3>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {wo.movement_log.map(log => (
-                      <div key={log.id} className="flex items-start gap-3 text-xs bg-gray-50 rounded-lg p-2">
-                        <div className="flex-1">
-                          <span className="font-bold">{log.from_stage_name}</span>
-                          <span className="text-gray-400 mx-1">←</span>
-                          <span className="font-bold text-blue-600">{log.to_stage_name || 'نهاية'}</span>
-                          <span className="font-mono text-green-600 mx-2">+{log.qty_moved}</span>
-                          {log.qty_rejected > 0 && <span className="font-mono text-red-500">-{log.qty_rejected}</span>}
-                          {log.rejection_reason && <span className="text-gray-400 mr-1">({log.rejection_reason})</span>}
+                <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                  <button onClick={() => setLogExpanded(!logExpanded)}
+                    className="w-full flex items-center justify-between p-4 text-sm font-bold text-[#1a1a2e] hover:bg-gray-50">
+                    <span className="flex items-center gap-2">
+                      <History size={15} className="text-indigo-400" />
+                      سجل حركة الإنتاج ({wo.movement_log.length} سجل)
+                    </span>
+                    <span className="text-gray-400 text-xs">{logExpanded ? '▲ إخفاء' : '▼ عرض'}</span>
+                  </button>
+                  {logExpanded && (
+                    <div className="border-t border-gray-100 divide-y divide-gray-50">
+                      {wo.movement_log.map(log => (
+                        <div key={log.id} className="flex items-start gap-3 text-xs p-3 hover:bg-gray-50">
+                          <div className="flex-1">
+                            <span className="font-bold">{log.from_stage_name}</span>
+                            <span className="text-gray-300 mx-1.5">→</span>
+                            <span className="font-bold text-blue-600">{log.to_stage_name || 'تسليم نهائي'}</span>
+                            <span className="font-mono text-green-600 mx-2">+{log.qty_moved}</span>
+                            {log.qty_rejected > 0 && (
+                              <span className="font-mono text-red-500">
+                                -{log.qty_rejected}
+                                {log.rejection_reason && ` (${log.rejection_reason})`}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-gray-400 text-left whitespace-nowrap shrink-0">
+                            <div className="font-medium">{log.moved_by_name}</div>
+                            <div>{new Date(log.moved_at).toLocaleString('ar-EG')}</div>
+                          </div>
                         </div>
-                        <div className="text-[10px] text-gray-400 text-left whitespace-nowrap">
-                          <div>{log.moved_by_name}</div>
-                          <div>{new Date(log.moved_at).toLocaleString('ar-EG')}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -411,9 +465,30 @@ export default function WorkOrderDetail() {
             <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2">
               <div className="h-full bg-[#c9a84c] rounded-full transition-all" style={{ width: `${progressPct}%` }} />
             </div>
-            <p className="text-xs text-gray-400 text-center">{piecesCompleted} من {totalPieces} قطعة مكتملة ({completedStages}/{totalStages} مراحل)</p>
-            <div className="mt-3 pt-3 border-t border-white/10">
-              <div className="flex justify-between text-sm"><span className="text-gray-400">القطع المكتملة</span><span className="font-mono font-bold">{piecesCompleted} / {totalPieces}</span></div>
+            <p className="text-xs text-gray-400 text-center">{progressPct}% مكتمل</p>
+            <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-400">مكتمل نهائياً</span>
+                <span className="font-mono font-bold text-green-400">{piecesCompleted} / {totalPieces}</span>
+              </div>
+              {piecesInProgress > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">في مراحل التصنيع</span>
+                  <span className="font-mono text-blue-400">{piecesInProgress}</span>
+                </div>
+              )}
+              {piecesRejected > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">مرفوض/هالك</span>
+                  <span className="font-mono text-red-400">{piecesRejected}</span>
+                </div>
+              )}
+              {piecesNotStarted > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">لم يبدأ بعد</span>
+                  <span className="font-mono text-gray-500">{piecesNotStarted}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -456,6 +531,15 @@ export default function WorkOrderDetail() {
           </div>
         </div>
       </div>
+      <ConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        confirmClass={confirmModal.confirmClass}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 }

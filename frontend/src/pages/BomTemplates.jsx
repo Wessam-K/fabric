@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Plus, Save, Trash2, Star, Scissors, Package, Layers } from 'lucide-react';
+import { ArrowRight, Plus, Save, Trash2, Star, Scissors, Package, Layers, DollarSign } from 'lucide-react';
 import api from '../utils/api';
 import FabricBlock from '../components/FabricBlock';
 import SizeGrid from '../components/SizeGrid';
@@ -9,6 +9,49 @@ import { useToast } from '../components/Toast';
 
 const emptyFabric = (role, wastePct = 5) => ({ fabric_code: '', role, meters_per_piece: '', waste_pct: wastePct, color_note: '' });
 const emptySize = () => ({ color_label: '', qty_s: 0, qty_m: 0, qty_l: 0, qty_xl: 0, qty_2xl: 0, qty_3xl: 0 });
+const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
+
+function LiveCostSummary({ mainFabrics, linings, accessories, grandTotal, masnaiya, masrouf, marginPct, fabricsList }) {
+  const lookup = useMemo(() => {
+    const m = {};
+    for (const f of fabricsList) m[f.code] = f;
+    return m;
+  }, [fabricsList]);
+
+  const calcFabricCost = (fabrics) => fabrics.reduce((sum, f) => {
+    if (!f.fabric_code || !f.meters_per_piece) return sum;
+    const reg = lookup[f.fabric_code];
+    const price = reg?.price_per_m || 0;
+    const mpp = parseFloat(f.meters_per_piece) || 0;
+    const waste = parseFloat(f.waste_pct) || 0;
+    const mppWithWaste = mpp * (1 + waste / 100);
+    return sum + mppWithWaste * price * grandTotal;
+  }, 0);
+
+  const mainCost = calcFabricCost(mainFabrics);
+  const liningCost = calcFabricCost(linings);
+  const accCost = accessories.reduce((sum, a) => sum + ((parseFloat(a.quantity) || 0) * (parseFloat(a.unit_price) || 0) * grandTotal), 0);
+  const masCost = (parseFloat(masnaiya) || 0) * grandTotal;
+  const masrCost = (parseFloat(masrouf) || 0) * grandTotal;
+  const total = mainCost + liningCost + accCost + masCost + masrCost;
+  const perPiece = grandTotal > 0 ? total / grandTotal : 0;
+  const margin = parseFloat(marginPct) || 0;
+  const suggested = perPiece * (1 + margin / 100);
+
+  return (
+    <div className="space-y-1.5 text-xs">
+      <div className="flex justify-between"><span className="text-gray-400">قماش أساسي</span><span className="font-mono">{fmt(mainCost)} ج</span></div>
+      <div className="flex justify-between"><span className="text-gray-400">بطانة</span><span className="font-mono">{fmt(liningCost)} ج</span></div>
+      <div className="flex justify-between"><span className="text-gray-400">اكسسوارات</span><span className="font-mono">{fmt(accCost)} ج</span></div>
+      <div className="flex justify-between"><span className="text-gray-400">مصنعية</span><span className="font-mono">{fmt(masCost)} ج</span></div>
+      <div className="flex justify-between"><span className="text-gray-400">مصروف</span><span className="font-mono">{fmt(masrCost)} ج</span></div>
+      <hr className="border-gray-200" />
+      <div className="flex justify-between font-bold text-sm"><span>الإجمالي</span><span className="font-mono text-[#c9a84c]">{fmt(total)} ج</span></div>
+      <div className="flex justify-between"><span className="text-gray-400">تكلفة/قطعة</span><span className="font-mono font-bold">{fmt(perPiece)} ج</span></div>
+      {suggested > 0 && <div className="flex justify-between"><span className="text-gray-400">سعر مقترح</span><span className="font-mono text-green-600">{fmt(suggested)} ج</span></div>}
+    </div>
+  );
+}
 
 export default function BomTemplates() {
   const { code } = useParams();
@@ -30,6 +73,7 @@ export default function BomTemplates() {
   const [sizes, setSizes] = useState([emptySize()]);
   const [accessories, setAccessories] = useState([]);
   const [notes, setNotes] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   // Registry data
   const [fabricsList, setFabricsList] = useState([]);
@@ -147,7 +191,12 @@ export default function BomTemplates() {
   };
 
   const handleDelete = async (tplId) => {
-    if (!confirm('هل أنت متأكد من حذف هذا القالب؟')) return;
+    setConfirmDelete(tplId);
+  };
+
+  const doDelete = async () => {
+    const tplId = confirmDelete;
+    setConfirmDelete(null);
     try {
       await api.delete(`/models/${code}/bom-templates/${tplId}`);
       toast.success('تم الحذف');
@@ -358,6 +407,17 @@ export default function BomTemplates() {
                 </div>
               </div>
             </div>
+
+            {/* Live Cost Summary */}
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              <h4 className="text-xs text-gray-400 mb-3 flex items-center gap-1.5"><DollarSign size={14} className="text-[#c9a84c]" /> التكلفة التقديرية</h4>
+              <LiveCostSummary
+                mainFabrics={mainFabrics} linings={linings}
+                accessories={accessories} grandTotal={grandTotal}
+                masnaiya={masnaiya} masrouf={masrouf} marginPct={marginPct}
+                fabricsList={fabricsList}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -373,6 +433,22 @@ export default function BomTemplates() {
           <Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ القالب'}
         </button>
       </div>
+
+      {/* Confirm Delete Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4 text-center space-y-4">
+            <h3 className="font-bold text-lg">حذف القالب</h3>
+            <p className="text-gray-600 text-sm">هل أنت متأكد من حذف هذا القالب؟ لا يمكن التراجع.</p>
+            <div className="flex gap-2 justify-center">
+              <button onClick={() => setConfirmDelete(null)}
+                className="px-4 py-2 rounded-lg border text-sm hover:bg-gray-50">إلغاء</button>
+              <button onClick={doDelete}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-700">حذف</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
