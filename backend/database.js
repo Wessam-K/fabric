@@ -998,6 +998,93 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (7)`);
   }
+
+  // ═══════════════════════════════════════════════
+  // V8 — Fabric Consumption Tracking, Waste, Partial Invoicing Bridge, PO Variance
+  // ═══════════════════════════════════════════════
+  if (currentVersion < 8) {
+    const addColumnSafe = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch {}
+    };
+
+    // wo_fabric_consumption: actual fabric used per WO, linked to PO batch
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS wo_fabric_consumption (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_order_id INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+        fabric_id INTEGER NOT NULL,
+        fabric_code TEXT,
+        po_id INTEGER REFERENCES purchase_orders(id),
+        po_line_id INTEGER REFERENCES purchase_order_items(id),
+        batch_id INTEGER REFERENCES fabric_inventory_batches(id),
+        planned_meters REAL NOT NULL DEFAULT 0,
+        actual_meters REAL,
+        price_per_meter REAL DEFAULT 0,
+        total_cost REAL DEFAULT 0,
+        notes TEXT,
+        recorded_by_user_id INTEGER REFERENCES users(id),
+        recorded_at TEXT DEFAULT (datetime('now','localtime')),
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // wo_accessory_consumption: actual accessories used per WO
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS wo_accessory_consumption (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_order_id INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+        accessory_id INTEGER NOT NULL,
+        accessory_code TEXT,
+        planned_qty REAL NOT NULL DEFAULT 0,
+        actual_qty REAL,
+        unit_price REAL DEFAULT 0,
+        total_cost REAL DEFAULT 0,
+        recorded_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // wo_waste: per-WO waste record
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS wo_waste (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_order_id INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+        waste_meters REAL NOT NULL DEFAULT 0,
+        price_per_meter REAL NOT NULL DEFAULT 0,
+        waste_cost REAL DEFAULT 0,
+        notes TEXT,
+        recorded_by_user_id INTEGER REFERENCES users(id),
+        recorded_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // wo_invoices bridge: link WO partial invoices to real invoices
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS wo_invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_order_id INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+        invoice_id INTEGER NOT NULL REFERENCES invoices(id),
+        qty_invoiced INTEGER NOT NULL,
+        unit_price REAL NOT NULL,
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // work_orders: new cost columns
+    addColumnSafe('work_orders', 'total_production_cost', 'REAL DEFAULT 0');
+    addColumnSafe('work_orders', 'cost_per_piece', 'REAL DEFAULT 0');
+    addColumnSafe('work_orders', 'waste_cost_per_piece', 'REAL DEFAULT 0');
+    addColumnSafe('work_orders', 'total_invoiced_qty', 'INTEGER DEFAULT 0');
+    addColumnSafe('work_orders', 'completed_by_user_id', 'INTEGER REFERENCES users(id)');
+    addColumnSafe('work_orders', 'waste_cost_total', 'REAL DEFAULT 0');
+
+    // purchase_order_items: variance notes
+    addColumnSafe('purchase_order_items', 'variance_notes', 'TEXT');
+
+    // purchase_orders: received_by_user_id
+    addColumnSafe('purchase_orders', 'received_by_user_id', 'INTEGER REFERENCES users(id)');
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (8)`);
+  }
 }
 
 initializeDatabase();

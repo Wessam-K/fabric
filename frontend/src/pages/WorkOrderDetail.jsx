@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History } from 'lucide-react';
+import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import StatusBadge from '../components/StatusBadge';
@@ -32,6 +32,7 @@ function ConfirmModal({ open, title, message, confirmLabel = 'تأكيد', confi
 }
 const TABS = [
   { key: 'stages', label: 'المراحل / WIP', icon: Layers },
+  { key: 'materials', label: 'المواد والتكلفة', icon: Beaker },
   { key: 'fabrics', label: 'الأقمشة والدفعات', icon: Scissors },
   { key: 'accessories', label: 'الاكسسوارات', icon: Package },
   { key: 'expenses', label: 'المصاريف', icon: DollarSign },
@@ -59,6 +60,12 @@ export default function WorkOrderDetail() {
   // Partial invoice form
   const [invPieces, setInvPieces] = useState('');
   const [invPrice, setInvPrice] = useState('');
+  // V8: Materials & consumption
+  const [consumptionData, setConsumptionData] = useState(null);
+  const [wasteForm, setWasteForm] = useState({ waste_meters: '', price_per_meter: '', notes: '' });
+  const [consumptionForm, setConsumptionForm] = useState({ fabric_code: '', batch_id: '', actual_meters: '', notes: '' });
+  // V8: Create invoice from WO
+  const [invoiceForm, setInvoiceForm] = useState({ qty: '', price: '', customer_name: '', notes: '' });
 
   const load = async () => {
     try {
@@ -69,6 +76,73 @@ export default function WorkOrderDetail() {
   };
 
   useEffect(() => { load(); }, [id]);
+
+  // V8: Load consumption data when materials tab is active
+  const loadConsumption = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/work-orders/${id}/fabric-consumption`);
+      setConsumptionData(data);
+    } catch {}
+  }, [id]);
+
+  useEffect(() => { if (tab === 'materials' && wo) loadConsumption(); }, [tab, wo?.id]);
+
+  // V8: Add fabric consumption
+  const handleAddConsumption = async () => {
+    const { fabric_code, batch_id, actual_meters, notes } = consumptionForm;
+    if (!actual_meters || parseFloat(actual_meters) <= 0) return toast.error('يجب تحديد الكمية');
+    // Determine fabric_id and price from batch
+    let fabric_id = 0;
+    let price = 0;
+    if (batch_id && consumptionData?.available_batches) {
+      for (const batches of Object.values(consumptionData.available_batches)) {
+        const b = batches.find(b => b.batch_id === parseInt(batch_id));
+        if (b) { price = b.price_per_meter; break; }
+      }
+    }
+    // Find fabric by code
+    const fab = (wo.fabrics || []).find(f => f.fabric_code === fabric_code) || (wo.fabric_batches || []).find(f => f.fabric_code === fabric_code);
+    if (fab) fabric_id = fab.id || 0;
+
+    try {
+      const { data } = await api.post(`/work-orders/${id}/fabric-consumption`, {
+        fabric_id, fabric_code, batch_id: batch_id ? parseInt(batch_id) : null,
+        actual_meters: parseFloat(actual_meters), price_per_meter: price, notes
+      });
+      setWo(data);
+      setConsumptionForm({ fabric_code: '', batch_id: '', actual_meters: '', notes: '' });
+      loadConsumption();
+      toast.success('تم تسجيل الاستهلاك');
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
+
+  // V8: Add waste
+  const handleAddWaste = async () => {
+    const { waste_meters, price_per_meter, notes } = wasteForm;
+    if (!waste_meters || parseFloat(waste_meters) <= 0) return toast.error('يجب تحديد كمية الهدر');
+    try {
+      const { data } = await api.post(`/work-orders/${id}/waste`, {
+        waste_meters: parseFloat(waste_meters), price_per_meter: parseFloat(price_per_meter) || 0, notes
+      });
+      setWo(data);
+      setWasteForm({ waste_meters: '', price_per_meter: '', notes: '' });
+      toast.success('تم تسجيل الهدر');
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
+
+  // V8: Create invoice from WO
+  const handleCreateInvoice = async () => {
+    const { qty, price, customer_name, notes } = invoiceForm;
+    if (!qty || parseInt(qty) <= 0) return toast.error('يجب تحديد عدد القطع');
+    try {
+      const { data } = await api.post(`/work-orders/${id}/create-invoice`, {
+        qty_to_invoice: parseInt(qty), unit_price: parseFloat(price) || 0, customer_name, notes
+      });
+      setWo(data.wo);
+      setInvoiceForm({ qty: '', price: '', customer_name: '', notes: '' });
+      toast.success(`تم إصدار فاتورة ${data.invoice_number} لـ ${qty} قطعة`);
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
 
   const handleStageAction = async (stageId, status) => {
     try {
@@ -275,6 +349,122 @@ export default function WorkOrderDetail() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === 'materials' && (
+            <div className="space-y-4">
+              {/* Section 1: Fabric consumption */}
+              <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+                <h3 className="text-sm font-bold text-[#1a1a2e] flex items-center gap-2"><Scissors size={16} className="text-blue-500" /> أقمشة مستخدمة</h3>
+                {/* Existing consumption records */}
+                {(wo.fabric_consumption || []).length > 0 && (
+                  <table className="w-full text-sm">
+                    <thead><tr className="text-xs text-gray-400 border-b"><th className="pb-2 text-right">القماش</th><th className="pb-2 text-center">الدفعة</th><th className="pb-2 text-center">المخطط</th><th className="pb-2 text-center">الفعلي</th><th className="pb-2 text-center">السعر/م</th><th className="pb-2 text-center">التكلفة</th></tr></thead>
+                    <tbody>
+                      {wo.fabric_consumption.map(c => (
+                        <tr key={c.id} className="border-b border-gray-50">
+                          <td className="py-2 text-right">{c.fabric_name || c.fabric_code}</td>
+                          <td className="py-2 text-center text-xs font-mono text-gray-500">{c.batch_code || c.po_number || '—'}</td>
+                          <td className="py-2 text-center font-mono">{fmt(c.planned_meters)}</td>
+                          <td className="py-2 text-center font-mono font-bold">{fmt(c.actual_meters)}</td>
+                          <td className="py-2 text-center font-mono">{fmt(c.price_per_meter)}</td>
+                          <td className="py-2 text-center font-mono text-[#c9a84c] font-bold">{fmt(c.total_cost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {/* Add consumption form */}
+                {['draft', 'pending', 'in_progress'].includes(wo.status) && (
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                    <p className="text-xs text-gray-500 font-bold">إضافة استهلاك قماش</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <select value={consumptionForm.fabric_code} onChange={e => {
+                        setConsumptionForm(f => ({ ...f, fabric_code: e.target.value, batch_id: '' }));
+                      }} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                        <option value="">— القماش —</option>
+                        {[...(wo.fabrics || []).map(f => f.fabric_code), ...(wo.fabric_batches || []).map(f => f.fabric_code)]
+                          .filter((v, i, a) => v && a.indexOf(v) === i)
+                          .map(code => <option key={code} value={code}>{(wo.fabrics || []).find(f => f.fabric_code === code)?.fabric_name || code}</option>)}
+                      </select>
+                      <select value={consumptionForm.batch_id} onChange={e => setConsumptionForm(f => ({ ...f, batch_id: e.target.value }))}
+                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                        <option value="">— الدفعة —</option>
+                        {(consumptionData?.available_batches?.[consumptionForm.fabric_code] || []).map(b => (
+                          <option key={b.batch_id} value={b.batch_id}>{b.po_number || b.batch_code} | {fmt(b.price_per_meter)} ج/م | متاح {fmt(b.available_meters)} م</option>
+                        ))}
+                      </select>
+                      <input type="number" placeholder="الكمية (م)" value={consumptionForm.actual_meters}
+                        onChange={e => setConsumptionForm(f => ({ ...f, actual_meters: e.target.value }))}
+                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-mono text-center" />
+                      <button onClick={handleAddConsumption} className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm"><Plus size={14} className="inline" /> تسجيل</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Waste */}
+              <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+                <h3 className="text-sm font-bold text-[#1a1a2e] flex items-center gap-2"><AlertTriangle size={16} className="text-orange-500" /> هدر القماش</h3>
+                {(wo.waste_records || []).length > 0 && (
+                  <div className="space-y-1">
+                    {wo.waste_records.map(w => (
+                      <div key={w.id} className="flex justify-between text-sm bg-orange-50 rounded-lg px-3 py-2">
+                        <span>{fmt(w.waste_meters)} م × {fmt(w.price_per_meter)} ج/م</span>
+                        <span className="font-mono font-bold text-orange-600">{fmt(w.waste_cost)} ج</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {['draft', 'pending', 'in_progress'].includes(wo.status) && (
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <input type="number" placeholder="كمية الهدر (م)" value={wasteForm.waste_meters}
+                        onChange={e => setWasteForm(f => ({ ...f, waste_meters: e.target.value }))}
+                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-mono text-center" />
+                      <input type="number" placeholder="السعر/م" value={wasteForm.price_per_meter}
+                        onChange={e => setWasteForm(f => ({ ...f, price_per_meter: e.target.value }))}
+                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-mono text-center" />
+                      <button onClick={handleAddWaste} className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm">تسجيل الهدر</button>
+                    </div>
+                    {wasteForm.waste_meters && wasteForm.price_per_meter && (
+                      <p className="text-xs text-gray-500">
+                        تكلفة الهدر: <span className="font-mono font-bold">{fmt(parseFloat(wasteForm.waste_meters) * parseFloat(wasteForm.price_per_meter))}</span> ج
+                        {piecesCompleted > 0 && <> • هدر/قطعة: <span className="font-mono">{fmt(parseFloat(wasteForm.waste_meters) * parseFloat(wasteForm.price_per_meter) / piecesCompleted)}</span> ج</>}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-gray-400">يُضاف تلقائياً لتكلفة القطعة</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3: Cost Summary Card */}
+              <div className="bg-gradient-to-br from-[#1a1a2e] to-[#2a2a4e] rounded-2xl p-5 text-white">
+                <h3 className="text-sm font-bold mb-4">ملخص التكلفة</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-400">تكلفة الأقمشة</span><span className="font-mono">{fmt(wo.total_fabric_consumption_cost || cs.main_fabric_cost + cs.lining_cost)} ج</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">تكلفة الاكسسوار</span><span className="font-mono">{fmt(wo.total_accessory_consumption_cost || cs.accessories_cost)} ج</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">المصنعية</span><span className="font-mono">{fmt(cs.masnaiya_total)} ج</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">المصروف</span><span className="font-mono">{fmt(cs.masrouf_total)} ج</span></div>
+                  <div className="flex justify-between text-orange-400"><span>تكلفة الهدر</span><span className="font-mono">{fmt(wo.total_waste_cost || cs.waste_cost)} ج</span></div>
+                  <hr className="border-white/20" />
+                  {(() => {
+                    const totalFab = wo.total_fabric_consumption_cost || (cs.main_fabric_cost + cs.lining_cost);
+                    const totalAcc = wo.total_accessory_consumption_cost || cs.accessories_cost;
+                    const totalW = wo.total_waste_cost || cs.waste_cost || 0;
+                    const grand = totalFab + totalAcc + cs.masnaiya_total + cs.masrouf_total + totalW + (cs.extra_expenses || 0);
+                    const cpp = piecesCompleted > 0 ? grand / piecesCompleted : cs.cost_per_piece;
+                    return (
+                      <>
+                        <div className="flex justify-between font-bold text-base"><span>إجمالي التكلفة</span><span className="font-mono text-[#c9a84c]">{fmt(grand)} ج</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">القطع المكتملة</span><span className="font-mono font-bold">{piecesCompleted}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">تكلفة القطعة</span><span className="font-mono font-bold text-[#c9a84c]">{fmt(cpp)} ج</span></div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
           )}
 
@@ -510,6 +700,45 @@ export default function WorkOrderDetail() {
               {wo.consumer_price > 0 && <div className="flex justify-between"><span className="text-gray-400">سعر المستهلك</span><span className="font-mono">{fmt(wo.consumer_price)} ج</span></div>}
             </div>
           </div>
+
+          {/* V8: Create Invoice from WO */}
+          {piecesCompleted > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm p-5 space-y-3">
+              <h4 className="text-xs text-gray-400 flex items-center gap-1.5"><FileText size={14} className="text-indigo-500" /> فاتورة جزئية</h4>
+              <div className="text-xs space-y-1">
+                <div className="flex justify-between"><span className="text-gray-400">القطع المكتملة</span><span className="font-mono font-bold">{piecesCompleted}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">القطع المُفوترة</span><span className="font-mono">{wo.total_invoiced_qty || 0}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">متاح للفوترة</span><span className="font-mono font-bold text-green-600">{Math.max(0, piecesCompleted - (wo.total_invoiced_qty || 0))}</span></div>
+              </div>
+              {piecesCompleted > (wo.total_invoiced_qty || 0) && (
+                <div className="space-y-2 pt-2 border-t border-gray-100">
+                  <input type="number" placeholder="عدد القطع" value={invoiceForm.qty}
+                    onChange={e => setInvoiceForm(f => ({ ...f, qty: e.target.value }))}
+                    max={piecesCompleted - (wo.total_invoiced_qty || 0)} min="1"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-mono text-center" />
+                  <input type="number" placeholder="سعر القطعة (ج)" value={invoiceForm.price}
+                    onChange={e => setInvoiceForm(f => ({ ...f, price: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-mono text-center" />
+                  <input type="text" placeholder="العميل" value={invoiceForm.customer_name}
+                    onChange={e => setInvoiceForm(f => ({ ...f, customer_name: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+                  <button onClick={handleCreateInvoice}
+                    className="w-full px-3 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-bold">إصدار الفاتورة</button>
+                </div>
+              )}
+              {/* List existing WO invoices */}
+              {(wo.wo_invoices || []).length > 0 && (
+                <div className="pt-2 border-t border-gray-100 space-y-1">
+                  {wo.wo_invoices.map(inv => (
+                    <div key={inv.id} className="flex justify-between text-xs">
+                      <span className="font-mono text-[#c9a84c]">{inv.invoice_number}</span>
+                      <span className="font-mono">{inv.qty_invoiced} قطعة × {fmt(inv.unit_price)} ج</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Model info */}
           <div className="bg-white rounded-2xl shadow-sm p-5">

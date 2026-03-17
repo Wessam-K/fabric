@@ -120,11 +120,20 @@ export default function PurchaseOrders() {
 
   const handleReceive = async () => {
     if (!showReceive) return;
-    const items = receiveItems.filter(i => parseFloat(i.received_qty) > 0).map(i => ({ item_id: i.item_id, received_qty: parseFloat(i.received_qty) }));
+    const items = receiveItems.filter(i => parseFloat(i.received_qty) > 0).map(i => ({
+      item_id: i.item_id,
+      received_qty: parseFloat(i.received_qty),
+      variance_notes: i.variance_notes || null,
+    }));
     if (items.length === 0) { toast.error('أدخل كمية مستلمة لعنصر واحد على الأقل'); return; }
     try {
       await api.patch(`/purchase-orders/${showReceive.id}/receive`, { items });
-      toast.success('تم تسجيل الاستلام وإنشاء دفعات المخزون');
+      const totalVariance = receiveItems.reduce((s, r) => {
+        const recvd = parseFloat(r.received_qty) || 0;
+        const remain = r.ordered_qty - r.already_received;
+        return s + (remain - recvd);
+      }, 0);
+      toast.success(`تم تسجيل الاستلام${totalVariance !== 0 ? ` • فرق: ${totalVariance > 0 ? '+' : ''}${totalVariance}` : ''}`);
       setShowReceive(null);
       load();
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
@@ -321,21 +330,39 @@ export default function PurchaseOrders() {
             <h3 className="text-lg font-bold text-[#1a1a2e]">استلام بنود — {showReceive.po_number}</h3>
             <p className="text-xs text-gray-400">أدخل الكمية المستلمة لكل بند. سيتم إنشاء دفعات مخزون تلقائياً للأقمشة.</p>
             <div className="space-y-2">
-              {receiveItems.map((item, i) => (
-                <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                  <span className={`text-[10px] px-2 py-0.5 rounded ${item.item_type === 'fabric' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                    {item.item_type === 'fabric' ? 'قماش' : 'اكسسوار'}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold truncate">{item.description}</p>
-                    <p className="text-[10px] text-gray-400">مطلوب: {item.ordered_qty} | مستلم سابقاً: {item.already_received}</p>
+              {receiveItems.map((item, i) => {
+                const remaining = item.ordered_qty - item.already_received;
+                const recvd = parseFloat(item.received_qty) || 0;
+                const variance = recvd > 0 ? recvd - remaining : 0;
+                return (
+                  <div key={i} className="bg-gray-50 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-[10px] px-2 py-0.5 rounded ${item.item_type === 'fabric' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                        {item.item_type === 'fabric' ? 'قماش' : 'اكسسوار'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate">{item.description}</p>
+                        <p className="text-[10px] text-gray-400">مطلوب: {item.ordered_qty} | مستلم سابقاً: {item.already_received} | متبقي: {remaining}</p>
+                      </div>
+                      <input type="number" min="0" step="0.01" placeholder="0"
+                        value={item.received_qty}
+                        onChange={e => setReceiveItems(prev => prev.map((r, idx) => idx === i ? { ...r, received_qty: e.target.value } : r))}
+                        className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-mono text-center focus:border-[#c9a84c] outline-none" />
+                    </div>
+                    {recvd > 0 && variance !== 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold ${variance < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          فرق: {variance > 0 ? '+' : ''}{variance} {item.item_type === 'fabric' ? 'م' : 'قطعة'}
+                        </span>
+                        <input type="text" placeholder="ملاحظات الفرق..."
+                          value={item.variance_notes || ''}
+                          onChange={e => setReceiveItems(prev => prev.map((r, idx) => idx === i ? { ...r, variance_notes: e.target.value } : r))}
+                          className="flex-1 border border-gray-200 rounded px-2 py-1 text-[10px]" />
+                      </div>
+                    )}
                   </div>
-                  <input type="number" min="0" step="0.01" placeholder="0"
-                    value={item.received_qty}
-                    onChange={e => setReceiveItems(prev => prev.map((r, idx) => idx === i ? { ...r, received_qty: e.target.value } : r))}
-                    className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-mono text-center focus:border-[#c9a84c] outline-none" />
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowReceive(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>

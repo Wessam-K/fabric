@@ -160,6 +160,8 @@ router.patch('/:id/receive', (req, res) => {
     const { items, received_date } = req.body;
     if (!items?.length) return res.status(400).json({ error: 'items required' });
 
+    const userId = req.user?.id || null;
+
     const transaction = db.transaction(() => {
       let allFullyReceived = true;
 
@@ -172,8 +174,9 @@ router.patch('/:id/receive', (req, res) => {
 
         const totalReceived = (poItem.received_qty_actual || 0) + receivedQty;
         const variance = totalReceived - poItem.quantity;
-        db.prepare('UPDATE purchase_order_items SET received_qty_actual=?, quantity_variance=? WHERE id=?')
-          .run(totalReceived, variance, poItem.id);
+        const varianceNotes = item.variance_notes || null;
+        db.prepare('UPDATE purchase_order_items SET received_qty_actual=?, quantity_variance=?, variance_notes=COALESCE(?,variance_notes) WHERE id=?')
+          .run(totalReceived, variance, varianceNotes, poItem.id);
 
         if (totalReceived < poItem.quantity) allFullyReceived = false;
 
@@ -191,9 +194,8 @@ router.patch('/:id/receive', (req, res) => {
       }
 
       const newStatus = allFullyReceived ? 'received' : 'partial';
-      const sets = [`status='${newStatus}'`];
-      if (allFullyReceived || newStatus === 'received') sets.push("received_date=COALESCE(received_date,datetime('now'))");
-      db.prepare(`UPDATE purchase_orders SET ${sets.join(',')} WHERE id=?`).run(poId);
+      db.prepare(`UPDATE purchase_orders SET status=?, received_date=COALESCE(received_date,datetime('now','localtime')), received_by_user_id=? WHERE id=?`)
+        .run(newStatus, userId, poId);
     });
 
     transaction();

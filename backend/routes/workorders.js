@@ -154,6 +154,42 @@ function getFullWO(id) {
   // V7: Movement log
   wo.movement_log = db.prepare('SELECT * FROM stage_movement_log WHERE wo_id=? ORDER BY moved_at DESC').all(id);
 
+  // V8: Fabric consumption
+  wo.fabric_consumption = db.prepare(`
+    SELECT wfc.*, f.name as fabric_name, f.color as fabric_color, f.fabric_type,
+      po.po_number, fib.batch_code
+    FROM wo_fabric_consumption wfc
+    LEFT JOIN fabrics f ON f.id = wfc.fabric_id OR f.code = wfc.fabric_code
+    LEFT JOIN purchase_orders po ON po.id = wfc.po_id
+    LEFT JOIN fabric_inventory_batches fib ON fib.id = wfc.batch_id
+    WHERE wfc.work_order_id = ?
+    ORDER BY wfc.created_at
+  `).all(id);
+
+  // V8: Accessory consumption
+  wo.accessory_consumption = db.prepare(`
+    SELECT wac.*, a.name as accessory_name, a.unit as accessory_unit
+    FROM wo_accessory_consumption wac
+    LEFT JOIN accessories a ON a.id = wac.accessory_id OR a.code = wac.accessory_code
+    WHERE wac.work_order_id = ?
+  `).all(id);
+
+  // V8: Waste records
+  wo.waste_records = db.prepare('SELECT * FROM wo_waste WHERE work_order_id=? ORDER BY recorded_at DESC').all(id);
+
+  // V8: WO invoices bridge
+  wo.wo_invoices = db.prepare(`
+    SELECT wi.*, i.invoice_number, i.status as invoice_status, i.total as invoice_total
+    FROM wo_invoices wi LEFT JOIN invoices i ON i.id = wi.invoice_id
+    WHERE wi.work_order_id = ?
+    ORDER BY wi.created_at
+  `).all(id);
+
+  // V8: Consumption cost summaries
+  wo.total_fabric_consumption_cost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_fabric_consumption WHERE work_order_id=?').get(id).v;
+  wo.total_accessory_consumption_cost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_accessory_consumption WHERE work_order_id=?').get(id).v;
+  wo.total_waste_cost = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as v FROM wo_waste WHERE work_order_id=?').get(id).v;
+
   wo.stage_wip_summary = wo.stages.map(s => ({
     stage_id: s.id,
     stage_name: s.stage_name,
@@ -174,6 +210,7 @@ function getFullWO(id) {
   const totalRejected = wo.stages.reduce((sum, s) => sum + (s.quantity_rejected || 0), 0);
   wo.quantity_integrity = {
     ok: (totalInStages + totalCompleted + totalRejected) === (wo.quantity || 0),
+    balanced: (totalInStages + totalCompleted + totalRejected) === (wo.quantity || 0),
     total_ordered: wo.quantity || 0,
     total_in_stages: totalInStages,
     total_completed: totalCompleted,
@@ -593,15 +630,19 @@ router.delete('/:id/expenses/:expId', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/work-orders/:id/finalize — close production
+// POST /api/work-orders/:id/finalize — close production with real cost calculation
 router.post('/:id/finalize', (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
-    if (!wo) return res.status(404).json({ error: 'Not found' });
+    if (!wo) return res.status(404).json({ error: 'أمر العمل غير موجود' });
     const { pieces_produced, extra_notes } = req.body;
+    const userId = req.user?.id || null;
+
+    let warning = null;
 
     const transaction = db.transaction(() => {
+      // Finalize batch statuses
       const batchFabrics = db.prepare('SELECT * FROM wo_fabric_batches WHERE wo_id=?').all(woId);
       for (const bf of batchFabrics) {
         const inv = db.prepare('SELECT available_meters FROM fabric_inventory_batches WHERE id=?').get(bf.batch_id);
@@ -610,12 +651,37 @@ router.post('/:id/finalize', (req, res) => {
         }
       }
 
+      // V8: Calculate real cost from consumption tables
+      const fabricCost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_fabric_consumption WHERE work_order_id=?').get(woId).v;
+      const accessoryCost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_accessory_consumption WHERE work_order_id=?').get(woId).v;
+      const wasteCost = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as v FROM wo_waste WHERE work_order_id=?').get(woId).v;
+
+      // Fall back to calculated cost if no consumption recorded
       const cost = calculateWOCost(woId);
-      db.prepare(`UPDATE work_orders SET status='completed', completed_date=datetime('now'), actual_cost_per_piece=?, pieces_completed=COALESCE(?,pieces_completed), updated_at=datetime('now') WHERE id=?`)
-        .run(cost.cost_per_piece, pieces_produced || null, woId);
+      const useFabricCost = fabricCost > 0 ? fabricCost : (cost.main_fabric_cost + cost.lining_cost);
+      const useAccessoryCost = accessoryCost > 0 ? accessoryCost : cost.accessories_cost;
+
+      if (fabricCost === 0) warning = 'لم يتم تسجيل استهلاك القماش — التكلفة غير دقيقة';
+
+      const masnaiyaTotal = cost.masnaiya_total;
+      const masroufTotal = cost.masrouf_total;
+      const totalCost = useFabricCost + useAccessoryCost + wasteCost + masnaiyaTotal + masroufTotal + cost.extra_expenses;
+      const qty = pieces_produced || wo.pieces_completed || wo.quantity || 0;
+      const costPerPiece = qty > 0 ? totalCost / qty : 0;
+      const wasteCostPerPiece = qty > 0 ? wasteCost / qty : 0;
+
+      const round2 = v => Math.round((v || 0) * 100) / 100;
+
+      db.prepare(`UPDATE work_orders SET 
+        status='completed', completed_date=datetime('now','localtime'),
+        actual_cost_per_piece=?, pieces_completed=COALESCE(?,pieces_completed),
+        total_production_cost=?, cost_per_piece=?, waste_cost_per_piece=?,
+        completed_by_user_id=?, updated_at=datetime('now','localtime')
+        WHERE id=?`)
+        .run(round2(costPerPiece), pieces_produced || null, round2(totalCost), round2(costPerPiece), round2(wasteCostPerPiece), userId, woId);
 
       db.prepare(`INSERT INTO cost_snapshots (wo_id,model_id,total_pieces,total_meters_main,total_meters_lining,main_fabric_cost,lining_cost,accessories_cost,masnaiya,masrouf,waste_cost,extra_expenses,total_cost,cost_per_piece) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(woId, wo.model_id, cost.total_pieces, cost.total_meters_main, cost.total_meters_lining, cost.main_fabric_cost, cost.lining_cost, cost.accessories_cost, cost.masnaiya_total, cost.masrouf_total, cost.waste_cost, cost.extra_expenses, cost.total_cost, cost.cost_per_piece);
+        .run(woId, wo.model_id, qty, cost.total_meters_main, cost.total_meters_lining, round2(useFabricCost), 0, round2(useAccessoryCost), round2(masnaiyaTotal), round2(masroufTotal), round2(wasteCost), round2(cost.extra_expenses), round2(totalCost), round2(costPerPiece));
 
       if (extra_notes) {
         db.prepare("UPDATE work_orders SET notes=COALESCE(notes||'\n'||?,?) WHERE id=?").run(extra_notes, extra_notes, woId);
@@ -623,7 +689,10 @@ router.post('/:id/finalize', (req, res) => {
     });
 
     transaction();
-    res.json(getFullWO(woId));
+    logAudit(req, 'WO_FINALIZED', 'work_order', woId, 'اكتمل الإنتاج');
+    const result = getFullWO(woId);
+    if (warning) result.warning = warning;
+    res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -785,6 +854,242 @@ router.get('/:id/movement-log', (req, res) => {
     const woId = parseInt(req.params.id);
     const logs = db.prepare('SELECT * FROM stage_movement_log WHERE wo_id=? ORDER BY moved_at DESC').all(woId);
     res.json(logs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════
+// V8 — Fabric Consumption Tracking
+// ═══════════════════════════════════════════════
+
+// GET /api/work-orders/:id/fabric-consumption
+router.get('/:id/fabric-consumption', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
+    if (!wo) return res.status(404).json({ error: 'أمر العمل غير موجود' });
+
+    const consumption = db.prepare(`
+      SELECT wfc.*, f.name as fabric_name, f.color as fabric_color, f.fabric_type,
+        po.po_number, fib.batch_code, fib.available_meters as batch_available
+      FROM wo_fabric_consumption wfc
+      LEFT JOIN fabrics f ON f.id = wfc.fabric_id OR f.code = wfc.fabric_code
+      LEFT JOIN purchase_orders po ON po.id = wfc.po_id
+      LEFT JOIN fabric_inventory_batches fib ON fib.id = wfc.batch_id
+      WHERE wfc.work_order_id = ?
+      ORDER BY wfc.created_at
+    `).all(woId);
+
+    // Available PO batches for each fabric in the WO
+    const woFabricCodes = db.prepare(`
+      SELECT DISTINCT fabric_code FROM wo_fabrics WHERE wo_id = ?
+      UNION SELECT DISTINCT fabric_code FROM wo_fabric_batches WHERE wo_id = ?
+    `).all(woId, woId).map(r => r.fabric_code).filter(Boolean);
+
+    const available_batches = {};
+    for (const code of woFabricCodes) {
+      available_batches[code] = db.prepare(`
+        SELECT fib.id as batch_id, fib.batch_code, fib.po_id, fib.price_per_meter,
+          fib.available_meters, fib.received_meters, fib.received_date,
+          po.po_number, s.name as supplier_name
+        FROM fabric_inventory_batches fib
+        LEFT JOIN purchase_orders po ON po.id = fib.po_id
+        LEFT JOIN suppliers s ON s.id = fib.supplier_id
+        WHERE fib.fabric_code = ? AND fib.batch_status = 'available' AND fib.available_meters > 0
+        ORDER BY fib.received_date
+      `).all(code);
+    }
+
+    res.json({ consumption, available_batches });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/work-orders/:id/fabric-consumption
+router.post('/:id/fabric-consumption', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
+    if (!wo) return res.status(404).json({ error: 'أمر العمل غير موجود' });
+    const { fabric_id, fabric_code, po_id, po_line_id, batch_id, planned_meters, actual_meters, price_per_meter, notes } = req.body;
+    if (!fabric_id && !fabric_code) return res.status(400).json({ error: 'يجب تحديد القماش' });
+    if (!actual_meters || actual_meters <= 0) return res.status(400).json({ error: 'يجب تحديد الكمية المستهلكة' });
+
+    // Get price from batch if not provided
+    let price = parseFloat(price_per_meter) || 0;
+    if (!price && batch_id) {
+      const batch = db.prepare('SELECT price_per_meter FROM fabric_inventory_batches WHERE id=?').get(batch_id);
+      if (batch) price = batch.price_per_meter;
+    }
+
+    const totalCost = (parseFloat(actual_meters) || 0) * price;
+    const userId = req.user?.id || null;
+
+    const transaction = db.transaction(() => {
+      db.prepare(`INSERT INTO wo_fabric_consumption (work_order_id, fabric_id, fabric_code, po_id, po_line_id, batch_id, planned_meters, actual_meters, price_per_meter, total_cost, notes, recorded_by_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(woId, fabric_id || 0, fabric_code || null, po_id || null, po_line_id || null, batch_id || null, planned_meters || 0, actual_meters, price, totalCost, notes || null, userId);
+
+      // Update batch used_meters if batch linked
+      if (batch_id) {
+        db.prepare('UPDATE fabric_inventory_batches SET used_meters = used_meters + ? WHERE id=?').run(parseFloat(actual_meters), batch_id);
+        const inv = db.prepare('SELECT available_meters FROM fabric_inventory_batches WHERE id=?').get(batch_id);
+        if (inv && inv.available_meters <= 0) {
+          db.prepare("UPDATE fabric_inventory_batches SET batch_status='depleted' WHERE id=?").run(batch_id);
+        }
+      }
+    });
+    transaction();
+
+    logAudit(req, 'FABRIC_CONSUMPTION', 'work_order', woId, `${actual_meters}م من ${fabric_code || fabric_id}`);
+    res.status(201).json(getFullWO(woId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /api/work-orders/:id/fabric-consumption/:consumptionId
+router.patch('/:id/fabric-consumption/:consumptionId', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const cId = parseInt(req.params.consumptionId);
+    const record = db.prepare('SELECT * FROM wo_fabric_consumption WHERE id=? AND work_order_id=?').get(cId, woId);
+    if (!record) return res.status(404).json({ error: 'سجل الاستهلاك غير موجود' });
+
+    const { actual_meters, price_per_meter, notes } = req.body;
+    const newMeters = actual_meters !== undefined ? parseFloat(actual_meters) : record.actual_meters;
+    const newPrice = price_per_meter !== undefined ? parseFloat(price_per_meter) : record.price_per_meter;
+    const newCost = (newMeters || 0) * (newPrice || 0);
+
+    const transaction = db.transaction(() => {
+      db.prepare('UPDATE wo_fabric_consumption SET actual_meters=?, price_per_meter=?, total_cost=?, notes=COALESCE(?,notes) WHERE id=?')
+        .run(newMeters, newPrice, newCost, notes, cId);
+
+      // Update batch used_meters delta
+      if (record.batch_id && actual_meters !== undefined) {
+        const delta = newMeters - (record.actual_meters || 0);
+        db.prepare('UPDATE fabric_inventory_batches SET used_meters = used_meters + ? WHERE id=?').run(delta, record.batch_id);
+        const inv = db.prepare('SELECT available_meters FROM fabric_inventory_batches WHERE id=?').get(record.batch_id);
+        if (inv && inv.available_meters <= 0) {
+          db.prepare("UPDATE fabric_inventory_batches SET batch_status='depleted' WHERE id=?").run(record.batch_id);
+        } else if (inv) {
+          db.prepare("UPDATE fabric_inventory_batches SET batch_status='available' WHERE id=?").run(record.batch_id);
+        }
+      }
+    });
+    transaction();
+
+    res.json(getFullWO(woId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/work-orders/:id/fabric-consumption/:consumptionId
+router.delete('/:id/fabric-consumption/:consumptionId', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const cId = parseInt(req.params.consumptionId);
+    const record = db.prepare('SELECT * FROM wo_fabric_consumption WHERE id=? AND work_order_id=?').get(cId, woId);
+    if (!record) return res.status(404).json({ error: 'سجل الاستهلاك غير موجود' });
+
+    const transaction = db.transaction(() => {
+      if (record.batch_id && record.actual_meters) {
+        db.prepare('UPDATE fabric_inventory_batches SET used_meters = MAX(0, used_meters - ?) WHERE id=?').run(record.actual_meters, record.batch_id);
+        db.prepare("UPDATE fabric_inventory_batches SET batch_status='available' WHERE id=? AND batch_status='depleted'").run(record.batch_id);
+      }
+      db.prepare('DELETE FROM wo_fabric_consumption WHERE id=?').run(cId);
+    });
+    transaction();
+
+    res.json(getFullWO(woId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════
+// V8 — Waste Tracking
+// ═══════════════════════════════════════════════
+
+// GET /api/work-orders/:id/waste
+router.get('/:id/waste', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const waste = db.prepare('SELECT * FROM wo_waste WHERE work_order_id=? ORDER BY recorded_at DESC').all(woId);
+    res.json(waste);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/work-orders/:id/waste
+router.post('/:id/waste', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
+    if (!wo) return res.status(404).json({ error: 'أمر العمل غير موجود' });
+    const { waste_meters, price_per_meter, notes } = req.body;
+    if (!waste_meters || waste_meters <= 0) return res.status(400).json({ error: 'يجب تحديد كمية الهدر' });
+
+    const price = parseFloat(price_per_meter) || 0;
+    const wasteCost = parseFloat(waste_meters) * price;
+    const userId = req.user?.id || null;
+
+    db.prepare(`INSERT INTO wo_waste (work_order_id, waste_meters, price_per_meter, waste_cost, notes, recorded_by_user_id) VALUES (?,?,?,?,?,?)`)
+      .run(woId, parseFloat(waste_meters), price, wasteCost, notes || null, userId);
+
+    // Update waste_cost_per_piece on WO
+    const totalWaste = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as v FROM wo_waste WHERE work_order_id=?').get(woId).v;
+    const piecesCompleted = wo.pieces_completed || wo.quantity || 1;
+    db.prepare('UPDATE work_orders SET waste_cost_total=?, waste_cost_per_piece=? WHERE id=?')
+      .run(totalWaste, totalWaste / piecesCompleted, woId);
+
+    logAudit(req, 'WASTE_RECORDED', 'work_order', woId, `${waste_meters}م × ${price} = ${wasteCost} ج`);
+    res.status(201).json(getFullWO(woId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════
+// V8 — Partial Invoice from Work Order (creates real invoice)
+// ═══════════════════════════════════════════════
+router.post('/:id/create-invoice', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const wo = db.prepare('SELECT wo.*, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.id=?').get(woId);
+    if (!wo) return res.status(404).json({ error: 'أمر العمل غير موجود' });
+    const { qty_to_invoice, unit_price, customer_name, notes } = req.body;
+    if (!qty_to_invoice || qty_to_invoice <= 0) return res.status(400).json({ error: 'يجب تحديد عدد القطع' });
+
+    const invoiced = wo.total_invoiced_qty || 0;
+    const completed = wo.pieces_completed || 0;
+    const available = completed - invoiced;
+    if (qty_to_invoice > available) {
+      return res.status(400).json({ error: `لا توجد قطع كافية للفوترة (متاح: ${available} قطعة)` });
+    }
+
+    const price = parseFloat(unit_price) || 0;
+    const total = qty_to_invoice * price;
+
+    const transaction = db.transaction(() => {
+      // Generate invoice number
+      const year = new Date().getFullYear();
+      const last = db.prepare("SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1").get(`INV-${year}-%`);
+      let nextNum = 1;
+      if (last) nextNum = (parseInt(last.invoice_number.split('-')[2], 10) || 0) + 1;
+      const invoiceNumber = `INV-${year}-${String(nextNum).padStart(3, '0')}`;
+
+      // Create invoice
+      const inv = db.prepare(`INSERT INTO invoices (invoice_number, customer_name, wo_id, status, subtotal, total, notes) VALUES (?,?,?,'draft',?,?,?)`)
+        .run(invoiceNumber, customer_name || '', woId, total, total, notes || `فاتورة جزئية من أمر العمل ${wo.wo_number}`);
+      const invoiceId = inv.lastInsertRowid;
+
+      // Create invoice line
+      db.prepare(`INSERT INTO invoice_items (invoice_id, description, model_code, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,1)`)
+        .run(invoiceId, `${wo.model_name || wo.model_code || ''} — ${wo.wo_number}`, wo.model_code || '', qty_to_invoice, price, total);
+
+      // Create WO-Invoice bridge
+      db.prepare('INSERT INTO wo_invoices (work_order_id, invoice_id, qty_invoiced, unit_price) VALUES (?,?,?,?)')
+        .run(woId, invoiceId, qty_to_invoice, price);
+
+      // Update WO total_invoiced_qty
+      db.prepare('UPDATE work_orders SET total_invoiced_qty = COALESCE(total_invoiced_qty,0) + ? WHERE id=?').run(qty_to_invoice, woId);
+
+      return { invoice_id: invoiceId, invoice_number: invoiceNumber, qty_invoiced: qty_to_invoice };
+    });
+
+    const result = transaction();
+    logAudit(req, 'INVOICE_FROM_WO', 'work_order', woId, `فاتورة ${result.invoice_number} — ${qty_to_invoice} قطعة`);
+    res.status(201).json({ ...result, wo: getFullWO(woId) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

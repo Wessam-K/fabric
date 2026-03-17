@@ -390,7 +390,7 @@ router.get('/hr-summary', (req, res) => {
   try {
     const totalEmployees = db.prepare("SELECT COUNT(*) as c FROM employees WHERE status='active'").get().c;
     const totalPayroll = db.prepare(`
-      SELECT COALESCE(SUM(pr.net_salary),0) as total FROM payroll_records pr
+      SELECT COALESCE(SUM(pr.net_pay),0) as total FROM payroll_records pr
       JOIN payroll_periods pp ON pp.id=pr.period_id
       WHERE pp.period_month = strftime('%Y-%m','now')
     `).get().total;
@@ -413,6 +413,103 @@ router.get('/hr-summary', (req, res) => {
       dept_breakdown: deptBreakdown,
       type_breakdown: typeBreakdown,
     });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════
+// V8 — Enhanced production-by-stage with WO details
+// ═══════════════════════════════════════════════
+router.get('/production-by-stage-detail', (req, res) => {
+  try {
+    const stages = db.prepare(`
+      SELECT ws.stage_name, st.color,
+        COUNT(DISTINCT ws.wo_id) as wo_count,
+        COALESCE(SUM(ws.quantity_in_stage),0) as total_in_stage,
+        COALESCE(SUM(ws.quantity_completed),0) as total_completed,
+        COALESCE(SUM(ws.quantity_rejected),0) as total_rejected
+      FROM wo_stages ws
+      INNER JOIN work_orders wo ON wo.id=ws.wo_id AND wo.status IN ('in_progress','pending','draft')
+      LEFT JOIN stage_templates st ON st.name=ws.stage_name
+      GROUP BY ws.stage_name
+      ORDER BY MIN(ws.sort_order)
+    `).all();
+
+    for (const stage of stages) {
+      stage.work_orders = db.prepare(`
+        SELECT wo.id, wo.wo_number, m.model_name, m.model_code,
+          ws.quantity_in_stage, ws.quantity_completed, ws.quantity_rejected, ws.status as stage_status
+        FROM wo_stages ws
+        JOIN work_orders wo ON wo.id=ws.wo_id AND wo.status IN ('in_progress','pending','draft')
+        LEFT JOIN models m ON m.id=wo.model_id
+        WHERE ws.stage_name=? AND (ws.quantity_in_stage > 0 OR ws.status='in_progress')
+        ORDER BY wo.wo_number
+      `).all(stage.stage_name);
+    }
+
+    res.json(stages);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// V8 — Production by model
+router.get('/production-by-model', (req, res) => {
+  try {
+    const { search } = req.query;
+    let where = "wo.status != 'cancelled'";
+    const p = [];
+    if (search) { where += " AND (m.model_code LIKE ? OR m.model_name LIKE ?)"; p.push(`%${search}%`, `%${search}%`); }
+
+    const rows = db.prepare(`
+      SELECT m.id as model_id, m.model_code, m.model_name, m.category,
+        COUNT(wo.id) as wo_count,
+        COALESCE(SUM(wo.quantity),0) as total_pieces,
+        COALESCE(SUM(wo.pieces_completed),0) as total_completed,
+        COALESCE(SUM(CASE WHEN wo.status='in_progress' THEN 1 ELSE 0 END),0) as in_progress_count,
+        COALESCE(AVG(wo.actual_cost_per_piece),0) as avg_cost_per_piece,
+        MAX(wo.created_at) as last_wo_date,
+        GROUP_CONCAT(DISTINCT wo.wo_number) as wo_numbers
+      FROM work_orders wo
+      JOIN models m ON m.id=wo.model_id
+      WHERE ${where}
+      GROUP BY m.id
+      ORDER BY last_wo_date DESC
+    `).all(...p);
+
+    // For each model, get fabric usage
+    for (const row of rows) {
+      row.fabric_usage = db.prepare(`
+        SELECT DISTINCT f.code as fabric_code, f.name as fabric_name, f.fabric_type
+        FROM wo_fabrics wf
+        JOIN work_orders wo ON wo.id=wf.wo_id AND wo.model_id=?
+        JOIN fabrics f ON f.code=wf.fabric_code
+        UNION
+        SELECT DISTINCT f.code, f.name, f.fabric_type
+        FROM wo_fabric_batches wfb
+        JOIN work_orders wo ON wo.id=wfb.wo_id AND wo.model_id=?
+        JOIN fabrics f ON f.code=wfb.fabric_code
+      `).all(row.model_id, row.model_id);
+    }
+
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// V8 — Fabric consumption by supplier (aggregated)
+router.get('/fabric-consumption-by-supplier', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT s.id as supplier_id, s.name as supplier_name,
+        COUNT(DISTINCT poi.id) as item_count,
+        COALESCE(SUM(poi.received_qty_actual), 0) as total_meters,
+        COALESCE(SUM(poi.received_qty_actual * poi.unit_price), 0) as total_cost
+      FROM purchase_order_items poi
+      JOIN purchase_orders po ON po.id=poi.po_id AND po.status != 'cancelled'
+      JOIN suppliers s ON s.id=po.supplier_id
+      WHERE poi.item_type='fabric'
+      GROUP BY s.id
+      ORDER BY total_cost DESC
+    `).all();
+
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

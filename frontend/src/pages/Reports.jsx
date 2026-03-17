@@ -19,6 +19,8 @@ const TABS = [
   { key: 'production-wip', label: 'خط الإنتاج (WIP)', icon: Factory },
   { key: 'fabric-consumption', label: 'استهلاك الأقمشة', icon: Warehouse },
   { key: 'waste', label: 'تحليل الهدر', icon: AlertTriangle },
+  { key: 'model-production', label: 'إنتاج الموديلات', icon: BarChart2 },
+  { key: 'supplier-consumption', label: 'استهلاك الموردين', icon: Warehouse },
   { key: 'hr', label: 'الموارد البشرية', icon: Users },
   { key: 'pivot', label: 'جدول محوري', icon: Table2 },
 ];
@@ -62,11 +64,14 @@ export default function Reports() {
   const [productionWIP, setProductionWIP] = useState(null);
   const [fabricConsumption, setFabricConsumption] = useState(null);
   const [wasteData, setWasteData] = useState(null);
+  const [modelProductionData, setModelProductionData] = useState(null);
+  const [supplierConsumptionData, setSupplierConsumptionData] = useState(null);
   const [hrData, setHrData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [expandedStages, setExpandedStages] = useState({});
 
   const filterParams = () => {
     const p = {};
@@ -102,7 +107,7 @@ export default function Reports() {
           const { data } = await api.get('/suppliers');
           setSuppliersData(data);
         } else if (tab === 'production-wip') {
-          const { data } = await api.get('/reports/production-by-stage');
+          const { data } = await api.get('/reports/production-by-stage-detail');
           setProductionWIP(data);
         } else if (tab === 'fabric-consumption') {
           const { data } = await api.get('/reports/fabric-consumption');
@@ -110,6 +115,12 @@ export default function Reports() {
         } else if (tab === 'waste') {
           const { data } = await api.get('/reports/waste-analysis');
           setWasteData(data);
+        } else if (tab === 'model-production') {
+          const { data } = await api.get('/reports/production-by-model');
+          setModelProductionData(data);
+        } else if (tab === 'supplier-consumption') {
+          const { data } = await api.get('/reports/fabric-consumption-by-supplier');
+          setSupplierConsumptionData(data);
         } else if (tab === 'hr') {
           const { data } = await api.get('/reports/hr-summary');
           setHrData(data);
@@ -456,10 +467,11 @@ export default function Reports() {
 
   const renderProductionWIP = () => {
     if (!productionWIP || productionWIP.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات إنتاج</div>;
+    const chartStages = productionWIP.map(s => ({ stage_name: s.stage_name, total_in_stage: s.wo_count || 0, total_completed: (s.work_orders || []).filter(w => w.stage_status === 'completed').length }));
     return (
       <div className="space-y-6">
         <div className="flex justify-end">
-          <button onClick={() => downloadCSV(productionWIP, 'production-wip.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+          <button onClick={() => downloadCSV(productionWIP.map(s => ({ stage: s.stage_name, color: s.color, wo_count: s.wo_count })), 'production-wip.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
             <Download size={14} /> تصدير CSV
           </button>
         </div>
@@ -467,35 +479,54 @@ export default function Reports() {
           <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">خط الإنتاج - WIP حسب المرحلة</h3>
           <div className="h-[300px]">
             <Bar data={{
-              labels: productionWIP.map(s => s.stage_name),
+              labels: chartStages.map(s => s.stage_name),
               datasets: [
-                { label: 'في المرحلة', data: productionWIP.map(s => s.total_in_stage || 0), backgroundColor: '#3b82f6', borderRadius: 6 },
-                { label: 'مكتمل', data: productionWIP.map(s => s.total_completed || 0), backgroundColor: '#10b981', borderRadius: 6 },
+                { label: 'عدد الأوامر', data: chartStages.map(s => s.total_in_stage), backgroundColor: '#3b82f6', borderRadius: 6 },
+                { label: 'مكتمل', data: chartStages.map(s => s.total_completed), backgroundColor: '#10b981', borderRadius: 6 },
               ],
             }} options={{ responsive: true, maintainAspectRatio: false, scales: { x: { stacked: false }, y: { beginAtZero: true } } }} />
           </div>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-right text-xs text-gray-500">المرحلة</th>
-                <th className="px-4 py-3 text-center text-xs text-gray-500">عدد الأوامر</th>
-                <th className="px-4 py-3 text-center text-xs text-gray-500">في المرحلة</th>
-                <th className="px-4 py-3 text-center text-xs text-gray-500">مكتمل</th>
-              </tr>
-            </thead>
-            <tbody>
-              {productionWIP.map((s, i) => (
-                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
-                  <td className="px-4 py-3 font-bold">{s.stage_name}</td>
-                  <td className="px-4 py-3 text-center font-mono">{s.wo_count || 0}</td>
-                  <td className="px-4 py-3 text-center font-mono text-blue-600 font-bold">{s.total_in_stage || 0}</td>
-                  <td className="px-4 py-3 text-center font-mono text-green-600 font-bold">{s.total_completed || 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {productionWIP.map((stage, i) => (
+            <div key={i} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <button onClick={() => setExpandedStages(prev => ({ ...prev, [i]: !prev[i] }))}
+                className="w-full flex items-center gap-3 px-5 py-4 hover:bg-gray-50 transition-colors">
+                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: stage.color || '#3b82f6' }} />
+                <span className="font-bold text-sm text-[#1a1a2e] flex-1 text-right">{stage.stage_name}</span>
+                <span className="bg-blue-50 text-blue-700 text-xs font-mono px-2 py-0.5 rounded-full">{stage.wo_count || 0} أمر</span>
+                {expandedStages[i] ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+              </button>
+              {expandedStages[i] && stage.work_orders && stage.work_orders.length > 0 && (
+                <div className="border-t">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-right text-gray-500">رقم الأمر</th>
+                        <th className="px-4 py-2 text-right text-gray-500">الموديل</th>
+                        <th className="px-4 py-2 text-center text-gray-500">الحالة</th>
+                        <th className="px-4 py-2 text-center text-gray-500">إجمالي القطع</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stage.work_orders.map((wo, wi) => (
+                        <tr key={wi} className="border-t border-gray-50 hover:bg-gray-50/50">
+                          <td className="px-4 py-2 font-mono">{wo.wo_number}</td>
+                          <td className="px-4 py-2">{wo.model_code} {wo.model_name ? `- ${wo.model_name}` : ''}</td>
+                          <td className="px-4 py-2 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${wo.stage_status === 'completed' ? 'bg-green-100 text-green-700' : wo.stage_status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                              {wo.stage_status === 'completed' ? 'مكتمل' : wo.stage_status === 'in_progress' ? 'جاري' : wo.stage_status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-center font-mono">{wo.quantity_in_stage || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -648,6 +679,120 @@ export default function Reports() {
     );
   };
 
+  const renderModelProduction = () => {
+    if (!modelProductionData || modelProductionData.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات إنتاج للموديلات</div>;
+    const chartData = {
+      labels: modelProductionData.slice(0, 10).map(m => m.model_code),
+      datasets: [{
+        label: 'إجمالي القطع',
+        data: modelProductionData.slice(0, 10).map(m => m.total_pieces || 0),
+        backgroundColor: '#c9a84c',
+        borderRadius: 6,
+      }],
+    };
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(modelProductionData.map(m => ({ model_code: m.model_code, model_name: m.model_name, wo_count: m.wo_count, total_pieces: m.total_pieces, avg_cost_per_piece: m.avg_cost_per_piece })), 'model-production.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">إنتاج الموديلات — إجمالي القطع</h3>
+          <div className="h-[300px]">
+            <Bar data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }} />
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الكود</th>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الاسم</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">عدد الأوامر</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">إجمالي القطع</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">متوسط تكلفة القطعة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">أقمشة مستخدمة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {modelProductionData.map((m, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-3 font-mono text-xs">{m.model_code}</td>
+                  <td className="px-4 py-3 font-bold">{m.model_name || '—'}</td>
+                  <td className="px-4 py-3 text-center font-mono">{m.wo_count || 0}</td>
+                  <td className="px-4 py-3 text-center font-mono font-bold">{m.total_pieces || 0}</td>
+                  <td className="px-4 py-3 text-center font-mono text-[#c9a84c] font-bold">{fmt(m.avg_cost_per_piece)} ج</td>
+                  <td className="px-4 py-3 text-center">
+                    {(m.fabric_usage || []).length > 0 ? (
+                      <div className="flex flex-wrap gap-1 justify-center">
+                        {m.fabric_usage.map((f, fi) => (
+                          <span key={fi} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{f.fabric_name}: {fmt(f.total_meters)}م</span>
+                        ))}
+                      </div>
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSupplierConsumption = () => {
+    if (!supplierConsumptionData || supplierConsumptionData.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات استهلاك موردين</div>;
+    const totalMeters = supplierConsumptionData.reduce((s, r) => s + (r.total_meters || 0), 0);
+    const totalCost = supplierConsumptionData.reduce((s, r) => s + (r.total_cost || 0), 0);
+    const pieData = {
+      labels: supplierConsumptionData.slice(0, 6).map(s => s.supplier_name),
+      datasets: [{
+        data: supplierConsumptionData.slice(0, 6).map(s => s.total_cost || 0),
+        backgroundColor: ['#c9a84c', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#f59e0b'],
+      }],
+    };
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <KPICard label="عدد الموردين" value={supplierConsumptionData.length} icon={Package} color="bg-blue-50 text-blue-600" />
+          <KPICard label="إجمالي الأمتار" value={`${fmt(totalMeters)} م`} icon={Scissors} color="bg-green-50 text-green-600" />
+          <KPICard label="إجمالي التكلفة" value={`${fmt(totalCost)} ج`} icon={DollarSign} color="bg-amber-50 text-amber-600" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">توزيع التكلفة حسب المورد</h3>
+            <div className="h-[280px] flex items-center justify-center">
+              <Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} />
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-right text-xs text-gray-500">المورد</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">عدد الأصناف</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">إجمالي الأمتار</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">إجمالي التكلفة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {supplierConsumptionData.map((s, i) => (
+                  <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                    <td className="px-4 py-3 font-bold">{s.supplier_name}</td>
+                    <td className="px-4 py-3 text-center font-mono">{s.item_count || 0}</td>
+                    <td className="px-4 py-3 text-center font-mono">{fmt(s.total_meters)} م</td>
+                    <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(s.total_cost)} ج</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div>
@@ -704,6 +849,8 @@ export default function Reports() {
           {tab === 'production-wip' && renderProductionWIP()}
           {tab === 'fabric-consumption' && renderFabricConsumption()}
           {tab === 'waste' && renderWaste()}
+          {tab === 'model-production' && renderModelProduction()}
+          {tab === 'supplier-consumption' && renderSupplierConsumption()}
           {tab === 'hr' && renderHR()}
           {tab === 'pivot' && <PivotTable />}
         </>
