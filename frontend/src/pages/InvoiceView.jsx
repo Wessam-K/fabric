@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Printer, ArrowRight, Send, CheckCircle, Download, Share2, Copy, Check } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 
 const STATUS_MAP = {
   draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-600' },
@@ -21,7 +21,7 @@ export default function InvoiceView() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    axios.get(`/api/invoices/${id}`)
+    api.get(`/invoices/${id}`)
       .then(r => setInvoice(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));

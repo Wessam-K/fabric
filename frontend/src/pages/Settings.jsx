@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, GripVertical, Factory } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
 const FIELDS = [
@@ -20,8 +20,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     Promise.all([
-      axios.get('/api/settings'),
-      axios.get('/api/settings/stages'),
+      api.get('/settings'),
+      api.get('/settings/stages'),
     ])
       .then(([settingsRes, stagesRes]) => {
         setSettings(settingsRes.data);
@@ -34,7 +34,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { data } = await axios.put('/api/settings', settings);
+      const { data } = await api.put('/settings', settings);
       setSettings(data);
       toast.success('تم حفظ الإعدادات بنجاح');
     } catch { toast.error('فشل حفظ الإعدادات'); }
@@ -44,9 +44,9 @@ export default function SettingsPage() {
   const addStage = async () => {
     if (!newStage.trim()) return;
     try {
-      await axios.post('/api/settings/stages', { name: newStage.trim() });
+      await api.post('/settings/stages', { name: newStage.trim() });
       setNewStage('');
-      const { data } = await axios.get('/api/settings/stages');
+      const { data } = await api.get('/settings/stages');
       setStages(data);
       toast.success('تمت إضافة المرحلة');
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
@@ -55,8 +55,8 @@ export default function SettingsPage() {
   const deleteStage = async (id) => {
     if (!confirm('حذف هذه المرحلة؟')) return;
     try {
-      await axios.delete(`/api/settings/stages/${id}`);
-      const { data } = await axios.get('/api/settings/stages');
+      await api.delete(`/settings/stages/${id}`);
+      const { data } = await api.get('/settings/stages');
       setStages(data);
       toast.success('تم الحذف');
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
@@ -64,16 +64,16 @@ export default function SettingsPage() {
 
   const toggleStage = async (stage) => {
     try {
-      await axios.put(`/api/settings/stages/${stage.id}`, { is_active: stage.is_active ? 0 : 1 });
-      const { data } = await axios.get('/api/settings/stages');
+      await api.put(`/settings/stages/${stage.id}`, { is_default: stage.is_default ? 0 : 1 });
+      const { data } = await api.get('/settings/stages');
       setStages(data);
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
   const updateStageColor = async (stage, color) => {
     try {
-      await axios.put(`/api/settings/stages/${stage.id}`, { color });
-      const { data } = await axios.get('/api/settings/stages');
+      await api.put(`/settings/stages/${stage.id}`, { color });
+      const { data } = await api.get('/settings/stages');
       setStages(data);
     } catch { /* */ }
   };
@@ -134,10 +134,10 @@ export default function SettingsPage() {
               <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: stage.color || '#3b82f6' }} />
               <input type="color" value={stage.color || '#3b82f6'} onChange={e => updateStageColor(stage, e.target.value)}
                 className="w-6 h-6 rounded cursor-pointer border-0 p-0" title="تغيير اللون" />
-              <span className={`flex-1 text-sm font-bold ${stage.is_active ? 'text-[#1a1a2e]' : 'text-gray-400 line-through'}`}>{stage.name}</span>
+              <span className={`flex-1 text-sm font-bold ${stage.is_default ? 'text-[#1a1a2e]' : 'text-gray-400 line-through'}`}>{stage.name}</span>
               <button onClick={() => toggleStage(stage)}
-                className={`text-[10px] px-2 py-1 rounded ${stage.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
-                {stage.is_active ? 'مفعّل' : 'معطّل'}
+                className={`text-[10px] px-2 py-1 rounded ${stage.is_default ? 'bg-green-50 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
+                {stage.is_default ? 'مفعّل' : 'معطّل'}
               </button>
               <button onClick={() => deleteStage(stage.id)} className="text-red-400 hover:text-red-600">
                 <Trash2 size={14} />

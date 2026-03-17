@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, FileText, DollarSign, Clock, CheckCircle, AlertTriangle, Send, X, Eye, Pencil, Trash2, Download, Filter } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
 const STATUS_MAP = {
@@ -35,7 +35,7 @@ export default function Invoices() {
       if (statusFilter) params.status = statusFilter;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
-      const { data } = await axios.get('/api/invoices', { params });
+      const { data } = await api.get('/invoices', { params });
       setInvoices(data.invoices);
       setTotals(data.totals);
     } catch { toast.error('فشل تحميل الفواتير'); }
@@ -46,7 +46,7 @@ export default function Invoices() {
 
   const updateStatus = async (id, status) => {
     try {
-      await axios.patch(`/api/invoices/${id}/status`, { status });
+      await api.patch(`/invoices/${id}/status`, { status });
       toast.success('تم تحديث الحالة');
       load();
     } catch { toast.error('فشل التحديث'); }
@@ -55,7 +55,7 @@ export default function Invoices() {
   const deleteInvoice = async (id) => {
     if (!confirm('هل تريد حذف هذه الفاتورة؟')) return;
     try {
-      await axios.delete(`/api/invoices/${id}`);
+      await api.delete(`/invoices/${id}`);
       toast.success('تم حذف الفاتورة');
       load();
     } catch { toast.error('فشل الحذف'); }
@@ -224,9 +224,9 @@ function InvoiceForm({ invoice, onClose, onSaved }) {
 
   useEffect(() => {
     if (!invoice) {
-      axios.get('/api/invoices/next-number').then(r => setNumber(r.data.next_number));
+      api.get('/invoices/next-number').then(r => setNumber(r.data.next_number));
     }
-    axios.get('/api/models').then(r => setModels(r.data));
+    api.get('/models').then(r => setModels(r.data));
   }, []);
 
   const subtotal = items.reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0), 0);
@@ -268,10 +268,10 @@ function InvoiceForm({ invoice, onClose, onSaved }) {
         items: items.filter(i => i.description),
       };
       if (invoice) {
-        await axios.put(`/api/invoices/${invoice.id}`, payload);
+        await api.put(`/invoices/${invoice.id}`, payload);
         toast.success('تم تحديث الفاتورة');
       } else {
-        await axios.post('/api/invoices', payload);
+        await api.post('/invoices', payload);
         toast.success('تم إنشاء الفاتورة');
       }
       onSaved();

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, X, Camera, ArrowUpDown } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
 const TYPES = [
@@ -36,7 +36,7 @@ export default function Fabrics() {
       const params = {};
       if (search) params.search = search;
       if (filterType) params.type = filterType;
-      const { data } = await axios.get('/api/fabrics', { params });
+      const { data } = await api.get('/fabrics', { params });
       setFabrics(data);
     } catch { toast.error('فشل تحميل الأقمشة'); }
     finally { setLoading(false); }
@@ -68,10 +68,10 @@ export default function Fabrics() {
       Object.keys(form).forEach(k => { if (form[k]) fd.append(k, form[k]); });
       if (imageFile) fd.append('image', imageFile);
       if (editing) {
-        await axios.put(`/api/fabrics/${editing}`, fd);
+        await api.put(`/fabrics/${editing}`, fd);
         toast.success('تم التحديث');
       } else {
-        await axios.post('/api/fabrics', fd);
+        await api.post('/fabrics', fd);
         toast.success('تمت الإضافة');
       }
       setDrawerOpen(false);
@@ -84,7 +84,7 @@ export default function Fabrics() {
   const handleDelete = async (code) => {
     if (!confirm('إلغاء تفعيل هذا القماش؟')) return;
     try {
-      await axios.delete(`/api/fabrics/${code}`);
+      await api.delete(`/fabrics/${code}`);
       toast.success('تم إلغاء التفعيل');
       fetchFabrics();
     } catch { toast.error('فشل'); }

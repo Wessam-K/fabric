@@ -1,18 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scissors, Gem, List, TrendingUp, Factory, Truck, ShoppingCart, DollarSign } from 'lucide-react';
-import axios from 'axios';
+import { Scissors, Gem, List, TrendingUp, Factory, Truck, ShoppingCart, DollarSign, Users, Clock, AlertTriangle, Shield } from 'lucide-react';
+import api from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user, hasRole } = useAuth();
   const [data, setData] = useState(null);
+  const [hrData, setHrData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axios.get('/api/dashboard')
-      .then(r => setData(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const load = async () => {
+      try {
+        const { data: d } = await api.get('/dashboard');
+        setData(d);
+        if (hasRole('superadmin', 'hr', 'manager')) {
+          const { data: hr } = await api.get('/reports/hr-summary');
+          setHrData(hr);
+        }
+      } catch {}
+      finally { setLoading(false); }
+    };
+    load();
   }, []);
 
   if (loading) {
@@ -27,18 +38,20 @@ export default function Dashboard() {
     { label: 'الموديلات', value: data?.total_models ?? 0, icon: List, color: 'bg-blue-50 text-blue-600', path: '/models' },
     { label: 'الأقمشة', value: data?.total_fabrics ?? 0, icon: Scissors, color: 'bg-green-50 text-green-600', path: '/fabrics' },
     { label: 'الاكسسوارات', value: data?.total_accessories ?? 0, icon: Gem, color: 'bg-purple-50 text-purple-600', path: '/accessories' },
-    { label: 'متوسط تكلفة القطعة', value: `${(data?.avg_cost_per_piece || 0).toLocaleString('ar-EG')} ج`, icon: TrendingUp, color: 'bg-amber-50 text-amber-600' },
-    { label: 'أوامر إنتاج نشطة', value: data?.active_work_orders ?? 0, icon: Factory, color: 'bg-orange-50 text-orange-600', path: '/workorders' },
-    { label: 'أوامر شراء معلقة', value: data?.pending_pos ?? 0, icon: ShoppingCart, color: 'bg-teal-50 text-teal-600', path: '/purchaseorders' },
+    { label: 'الفواتير', value: data?.total_invoices ?? 0, icon: TrendingUp, color: 'bg-amber-50 text-amber-600', path: '/invoices' },
+    { label: 'أوامر إنتاج نشطة', value: data?.active_work_orders ?? 0, icon: Factory, color: 'bg-orange-50 text-orange-600', path: '/work-orders' },
+    { label: 'مكتمل هذا الشهر', value: data?.completed_this_month ?? 0, icon: ShoppingCart, color: 'bg-teal-50 text-teal-600', path: '/work-orders' },
     { label: 'الموردين', value: data?.total_suppliers ?? 0, icon: Truck, color: 'bg-indigo-50 text-indigo-600', path: '/suppliers' },
     { label: 'مستحقات الموردين', value: `${(data?.outstanding_payables || 0).toLocaleString('ar-EG')} ج`, icon: DollarSign, color: 'bg-red-50 text-red-600' },
   ];
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-[#1a1a2e]">لوحة التحكم</h2>
-        <p className="text-xs text-gray-400 mt-0.5">نظرة عامة على المصنع</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-[#1a1a2e]">لوحة التحكم</h2>
+          <p className="text-xs text-gray-400 mt-0.5">مرحباً {user?.full_name} — نظرة عامة على المصنع</p>
+        </div>
       </div>
 
       {/* Stat Cards */}
@@ -54,6 +67,32 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* HR Quick Stats (for HR/Admin roles) */}
+      {hrData && hasRole('superadmin', 'hr', 'manager') && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div onClick={() => navigate('/hr/employees')} className="bg-white rounded-2xl shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-cyan-50 text-cyan-600 mb-3"><Users size={20} /></div>
+            <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{hrData.total_employees}</p>
+            <p className="text-xs text-gray-400 mt-0.5">الموظفين</p>
+          </div>
+          <div onClick={() => navigate('/hr/payroll')} className="bg-white rounded-2xl shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-600 mb-3"><DollarSign size={20} /></div>
+            <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{(hrData.total_payroll || 0).toLocaleString('ar-EG')}</p>
+            <p className="text-xs text-gray-400 mt-0.5">رواتب الشهر</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-pink-50 text-pink-600 mb-3"><TrendingUp size={20} /></div>
+            <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{(hrData.avg_salary || 0).toLocaleString('ar-EG')}</p>
+            <p className="text-xs text-gray-400 mt-0.5">متوسط الراتب</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gray-100 text-gray-600 mb-3"><Shield size={20} /></div>
+            <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{hrData.dept_breakdown?.length || 0}</p>
+            <p className="text-xs text-gray-400 mt-0.5">الأقسام</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Models */}
@@ -93,7 +132,7 @@ export default function Dashboard() {
             <div className="space-y-3">
               {data.recent_work_orders.map(wo => (
                 <div key={wo.id}
-                  onClick={() => navigate(`/workorders/${wo.id}`)}
+                  onClick={() => navigate(`/work-orders/${wo.id}`)}
                   className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
                     wo.status === 'completed' ? 'bg-green-50 text-green-600' :
@@ -106,7 +145,10 @@ export default function Dashboard() {
                       <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{wo.wo_number}</span>
                       <span className="text-sm font-bold text-[#1a1a2e]">{wo.model_code}</span>
                     </div>
-                    <p className="text-xs text-gray-500 truncate">{wo.model_name || ''} • {wo.quantity || 0} قطعة</p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {wo.model_name || ''}
+                      {wo.stages_total > 0 && ` • ${wo.stages_done || 0}/${wo.stages_total} مراحل`}
+                    </p>
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                     wo.status === 'completed' ? 'bg-green-100 text-green-700' :

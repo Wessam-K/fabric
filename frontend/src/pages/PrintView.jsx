@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../utils/api';
 
 const SIZES = ['qty_s', 'qty_m', 'qty_l', 'qty_xl', 'qty_2xl', 'qty_3xl'];
 const SIZE_LABELS = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
@@ -8,17 +8,24 @@ const SIZE_LABELS = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
 export default function PrintView() {
   const { code } = useParams();
   const [model, setModel] = useState(null);
-  const [cost, setCost] = useState(null);
+  const [tmpl, setTmpl] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axios.get(`/api/models/${code}`)
-      .then(r => {
-        setModel(r.data);
-        setCost(r.data.cost_summary);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const load = async () => {
+      try {
+        const { data: m } = await api.get(`/models/${code}`);
+        setModel(m);
+        // Find default BOM template
+        const defTmpl = (m.bom_templates || []).find(t => t.is_default) || (m.bom_templates || [])[0];
+        if (defTmpl) {
+          const { data: full } = await api.get(`/models/${code}/bom-templates/${defTmpl.id}`);
+          setTmpl(full);
+        }
+      } catch {}
+      finally { setLoading(false); }
+    };
+    load();
   }, [code]);
 
   useEffect(() => {
@@ -31,10 +38,12 @@ export default function PrintView() {
   if (!model) return <div className="flex items-center justify-center h-screen"><p>الموديل غير موجود</p></div>;
 
   const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const mainFabrics = (model.fabrics || []).filter(f => f.role === 'main');
-  const linings = (model.fabrics || []).filter(f => f.role === 'lining');
+  const mainFabrics = (tmpl?.fabrics || []).filter(f => f.role === 'main');
+  const linings = (tmpl?.fabrics || []).filter(f => f.role === 'lining');
+  const sizes = tmpl?.sizes || [];
+  const accessories = tmpl?.accessories || [];
   const rowTotal = (row) => SIZES.reduce((s, k) => s + (parseInt(row[k]) || 0), 0);
-  const grandTotal = (model.sizes || []).reduce((s, row) => s + rowTotal(row), 0);
+  const grandTotal = sizes.reduce((s, row) => s + rowTotal(row), 0);
 
   return (
     <div dir="rtl" className="max-w-4xl mx-auto p-6 text-sm font-[Cairo] print:p-2 print:text-xs">
@@ -87,7 +96,7 @@ export default function PrintView() {
                 <tr key={i} className="border-t border-gray-200">
                   <td className="px-2 py-1.5 font-mono text-xs">[{f.fabric_code}] {f.fabric_name || ''}</td>
                   <td className="px-2 py-1.5 text-center font-mono">{f.meters_per_piece}</td>
-                  <td className="px-2 py-1.5 text-center font-mono">{f.registry_price} ج</td>
+                  <td className="px-2 py-1.5 text-center font-mono">{f.price_per_m} ج</td>
                   <td className="px-2 py-1.5 text-center font-mono">{f.waste_pct}%</td>
                   <td className="px-2 py-1.5 text-center">{f.color_note || '—'}</td>
                 </tr>
@@ -114,7 +123,7 @@ export default function PrintView() {
                 <tr key={i} className="border-t border-gray-200">
                   <td className="px-2 py-1.5 font-mono text-xs">[{f.fabric_code}] {f.fabric_name || ''}</td>
                   <td className="px-2 py-1.5 text-center font-mono">{f.meters_per_piece}</td>
-                  <td className="px-2 py-1.5 text-center font-mono">{f.registry_price} ج</td>
+                  <td className="px-2 py-1.5 text-center font-mono">{f.price_per_m} ج</td>
                   <td className="px-2 py-1.5 text-center">{f.color_note || '—'}</td>
                 </tr>
               ))}
@@ -124,7 +133,7 @@ export default function PrintView() {
       )}
 
       {/* Size Grid */}
-      {model.sizes?.length > 0 && (
+      {sizes.length > 0 && (
         <div className="mb-6">
           <h3 className="font-bold text-[#1a1a2e] border-b border-gray-300 pb-1 mb-2">جدول المقاسات</h3>
           <table className="w-full border-collapse">
@@ -136,7 +145,7 @@ export default function PrintView() {
               </tr>
             </thead>
             <tbody>
-              {model.sizes.map((row, i) => (
+              {sizes.map((row, i) => (
                 <tr key={i} className="border-t border-gray-200">
                   <td className="px-2 py-1.5">{row.color_label}</td>
                   {SIZES.map(k => <td key={k} className="px-2 py-1.5 text-center font-mono">{row[k] || 0}</td>)}
@@ -149,7 +158,7 @@ export default function PrintView() {
                 <td className="px-2 py-1.5">إجمالي القص</td>
                 {SIZES.map(k => (
                   <td key={k} className="px-2 py-1.5 text-center font-mono">
-                    {model.sizes.reduce((s, row) => s + (parseInt(row[k]) || 0), 0)}
+                    {sizes.reduce((s, row) => s + (parseInt(row[k]) || 0), 0)}
                   </td>
                 ))}
                 <td className="px-2 py-1.5 text-center font-mono text-lg">{grandTotal}</td>
@@ -160,7 +169,7 @@ export default function PrintView() {
       )}
 
       {/* Accessories */}
-      {model.accessories?.length > 0 && (
+      {accessories.length > 0 && (
         <div className="mb-6">
           <h3 className="font-bold text-[#1a1a2e] border-b border-gray-300 pb-1 mb-2">الاكسسوارات</h3>
           <table className="w-full border-collapse">
@@ -173,9 +182,9 @@ export default function PrintView() {
               </tr>
             </thead>
             <tbody>
-              {model.accessories.map((a, i) => (
+              {accessories.map((a, i) => (
                 <tr key={i} className="border-t border-gray-200">
-                  <td className="px-2 py-1.5">{a.accessory_code ? `[${a.accessory_code}] ` : ''}{a.accessory_name || a.registry_name || ''}</td>
+                  <td className="px-2 py-1.5">{a.accessory_code ? `[${a.accessory_code}] ` : ''}{a.name || a.registry_name || ''}</td>
                   <td className="px-2 py-1.5 text-center font-mono">{a.quantity}</td>
                   <td className="px-2 py-1.5 text-center font-mono">{a.unit_price} ج</td>
                   <td className="px-2 py-1.5 text-center font-mono font-bold">{fmt((a.quantity||0) * (a.unit_price||0))}</td>
@@ -187,26 +196,15 @@ export default function PrintView() {
       )}
 
       {/* Cost Summary */}
-      {cost && (
+      {tmpl && (
         <div className="mb-6 border-2 border-[#1a1a2e] rounded-xl p-4">
-          <h3 className="font-bold text-[#1a1a2e] mb-3">ملخص التكلفة</h3>
+          <h3 className="font-bold text-[#1a1a2e] mb-3">ملخص التكلفة (قالب: {tmpl.template_name})</h3>
           <div className="grid grid-cols-2 gap-y-2 text-sm">
-            <span className="text-gray-500">تكلفة القماش الأساسي:</span><span className="font-mono text-left">{fmt(cost.main_fabric_cost)} ج</span>
-            <span className="text-gray-500">تكلفة البطانة:</span><span className="font-mono text-left">{fmt(cost.lining_cost)} ج</span>
-            <span className="text-gray-500">تكلفة الاكسسوارات:</span><span className="font-mono text-left">{fmt(cost.accessories_cost)} ج</span>
-            <span className="text-gray-500">المصنعية:</span><span className="font-mono text-left">{fmt(cost.masnaiya)} ج</span>
-            <span className="text-gray-500">المصروف:</span><span className="font-mono text-left">{fmt(cost.masrouf)} ج</span>
-            <div className="col-span-2 border-t border-gray-300 my-1"></div>
-            <span className="font-bold text-[#1a1a2e] text-base">إجمالي التكلفة:</span><span className="font-mono font-bold text-left text-base">{fmt(cost.total_cost)} ج</span>
-            <span className="font-bold text-[#c9a84c]">تكلفة القطعة:</span><span className="font-mono font-bold text-[#c9a84c] text-left text-lg">{fmt(cost.cost_per_piece)} ج</span>
-            <span className="text-gray-500">عدد القطع:</span><span className="font-mono text-left">{cost.grand_total_pieces}</span>
+            <span className="text-gray-500">المصنعية:</span><span className="font-mono text-left">{fmt(tmpl.masnaiya)} ج</span>
+            <span className="text-gray-500">المصروف:</span><span className="font-mono text-left">{fmt(tmpl.masrouf)} ج</span>
+            <span className="text-gray-500">هامش الربح:</span><span className="font-mono text-left">{tmpl.margin_pct || 0}%</span>
+            <span className="text-gray-500">عدد القطع:</span><span className="font-mono text-left">{grandTotal}</span>
           </div>
-          {(model.consumer_price || model.wholesale_price) && (
-            <div className="border-t border-gray-300 mt-3 pt-3 grid grid-cols-2 gap-y-2">
-              {model.consumer_price && <><span className="text-gray-500">سعر المستهلك:</span><span className="font-mono font-bold text-left">{fmt(model.consumer_price)} ج</span></>}
-              {model.wholesale_price && <><span className="text-gray-500">سعر الجملة:</span><span className="font-mono font-bold text-left">{fmt(model.wholesale_price)} ج</span></>}
-            </div>
-          )}
         </div>
       )}
 

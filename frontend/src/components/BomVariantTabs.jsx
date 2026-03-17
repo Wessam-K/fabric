@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Star, Copy, ChevronDown, ChevronUp } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { useToast } from './Toast';
 
 export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList }) {
@@ -15,7 +15,7 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
   const load = async () => {
     if (!modelCode) { setLoading(false); return; }
     try {
-      const { data } = await axios.get(`/api/models/${modelCode}/variants`);
+      const { data } = await api.get(`/models/${modelCode}/variants`);
       setVariants(data);
       if (data.length > 0 && !active) setActive(data[0].id);
     } catch { /* ignore if model is new */ }
@@ -27,7 +27,7 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
   const createVariant = async () => {
     if (!newName.trim()) { toast.error('اسم المتغير مطلوب'); return; }
     try {
-      await axios.post(`/api/models/${modelCode}/variants`, {
+      await api.post(`/models/${modelCode}/variants`, {
         name: newName.trim(),
         is_default: variants.length === 0,
         fabrics: [],
@@ -43,7 +43,7 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
   const deleteVariant = async (vid) => {
     if (!confirm('حذف هذا المتغير؟')) return;
     try {
-      await axios.delete(`/api/models/${modelCode}/variants/${vid}`);
+      await api.delete(`/models/${modelCode}/variants/${vid}`);
       toast.success('تم الحذف');
       if (active === vid) setActive(null);
       load();
@@ -52,7 +52,7 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
 
   const setDefault = async (vid) => {
     try {
-      await axios.put(`/api/models/${modelCode}/variants/${vid}`, { is_default: true });
+      await api.put(`/models/${modelCode}/variants/${vid}`, { is_default: true });
       toast.success('تم التعيين كافتراضي');
       load();
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
@@ -64,7 +64,7 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
     if (!activeVariant) return;
     const fabrics = [...(activeVariant.fabrics || []), { fabric_code: '', role: 'main', meters_per_piece: '', waste_pct: '5', color_note: '' }];
     try {
-      await axios.put(`/api/models/${modelCode}/variants/${active}`, { fabrics: fabrics.filter(f => f.fabric_code && f.meters_per_piece) });
+      await api.put(`/models/${modelCode}/variants/${active}`, { fabrics: fabrics.filter(f => f.fabric_code && f.meters_per_piece) });
       load();
     } catch { /* */ }
   };
@@ -73,7 +73,7 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
     if (!activeVariant) return;
     const accs = [...(activeVariant.accessories || []), { accessory_code: '', accessory_name: '', quantity: '', unit_price: '' }];
     try {
-      await axios.put(`/api/models/${modelCode}/variants/${active}`, { accessories: accs.filter(a => a.quantity && a.unit_price) });
+      await api.put(`/models/${modelCode}/variants/${active}`, { accessories: accs.filter(a => a.quantity && a.unit_price) });
       load();
     } catch { /* */ }
   };
@@ -81,7 +81,7 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
   const saveVariantItems = async (fabrics, accessories) => {
     if (!active) return;
     try {
-      await axios.put(`/api/models/${modelCode}/variants/${active}`, { fabrics, accessories });
+      await api.put(`/models/${modelCode}/variants/${active}`, { fabrics, accessories });
       toast.success('تم الحفظ');
       load();
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }

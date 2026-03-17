@@ -14,6 +14,28 @@ code, .font-mono { font-family: 'JetBrains Mono', monospace; }
 input[type="number"] { -moz-appearance: textfield; }
 input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
+/* Smoother scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c9a84c40; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #c9a84c80; }
+
+/* Sidebar nav scrollbar */
+aside ::-webkit-scrollbar-thumb { background: #ffffff15; }
+aside ::-webkit-scrollbar-thumb:hover { background: #ffffff30; }
+
+/* Selection highlight */
+::selection { background: #c9a84c30; color: inherit; }
+
+/* Focus ring consistency */
+*:focus-visible { outline: 2px solid #c9a84c; outline-offset: 2px; border-radius: 8px; }
+
+/* Table row hover transitions */
+tbody tr { transition: background-color 0.15s ease; }
+
+/* Smooth transitions for interactive elements */
+button, a, input, select, textarea { transition: all 0.15s ease; }
+
 @media print {
   .no-print { display: none !important; }
   body { background: white; }

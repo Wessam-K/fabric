@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, ShoppingCart, Truck, Clock, CheckCircle, DollarSign } from 'lucide-react';
-import axios from 'axios';
+import { Plus, Search, ShoppingCart, Truck, Clock, CheckCircle, DollarSign, Package } from 'lucide-react';
+import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
 const STATUS_MAP = {
@@ -28,13 +28,17 @@ export default function PurchaseOrders() {
   const emptyItem = { item_type: 'fabric', item_code: '', description: '', quantity: '', unit_price: '' };
   const [form, setForm] = useState({ po_number: '', supplier_id: '', tax_pct: '0', discount: '0', expected_date: '', notes: '', items: [{ ...emptyItem }] });
 
+  // Receive workflow
+  const [showReceive, setShowReceive] = useState(null);
+  const [receiveItems, setReceiveItems] = useState([]);
+
   const load = async () => {
     setLoading(true);
     try {
       const params = {};
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
-      const { data } = await axios.get('/api/purchaseorders', { params });
+      const { data } = await api.get('/purchase-orders', { params });
       setOrders(data.orders);
       setTotals(data.totals);
     } catch { toast.error('فشل تحميل أوامر الشراء'); }
@@ -46,10 +50,10 @@ export default function PurchaseOrders() {
   const openCreate = async () => {
     try {
       const [supRes, nextRes, fabRes, accRes] = await Promise.all([
-        axios.get('/api/suppliers'),
-        axios.get('/api/purchaseorders/next-number'),
-        axios.get('/api/fabrics'),
-        axios.get('/api/accessories'),
+        api.get('/suppliers'),
+        api.get('/purchase-orders/next-number'),
+        api.get('/fabrics'),
+        api.get('/accessories'),
       ]);
       setSuppliers(supRes.data);
       setFabrics(fabRes.data);
@@ -84,7 +88,7 @@ export default function PurchaseOrders() {
   const handleCreate = async () => {
     if (!form.po_number || !form.supplier_id) { toast.error('رقم الأمر والمورد مطلوبان'); return; }
     try {
-      await axios.post('/api/purchaseorders', form);
+      await api.post('/purchase-orders', form);
       toast.success('تم إنشاء أمر الشراء');
       setShowCreate(false);
       load();
@@ -93,8 +97,35 @@ export default function PurchaseOrders() {
 
   const updateStatus = async (id, status) => {
     try {
-      await axios.patch(`/api/purchaseorders/${id}/status`, { status });
+      await api.patch(`/purchase-orders/${id}/status`, { status });
       toast.success('تم تحديث الحالة');
+      load();
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
+
+  const openReceive = async (poId) => {
+    try {
+      const { data } = await api.get(`/purchase-orders/${poId}`);
+      setShowReceive(data);
+      setReceiveItems((data.items || []).map(item => ({
+        item_id: item.id,
+        description: item.fabric_name || item.accessory_name || item.description || '',
+        item_type: item.item_type,
+        ordered_qty: item.quantity,
+        already_received: item.received_qty_actual || 0,
+        received_qty: '',
+      })));
+    } catch { toast.error('فشل تحميل بيانات أمر الشراء'); }
+  };
+
+  const handleReceive = async () => {
+    if (!showReceive) return;
+    const items = receiveItems.filter(i => parseFloat(i.received_qty) > 0).map(i => ({ item_id: i.item_id, received_qty: parseFloat(i.received_qty) }));
+    if (items.length === 0) { toast.error('أدخل كمية مستلمة لعنصر واحد على الأقل'); return; }
+    try {
+      await api.patch(`/purchase-orders/${showReceive.id}/receive`, { items });
+      toast.success('تم تسجيل الاستلام وإنشاء دفعات المخزون');
+      setShowReceive(null);
       load();
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
@@ -178,13 +209,13 @@ export default function PurchaseOrders() {
                     <td className="px-4 py-3 text-center">
                       <span className={`text-[10px] px-2 py-1 rounded-full ${STATUS_MAP[po.status]?.color}`}>{STATUS_MAP[po.status]?.label}</span>
                     </td>
-                    <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(po.total)} ج</td>
+                    <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(po.total_amount)} ج</td>
                     <td className="px-4 py-3 text-center text-xs text-gray-400">{po.expected_date ? new Date(po.expected_date).toLocaleDateString('ar-EG') : '—'}</td>
                     <td className="px-4 py-3 text-center text-xs text-gray-400">{new Date(po.created_at).toLocaleDateString('ar-EG')}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {po.status === 'draft' && <button onClick={() => updateStatus(po.id, 'sent')} className="text-[10px] px-2 py-1 bg-blue-50 text-blue-700 rounded">إرسال</button>}
-                        {po.status === 'sent' && <button onClick={() => updateStatus(po.id, 'received')} className="text-[10px] px-2 py-1 bg-green-50 text-green-700 rounded">استلام</button>}
+                        {(po.status === 'sent' || po.status === 'partial') && <button onClick={() => openReceive(po.id)} className="text-[10px] px-2 py-1 bg-green-50 text-green-700 rounded flex items-center gap-1"><Package size={10} /> استلام</button>}
                         {['draft','sent'].includes(po.status) && <button onClick={() => updateStatus(po.id, 'cancelled')} className="text-[10px] px-2 py-1 bg-red-50 text-red-700 rounded">إلغاء</button>}
                       </div>
                     </td>
@@ -278,6 +309,37 @@ export default function PurchaseOrders() {
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
               <button onClick={handleCreate} className="px-5 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold">إنشاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receive Modal */}
+      {showReceive && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowReceive(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-[#1a1a2e]">استلام بنود — {showReceive.po_number}</h3>
+            <p className="text-xs text-gray-400">أدخل الكمية المستلمة لكل بند. سيتم إنشاء دفعات مخزون تلقائياً للأقمشة.</p>
+            <div className="space-y-2">
+              {receiveItems.map((item, i) => (
+                <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
+                  <span className={`text-[10px] px-2 py-0.5 rounded ${item.item_type === 'fabric' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                    {item.item_type === 'fabric' ? 'قماش' : 'اكسسوار'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold truncate">{item.description}</p>
+                    <p className="text-[10px] text-gray-400">مطلوب: {item.ordered_qty} | مستلم سابقاً: {item.already_received}</p>
+                  </div>
+                  <input type="number" min="0" step="0.01" placeholder="0"
+                    value={item.received_qty}
+                    onChange={e => setReceiveItems(prev => prev.map((r, idx) => idx === i ? { ...r, received_qty: e.target.value } : r))}
+                    className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-mono text-center focus:border-[#c9a84c] outline-none" />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowReceive(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
+              <button onClick={handleReceive} className="px-5 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-bold flex items-center gap-1.5"><Package size={14} /> تأكيد الاستلام</button>
             </div>
           </div>
         </div>

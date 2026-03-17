@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { logAudit } = require('../middleware/auth');
 
 // GET /api/invoices — list with search, status filter, date range
 router.get('/', (req, res) => {
@@ -95,6 +96,7 @@ router.post('/', (req, res) => {
 
     const created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
     created.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoiceId);
+    logAudit(req, 'CREATE', 'invoice', invoiceId, invoice_number);
     res.status(201).json(created);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -132,6 +134,7 @@ router.put('/:id', (req, res) => {
 
     const updated = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice.id);
     updated.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoice.id);
+    logAudit(req, 'UPDATE', 'invoice', invoice.id, invoice.invoice_number, invoice, updated);
     res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -153,6 +156,7 @@ router.delete('/:id', (req, res) => {
   try {
     db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(req.params.id);
     db.prepare('DELETE FROM invoices WHERE id = ?').run(req.params.id);
+    logAudit(req, 'DELETE', 'invoice', req.params.id, `INV#${req.params.id}`);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

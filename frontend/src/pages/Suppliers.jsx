@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Star, Phone, Mail, Building2, DollarSign, X } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
 const TYPE_MAP = { fabric: 'أقمشة', accessory: 'اكسسوارات', both: 'أقمشة واكسسوارات', other: 'أخرى' };
@@ -16,7 +16,7 @@ export default function Suppliers() {
   const [showPayment, setShowPayment] = useState(null);
   const [paymentForm, setPaymentForm] = useState({ amount: '', payment_method: 'cash', reference: '', notes: '' });
 
-  const emptyForm = { code: '', name: '', contact_person: '', phone: '', email: '', address: '', type: 'fabric', payment_terms: '', rating: 3, notes: '' };
+  const emptyForm = { code: '', name: '', contact_name: '', phone: '', email: '', address: '', supplier_type: 'fabric', payment_terms: '', rating: 3, notes: '' };
   const [form, setForm] = useState(emptyForm);
 
   const load = async () => {
@@ -25,7 +25,7 @@ export default function Suppliers() {
       const params = {};
       if (search) params.search = search;
       if (typeFilter) params.type = typeFilter;
-      const { data } = await axios.get('/api/suppliers', { params });
+      const { data } = await api.get('/suppliers', { params });
       setSuppliers(data);
     } catch { toast.error('فشل تحميل الموردين'); }
     finally { setLoading(false); }
@@ -41,7 +41,7 @@ export default function Suppliers() {
 
   const openEdit = (s) => {
     setEditId(s.id);
-    setForm({ code: s.code, name: s.name, contact_person: s.contact_person || '', phone: s.phone || '', email: s.email || '', address: s.address || '', type: s.type, payment_terms: s.payment_terms || '', rating: s.rating, notes: s.notes || '' });
+    setForm({ code: s.code, name: s.name, contact_name: s.contact_name || '', phone: s.phone || '', email: s.email || '', address: s.address || '', supplier_type: s.supplier_type || 'fabric', payment_terms: s.payment_terms || '', rating: s.rating, notes: s.notes || '' });
     setShowModal(true);
   };
 
@@ -49,10 +49,10 @@ export default function Suppliers() {
     if (!form.code || !form.name) { toast.error('الكود والاسم مطلوبان'); return; }
     try {
       if (editId) {
-        await axios.put(`/api/suppliers/${editId}`, form);
+        await api.put(`/suppliers/${editId}`, form);
         toast.success('تم تحديث المورد');
       } else {
-        await axios.post('/api/suppliers', form);
+        await api.post('/suppliers', form);
         toast.success('تم إضافة المورد');
       }
       setShowModal(false);
@@ -63,7 +63,7 @@ export default function Suppliers() {
   const handlePayment = async () => {
     if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) { toast.error('أدخل مبلغ صحيح'); return; }
     try {
-      await axios.post(`/api/suppliers/${showPayment}/payments`, paymentForm);
+      await api.post(`/suppliers/${showPayment}/payments`, paymentForm);
       toast.success('تم تسجيل الدفعة');
       setShowPayment(null);
       setPaymentForm({ amount: '', payment_method: 'cash', reference: '', notes: '' });
@@ -139,9 +139,9 @@ export default function Suppliers() {
                     <td className="px-4 py-3 font-mono text-xs font-bold">{s.code}</td>
                     <td className="px-4 py-3">
                       <span className="font-bold text-[#1a1a2e]">{s.name}</span>
-                      {s.contact_person && <span className="text-xs text-gray-400 mr-2">• {s.contact_person}</span>}
+                      {s.contact_name && <span className="text-xs text-gray-400 mr-2">• {s.contact_name}</span>}
                     </td>
-                    <td className="px-4 py-3 text-center"><span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded">{TYPE_MAP[s.type]}</span></td>
+                    <td className="px-4 py-3 text-center"><span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded">{TYPE_MAP[s.supplier_type]}</span></td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-0.5">
                         {[1,2,3,4,5].map(n => <Star key={n} size={12} className={n <= s.rating ? 'text-[#c9a84c] fill-[#c9a84c]' : 'text-gray-200'} />)}
@@ -187,12 +187,12 @@ export default function Suppliers() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">شخص التواصل</label>
-                <input type="text" value={form.contact_person} onChange={e => setForm({...form, contact_person: e.target.value})}
+                <input type="text" value={form.contact_name} onChange={e => setForm({...form, contact_name: e.target.value})}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">النوع</label>
-                <select value={form.type} onChange={e => setForm({...form, type: e.target.value})}
+                <select value={form.supplier_type} onChange={e => setForm({...form, supplier_type: e.target.value})}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none">
                   {Object.entries(TYPE_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>

@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, X, Layers, Scissors, Package, FileText, ArrowLeft } from 'lucide-react';
+import { Search, X, Layers, Scissors, Package, FileText, ArrowLeft, Factory, ShoppingCart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../utils/api';
 
 const CATEGORY_META = {
-  models:      { label: 'الموديلات',    icon: Layers,   color: 'text-blue-500 bg-blue-50',  path: (r) => `/models/${r.code}/edit` },
-  fabrics:     { label: 'الأقمشة',      icon: Scissors, color: 'text-green-500 bg-green-50', path: () => '/fabrics' },
-  accessories: { label: 'الاكسسوارات', icon: Package,  color: 'text-purple-500 bg-purple-50', path: () => '/accessories' },
-  invoices:    { label: 'الفواتير',     icon: FileText, color: 'text-amber-600 bg-amber-50',  path: (r) => `/invoices/${r.id}/view` },
+  models:         { label: 'الموديلات',     icon: Layers,       color: 'text-blue-500 bg-blue-50',    path: (r) => `/models/${r.code}/edit` },
+  fabrics:        { label: 'الأقمشة',       icon: Scissors,     color: 'text-green-500 bg-green-50',  path: () => '/fabrics' },
+  accessories:    { label: 'الاكسسوارات',  icon: Package,      color: 'text-purple-500 bg-purple-50', path: () => '/accessories' },
+  invoices:       { label: 'الفواتير',      icon: FileText,     color: 'text-amber-600 bg-amber-50',  path: (r) => `/invoices/${r.id}/view` },
+  workOrders:     { label: 'أوامر الإنتاج', icon: Factory,      color: 'text-orange-500 bg-orange-50', path: (r) => `/work-orders/${r.id}` },
+  purchaseOrders: { label: 'أوامر الشراء',  icon: ShoppingCart,  color: 'text-teal-500 bg-teal-50',   path: (r) => `/purchase-orders` },
 };
 
 export default function GlobalSearch() {
@@ -34,7 +36,7 @@ export default function GlobalSearch() {
     if (!query.trim()) { setResults({}); return; }
     const t = setTimeout(() => {
       setLoading(true);
-      axios.get('/api/search', { params: { q: query.trim() } })
+      api.get('/search', { params: { q: query.trim() } })
         .then(r => setResults(r.data))
         .catch(() => {})
         .finally(() => setLoading(false));

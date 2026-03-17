@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar } from 'lucide-react';
-import axios from 'axios';
+import { useState, useEffect, useMemo } from 'react';
+import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
+import api from '../utils/api';
+import { exportToExcel } from '../utils/exportExcel';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
 import { Bar, Pie } from 'react-chartjs-2';
 import { useToast } from '../components/Toast';
@@ -15,6 +16,11 @@ const TABS = [
   { key: 'costs', label: 'تحليل التكاليف', icon: PieChart },
   { key: 'workorders', label: 'أوامر الإنتاج', icon: Layers },
   { key: 'suppliers', label: 'الموردين', icon: DollarSign },
+  { key: 'production-wip', label: 'خط الإنتاج (WIP)', icon: Factory },
+  { key: 'fabric-consumption', label: 'استهلاك الأقمشة', icon: Warehouse },
+  { key: 'waste', label: 'تحليل الهدر', icon: AlertTriangle },
+  { key: 'hr', label: 'الموارد البشرية', icon: Users },
+  { key: 'pivot', label: 'جدول محوري', icon: Table2 },
 ];
 
 function KPICard({ label, value, icon: Icon, color }) {
@@ -53,6 +59,10 @@ export default function Reports() {
   const [costsData, setCostsData] = useState(null);
   const [workOrdersData, setWorkOrdersData] = useState(null);
   const [suppliersData, setSuppliersData] = useState(null);
+  const [productionWIP, setProductionWIP] = useState(null);
+  const [fabricConsumption, setFabricConsumption] = useState(null);
+  const [wasteData, setWasteData] = useState(null);
+  const [hrData, setHrData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -71,26 +81,40 @@ export default function Reports() {
       setLoading(true);
       try {
         if (tab === 'summary') {
-          const { data } = await axios.get('/api/reports/summary');
+          const { data } = await api.get('/reports/summary');
           setSummary(data);
         } else if (tab === 'by-model') {
-          const { data } = await axios.get('/api/reports/by-model', filterParams());
+          const { data } = await api.get('/reports/by-model', filterParams());
           setByModel(data);
         } else if (tab === 'by-fabric') {
-          const { data } = await axios.get('/api/reports/by-fabric', filterParams());
+          const { data } = await api.get('/reports/by-fabric', filterParams());
           setByFabric(data);
         } else if (tab === 'by-accessory') {
-          const { data } = await axios.get('/api/reports/by-accessory', filterParams());
+          const { data } = await api.get('/reports/by-accessory', filterParams());
           setByAccessory(data);
         } else if (tab === 'costs') {
-          const { data } = await axios.get('/api/reports/costs');
+          const { data } = await api.get('/reports/costs');
           setCostsData(data);
         } else if (tab === 'workorders') {
-          const { data } = await axios.get('/api/workorders');
+          const { data } = await api.get('/work-orders');
           setWorkOrdersData(data);
         } else if (tab === 'suppliers') {
-          const { data } = await axios.get('/api/suppliers');
+          const { data } = await api.get('/suppliers');
           setSuppliersData(data);
+        } else if (tab === 'production-wip') {
+          const { data } = await api.get('/reports/production-by-stage');
+          setProductionWIP(data);
+        } else if (tab === 'fabric-consumption') {
+          const { data } = await api.get('/reports/fabric-consumption');
+          setFabricConsumption(data);
+        } else if (tab === 'waste') {
+          const { data } = await api.get('/reports/waste-analysis');
+          setWasteData(data);
+        } else if (tab === 'hr') {
+          const { data } = await api.get('/reports/hr-summary');
+          setHrData(data);
+        } else if (tab === 'pivot') {
+          setLoading(false); return; // PivotTable loads its own data
         }
       } catch { toast.error('فشل تحميل التقرير'); }
       finally { setLoading(false); }
@@ -336,25 +360,26 @@ export default function Reports() {
 
   const renderWorkOrders = () => {
     if (!workOrdersData) return null;
-    const orders = workOrdersData.workOrders || [];
-    const totals = workOrdersData.totals || {};
+    const orders = workOrdersData.work_orders || [];
+    const stats = workOrdersData.stats || {};
     if (orders.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد أوامر إنتاج</div>;
-    const statusCounts = { draft: 0, in_progress: 0, completed: 0, cancelled: 0 };
-    orders.forEach(o => { if (statusCounts[o.status] !== undefined) statusCounts[o.status]++; });
     const pieData = {
-      labels: ['مسودة', 'جاري', 'مكتمل', 'ملغي'],
+      labels: ['مسودة', 'معلق', 'جاري', 'مكتمل', 'ملغي'],
       datasets: [{
-        data: [statusCounts.draft, statusCounts.in_progress, statusCounts.completed, statusCounts.cancelled],
-        backgroundColor: ['#94a3b8', '#3b82f6', '#10b981', '#ef4444'],
+        data: [stats.draft || 0, stats.pending || 0, stats.in_progress || 0, stats.completed || 0, stats.cancelled || 0],
+        backgroundColor: ['#94a3b8', '#eab308', '#3b82f6', '#10b981', '#ef4444'],
       }],
     };
+    const totalOrders = orders.length;
+    const activeOrders = orders.filter(o => o.status === 'in_progress' || o.status === 'pending').length;
+    const completedOrders = stats.completed || 0;
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard label="إجمالي الأوامر" value={totals.total || 0} icon={Layers} color="bg-blue-50 text-blue-600" />
-          <KPICard label="أوامر نشطة" value={totals.active || 0} icon={TrendingUp} color="bg-amber-50 text-amber-600" />
-          <KPICard label="مكتملة" value={totals.completed || 0} icon={BarChart2} color="bg-green-50 text-green-600" />
-          <KPICard label="إجمالي القطع" value={fmt(totals.total_qty || 0)} icon={Package} color="bg-purple-50 text-purple-600" />
+          <KPICard label="إجمالي الأوامر" value={totalOrders} icon={Layers} color="bg-blue-50 text-blue-600" />
+          <KPICard label="أوامر نشطة" value={activeOrders} icon={TrendingUp} color="bg-amber-50 text-amber-600" />
+          <KPICard label="مكتملة" value={completedOrders} icon={BarChart2} color="bg-green-50 text-green-600" />
+          <KPICard label="عاجلة" value={stats.urgent || 0} icon={Package} color="bg-red-50 text-red-600" />
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl shadow-sm p-5">
@@ -388,7 +413,7 @@ export default function Reports() {
     if (suppliers.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات موردين</div>;
     const totalOutstanding = suppliers.reduce((s, sup) => s + (sup.balance || 0), 0);
     const byType = {};
-    suppliers.forEach(s => { byType[s.type || 'other'] = (byType[s.type || 'other'] || 0) + 1; });
+    suppliers.forEach(s => { byType[s.supplier_type || 'other'] = (byType[s.supplier_type || 'other'] || 0) + 1; });
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
@@ -397,7 +422,7 @@ export default function Reports() {
           <KPICard label="أنواع الموردين" value={Object.keys(byType).length} icon={Layers} color="bg-purple-50 text-purple-600" />
         </div>
         <div className="flex justify-end">
-          <button onClick={() => downloadCSV(suppliers.map(s => ({ code: s.code, name: s.name, type: s.type, balance: s.balance || 0, rating: s.rating })), 'suppliers-report.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+          <button onClick={() => downloadCSV(suppliers.map(s => ({ code: s.code, name: s.name, supplier_type: s.supplier_type, balance: s.balance || 0, rating: s.rating })), 'suppliers-report.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
             <Download size={14} /> تصدير CSV
           </button>
         </div>
@@ -417,7 +442,7 @@ export default function Reports() {
                 <tr key={s.id} className="border-t border-gray-100 hover:bg-gray-50/50">
                   <td className="px-4 py-3 font-mono text-xs">{s.code}</td>
                   <td className="px-4 py-3 font-bold">{s.name}</td>
-                  <td className="px-4 py-3 text-center"><span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded">{s.type || '—'}</span></td>
+                  <td className="px-4 py-3 text-center"><span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded">{s.supplier_type || '—'}</span></td>
                   <td className="px-4 py-3 text-center text-amber-500">{'★'.repeat(s.rating || 0)}{'☆'.repeat(5 - (s.rating || 0))}</td>
                   <td className={`px-4 py-3 text-center font-mono font-bold ${(s.balance || 0) > 0 ? 'text-red-500' : 'text-green-600'}`}>{fmt(s.balance || 0)} ج</td>
                 </tr>
@@ -429,11 +454,205 @@ export default function Reports() {
     );
   };
 
+  const renderProductionWIP = () => {
+    if (!productionWIP || productionWIP.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات إنتاج</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(productionWIP, 'production-wip.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">خط الإنتاج - WIP حسب المرحلة</h3>
+          <div className="h-[300px]">
+            <Bar data={{
+              labels: productionWIP.map(s => s.stage_name),
+              datasets: [
+                { label: 'في المرحلة', data: productionWIP.map(s => s.total_in_stage || 0), backgroundColor: '#3b82f6', borderRadius: 6 },
+                { label: 'مكتمل', data: productionWIP.map(s => s.total_completed || 0), backgroundColor: '#10b981', borderRadius: 6 },
+              ],
+            }} options={{ responsive: true, maintainAspectRatio: false, scales: { x: { stacked: false }, y: { beginAtZero: true } } }} />
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">المرحلة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">عدد الأوامر</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">في المرحلة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">مكتمل</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productionWIP.map((s, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-3 font-bold">{s.stage_name}</td>
+                  <td className="px-4 py-3 text-center font-mono">{s.wo_count || 0}</td>
+                  <td className="px-4 py-3 text-center font-mono text-blue-600 font-bold">{s.total_in_stage || 0}</td>
+                  <td className="px-4 py-3 text-center font-mono text-green-600 font-bold">{s.total_completed || 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderFabricConsumption = () => {
+    if (!fabricConsumption || fabricConsumption.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات استهلاك</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(fabricConsumption, 'fabric-consumption.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">القماش</th>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الباتش</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">أمر الإنتاج</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">الكمية المستخدمة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">الهدر</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">التكلفة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fabricConsumption.map((r, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-3 font-bold">{r.fabric_name || r.fabric_code}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.batch_code || '—'}</td>
+                  <td className="px-4 py-3 text-center font-mono text-xs">{r.wo_number}</td>
+                  <td className="px-4 py-3 text-center font-mono">{fmt(r.quantity_used)} م</td>
+                  <td className="px-4 py-3 text-center font-mono text-amber-600">{fmt(r.waste_meters)} م</td>
+                  <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(r.total_cost)} ج</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderWaste = () => {
+    if (!wasteData || wasteData.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات هدر</div>;
+    const totalWaste = wasteData.reduce((s, r) => s + (r.total_waste_cost || 0), 0);
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <KPICard label="إجمالي تكلفة الهدر" value={`${fmt(totalWaste)} ج`} icon={AlertTriangle} color="bg-amber-50 text-amber-600" />
+          <KPICard label="أوامر بها هدر" value={wasteData.length} icon={Layers} color="bg-red-50 text-red-600" />
+        </div>
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(wasteData, 'waste-analysis.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">أمر الإنتاج</th>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الموديل</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">إجمالي هدر (م)</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">تكلفة الهدر</th>
+              </tr>
+            </thead>
+            <tbody>
+              {wasteData.map((r, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-3 font-mono text-xs">{r.wo_number}</td>
+                  <td className="px-4 py-3 font-bold">{r.model_code}</td>
+                  <td className="px-4 py-3 text-center font-mono text-amber-600">{fmt(r.total_waste_meters)}</td>
+                  <td className="px-4 py-3 text-center font-mono font-bold text-red-500">{fmt(r.total_waste_cost)} ج</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderHR = () => {
+    if (!hrData) return null;
+    const { total_employees, total_payroll, avg_salary, dept_breakdown, type_breakdown } = hrData;
+    const SALARY_LABELS = { monthly: 'شهري', daily: 'يومي', hourly: 'بالساعة', piece_work: 'بالقطعة' };
+    const deptChartData = {
+      labels: dept_breakdown.map(d => d.department),
+      datasets: [{
+        label: 'عدد الموظفين',
+        data: dept_breakdown.map(d => d.count),
+        backgroundColor: ['#c9a84c', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#f59e0b', '#06b6d4', '#ec4899'],
+        borderRadius: 6,
+      }],
+    };
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <KPICard label="إجمالي الموظفين" value={total_employees} icon={Users} color="bg-blue-50 text-blue-600" />
+          <KPICard label="إجمالي الرواتب (الشهر الحالي)" value={`${fmt(total_payroll)} ج`} icon={DollarSign} color="bg-green-50 text-green-600" />
+          <KPICard label="متوسط الراتب" value={`${fmt(avg_salary)} ج`} icon={TrendingUp} color="bg-amber-50 text-amber-600" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">توزيع الموظفين حسب القسم</h3>
+            <div className="h-[300px]">
+              <Bar data={deptChartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }} />
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">حسب نوع الراتب</h3>
+            <div className="space-y-3 mt-6">
+              {type_breakdown.map((t, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="flex-1 text-sm text-gray-600">{SALARY_LABELS[t.salary_type] || t.salary_type}</span>
+                  <span className="font-mono text-sm font-bold">{t.count}</span>
+                  <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#c9a84c] rounded-full" style={{ width: `${total_employees > 0 ? (t.count / total_employees) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {dept_breakdown.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-right text-xs text-gray-500">القسم</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">عدد الموظفين</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">إجمالي الرواتب</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dept_breakdown.map((d, i) => (
+                  <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                    <td className="px-4 py-3 font-bold">{d.department}</td>
+                    <td className="px-4 py-3 text-center font-mono">{d.count}</td>
+                    <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(d.total_salary)} ج</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-[#1a1a2e]">التقارير</h2>
-        <p className="text-xs text-gray-400 mt-0.5">تحليلات وإحصائيات المصنع</p>
+        <h2 className="text-xl font-bold text-[#1a1a2e]">مركز التقارير</h2>
+        <p className="text-xs text-gray-400 mt-0.5">تحليلات وإحصائيات المصنع — جدول محوري وتقارير متقدمة</p>
       </div>
 
       {/* Tabs */}
@@ -482,7 +701,233 @@ export default function Reports() {
           {tab === 'costs' && renderCosts()}
           {tab === 'workorders' && renderWorkOrders()}
           {tab === 'suppliers' && renderSuppliers()}
+          {tab === 'production-wip' && renderProductionWIP()}
+          {tab === 'fabric-consumption' && renderFabricConsumption()}
+          {tab === 'waste' && renderWaste()}
+          {tab === 'hr' && renderHR()}
+          {tab === 'pivot' && <PivotTable />}
         </>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════ */
+/*           Pivot Table Component             */
+/* ═══════════════════════════════════════════ */
+const PIVOT_SOURCES = {
+  production: { label: 'الإنتاج', fields: ['wo_number', 'model_code', 'model_name', 'category', 'gender', 'status', 'total_pieces', 'total_cost', 'cost_per_piece', 'main_fabric_cost', 'lining_cost', 'accessories_cost', 'masnaiya', 'masrouf'] },
+  financial: { label: 'المالية', fields: ['po_number', 'supplier_name', 'supplier_type', 'status', 'total_amount', 'paid_amount', 'balance', 'order_date', 'item_count'] },
+  hr: { label: 'الموارد البشرية', fields: ['emp_code', 'full_name', 'department', 'job_title', 'salary_type', 'base_salary', 'employment_type', 'status', 'present_days', 'absent_days', 'total_overtime', 'last_net_salary'] },
+  inventory: { label: 'المخزون', fields: ['code', 'name', 'fabric_type', 'color', 'supplier', 'price_per_m', 'available_meters', 'min_stock', 'stock_status', 'stock_value'] },
+};
+const NUMERIC_FIELDS = ['total_pieces', 'total_cost', 'cost_per_piece', 'main_fabric_cost', 'lining_cost', 'accessories_cost', 'masnaiya', 'masrouf', 'total_amount', 'paid_amount', 'balance', 'item_count', 'base_salary', 'present_days', 'absent_days', 'total_overtime', 'last_net_salary', 'price_per_m', 'available_meters', 'min_stock', 'stock_value'];
+const AGG_FNS = { sum: 'مجموع', avg: 'متوسط', count: 'عدد', min: 'أقل', max: 'أعلى' };
+
+function PivotTable() {
+  const [source, setSource] = useState('production');
+  const [rawData, setRawData] = useState([]);
+  const [rowField, setRowField] = useState('');
+  const [colField, setColField] = useState('');
+  const [valueField, setValueField] = useState('');
+  const [aggFn, setAggFn] = useState('sum');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    api.get('/reports/pivot', { params: { source } })
+      .then(r => {
+        setRawData(r.data);
+        const fields = PIVOT_SOURCES[source]?.fields || [];
+        const textFields = fields.filter(f => !NUMERIC_FIELDS.includes(f));
+        const numFields = fields.filter(f => NUMERIC_FIELDS.includes(f));
+        setRowField(textFields[0] || '');
+        setColField(textFields[1] || '');
+        setValueField(numFields[0] || '');
+      })
+      .catch(() => setRawData([]))
+      .finally(() => setLoading(false));
+  }, [source]);
+
+  const fields = PIVOT_SOURCES[source]?.fields || [];
+  const textFields = fields.filter(f => !NUMERIC_FIELDS.includes(f));
+  const numFields = fields.filter(f => NUMERIC_FIELDS.includes(f));
+
+  // Compute pivot
+  const pivot = useMemo(() => {
+    if (!rowField || !valueField || rawData.length === 0) return null;
+    const rowVals = [...new Set(rawData.map(r => String(r[rowField] ?? '—')))];
+    const colVals = colField ? [...new Set(rawData.map(r => String(r[colField] ?? '—')))] : ['الكل'];
+    const grid = {};
+    rowVals.forEach(rv => { grid[rv] = {}; colVals.forEach(cv => { grid[rv][cv] = []; }); });
+
+    rawData.forEach(r => {
+      const rv = String(r[rowField] ?? '—');
+      const cv = colField ? String(r[colField] ?? '—') : 'الكل';
+      const val = Number(r[valueField]) || 0;
+      grid[rv][cv].push(val);
+    });
+
+    const agg = (arr) => {
+      if (arr.length === 0) return 0;
+      if (aggFn === 'sum') return arr.reduce((a, b) => a + b, 0);
+      if (aggFn === 'avg') return arr.reduce((a, b) => a + b, 0) / arr.length;
+      if (aggFn === 'count') return arr.length;
+      if (aggFn === 'min') return Math.min(...arr);
+      if (aggFn === 'max') return Math.max(...arr);
+      return 0;
+    };
+
+    const result = rowVals.map(rv => {
+      const row = { _label: rv };
+      let rowTotal = [];
+      colVals.forEach(cv => {
+        row[cv] = Math.round(agg(grid[rv][cv]) * 100) / 100;
+        rowTotal = rowTotal.concat(grid[rv][cv]);
+      });
+      row._total = Math.round(agg(rowTotal) * 100) / 100;
+      return row;
+    });
+
+    // Column totals
+    const colTotals = { _label: 'الإجمالي' };
+    let allVals = [];
+    colVals.forEach(cv => {
+      const allInCol = rawData.filter(r => !colField || String(r[colField] ?? '—') === cv).map(r => Number(r[valueField]) || 0);
+      colTotals[cv] = Math.round(agg(allInCol) * 100) / 100;
+      allVals = allVals.concat(allInCol);
+    });
+    colTotals._total = Math.round(agg(allVals) * 100) / 100;
+
+    // Max value for heatmap
+    const maxVal = Math.max(...result.map(r => colVals.map(cv => r[cv])).flat().filter(v => v > 0), 1);
+
+    return { rowVals, colVals, result, colTotals, maxVal };
+  }, [rawData, rowField, colField, valueField, aggFn]);
+
+  function handleExport() {
+    if (!pivot) return;
+    const exportData = pivot.result.map(r => {
+      const obj = { [rowField]: r._label };
+      pivot.colVals.forEach(cv => { obj[cv] = r[cv]; });
+      obj['الإجمالي'] = r._total;
+      return obj;
+    });
+    const columns = [
+      { key: rowField, header: rowField, width: 20 },
+      ...pivot.colVals.map(cv => ({ key: cv, header: cv, width: 15 })),
+      { key: 'الإجمالي', header: 'الإجمالي', width: 15 },
+    ];
+    exportToExcel(exportData, columns, `pivot-${source}`);
+  }
+
+  const heatColor = (val, maxVal) => {
+    if (!val || val <= 0) return '';
+    const pct = Math.min(val / maxVal, 1);
+    const r = Math.round(201 + (249 - 201) * (1 - pct));
+    const g = Math.round(168 + (115 - 168) * pct);
+    const b = Math.round(76 + (22 - 76) * pct);
+    return `rgba(${r},${g},${b},${0.1 + pct * 0.3})`;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Controls */}
+      <div className="bg-white rounded-2xl shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Table2 className="text-[#c9a84c]" size={20} />
+          <h3 className="text-sm font-bold text-[#1a1a2e]">جدول محوري ديناميكي</h3>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">مصدر البيانات</label>
+            <select value={source} onChange={e => setSource(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:border-[#c9a84c] outline-none">
+              {Object.entries(PIVOT_SOURCES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">الصفوف (Group By)</label>
+            <select value={rowField} onChange={e => setRowField(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:border-[#c9a84c] outline-none">
+              {textFields.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">الأعمدة (اختياري)</label>
+            <select value={colField} onChange={e => setColField(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:border-[#c9a84c] outline-none">
+              <option value="">— بدون —</option>
+              {textFields.filter(f => f !== rowField).map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">القيمة</label>
+            <select value={valueField} onChange={e => setValueField(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:border-[#c9a84c] outline-none">
+              {numFields.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">الدالة</label>
+            <select value={aggFn} onChange={e => setAggFn(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:border-[#c9a84c] outline-none">
+              {Object.entries(AGG_FNS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Result */}
+      {loading && <div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-[#c9a84c] border-t-transparent rounded-full" /></div>}
+      {!loading && pivot && (
+        <>
+          <div className="flex justify-between items-center">
+            <p className="text-xs text-gray-500">{pivot.result.length} صف × {pivot.colVals.length} عمود | {rawData.length} سجل</p>
+            <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+              <Download size={14} /> تصدير Excel
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-3 text-right font-medium text-gray-600 sticky right-0 bg-gray-50">{rowField}</th>
+                  {pivot.colVals.map(cv => <th key={cv} className="px-3 py-3 text-center font-medium text-gray-600 min-w-[80px]">{cv}</th>)}
+                  <th className="px-3 py-3 text-center font-bold text-[#1a1a2e] bg-amber-50 min-w-[80px]">الإجمالي</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pivot.result.map((row, i) => (
+                  <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                    <td className="px-3 py-2 font-medium sticky right-0 bg-white border-l whitespace-nowrap">{row._label}</td>
+                    {pivot.colVals.map(cv => (
+                      <td key={cv} className="px-3 py-2 text-center font-mono"
+                        style={{ backgroundColor: heatColor(row[cv], pivot.maxVal) }}>
+                        {Number(row[cv]).toLocaleString()}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2 text-center font-mono font-bold bg-amber-50">{Number(row._total).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {/* Totals Row */}
+                <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
+                  <td className="px-3 py-2 sticky right-0 bg-gray-50">الإجمالي</td>
+                  {pivot.colVals.map(cv => (
+                    <td key={cv} className="px-3 py-2 text-center font-mono">{Number(pivot.colTotals[cv]).toLocaleString()}</td>
+                  ))}
+                  <td className="px-3 py-2 text-center font-mono text-[#c9a84c] bg-amber-50">{Number(pivot.colTotals._total).toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+      {!loading && !pivot && rawData.length > 0 && (
+        <div className="text-center py-8 text-gray-400">اختر الصفوف والقيمة لعرض الجدول المحوري</div>
+      )}
+      {!loading && rawData.length === 0 && (
+        <div className="text-center py-8 text-gray-400">لا توجد بيانات</div>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
 const ACC_TYPES = [
@@ -45,7 +45,7 @@ export default function Accessories() {
       const params = {};
       if (search) params.search = search;
       if (filterType) params.type = filterType;
-      const { data } = await axios.get('/api/accessories', { params });
+      const { data } = await api.get('/accessories', { params });
       setList(data);
     } catch { toast.error('فشل التحميل'); }
     finally { setLoading(false); }
@@ -67,10 +67,10 @@ export default function Accessories() {
     }
     try {
       if (editing) {
-        await axios.put(`/api/accessories/${editing}`, form);
+        await api.put(`/accessories/${editing}`, form);
         toast.success('تم التحديث');
       } else {
-        await axios.post('/api/accessories', form);
+        await api.post('/accessories', form);
         toast.success('تمت الإضافة');
       }
       setDrawerOpen(false);
@@ -83,7 +83,7 @@ export default function Accessories() {
   const handleDelete = async (code) => {
     if (!confirm('إلغاء تفعيل هذا الاكسسوار؟')) return;
     try {
-      await axios.delete(`/api/accessories/${code}`);
+      await api.delete(`/accessories/${code}`);
       toast.success('تم إلغاء التفعيل');
       fetchList();
     } catch { toast.error('فشل'); }

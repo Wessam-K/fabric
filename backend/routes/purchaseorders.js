@@ -1,174 +1,216 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { logAudit } = require('../middleware/auth');
 
-// GET /api/purchaseorders — list with filters
+// GET /api/purchase-orders — list
 router.get('/', (req, res) => {
   try {
-    const { search, status, supplier_id, page = 1, limit = 50 } = req.query;
+    const { search, status, supplier_id, type, date_from, date_to } = req.query;
     let q = `SELECT po.*, s.name as supplier_name, s.code as supplier_code
-             FROM purchase_orders po
-             LEFT JOIN suppliers s ON s.id = po.supplier_id
-             WHERE 1=1`;
+      FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE 1=1`;
     const p = [];
-
-    if (search) {
-      q += ' AND (po.po_number LIKE ? OR s.name LIKE ?)';
-      const s = `%${search}%`;
-      p.push(s, s);
-    }
-    if (status) { q += ' AND po.status = ?'; p.push(status); }
-    if (supplier_id) { q += ' AND po.supplier_id = ?'; p.push(parseInt(supplier_id)); }
-
+    if (status) { q += ' AND po.status=?'; p.push(status); }
+    if (supplier_id) { q += ' AND po.supplier_id=?'; p.push(supplier_id); }
+    if (type) { q += ' AND po.po_type=?'; p.push(type); }
+    if (date_from) { q += ' AND po.order_date >= ?'; p.push(date_from); }
+    if (date_to) { q += ' AND po.order_date <= ?'; p.push(date_to); }
+    if (search) { const s = `%${search}%`; q += ' AND (po.po_number LIKE ? OR s.name LIKE ?)'; p.push(s, s); }
     q += ' ORDER BY po.created_at DESC';
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-    q += ' LIMIT ? OFFSET ?';
-    p.push(parseInt(limit), offset);
-
     const orders = db.prepare(q).all(...p);
 
-    const totals = db.prepare(`SELECT
-      COUNT(*) as total,
-      COALESCE(SUM(CASE WHEN status='draft' THEN total ELSE 0 END),0) as draft_total,
-      COALESCE(SUM(CASE WHEN status IN ('sent','partial') THEN total ELSE 0 END),0) as pending_total,
-      COALESCE(SUM(CASE WHEN status='received' THEN total ELSE 0 END),0) as received_total
-    FROM purchase_orders`).get();
-
+    const totals = {
+      total: orders.length,
+      draft_total: orders.filter(o => o.status === 'draft').reduce((s, o) => s + (o.total_amount || 0), 0),
+      pending_total: orders.filter(o => o.status === 'sent' || o.status === 'partial').reduce((s, o) => s + (o.total_amount || 0), 0),
+      received_total: orders.filter(o => o.status === 'received').reduce((s, o) => s + (o.total_amount || 0), 0),
+      outstanding: orders.filter(o => o.status !== 'cancelled' && o.status !== 'draft').reduce((s, o) => s + (o.total_amount || 0) - (o.paid_amount || 0), 0),
+    };
     res.json({ orders, totals });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/purchaseorders/next-number
+// GET /api/purchase-orders/next-number
 router.get('/next-number', (req, res) => {
   try {
-    const last = db.prepare("SELECT po_number FROM purchase_orders ORDER BY id DESC LIMIT 1").get();
-    let next = 'PO-001';
-    if (last) {
-      const num = parseInt(last.po_number.replace(/\D/g, '') || '0') + 1;
-      next = `PO-${String(num).padStart(3, '0')}`;
-    }
-    res.json({ next_number: next });
+    const year = new Date().getFullYear();
+    const last = db.prepare(`SELECT po_number FROM purchase_orders WHERE po_number LIKE ? ORDER BY id DESC LIMIT 1`).get(`PO-${year}-%`);
+    if (!last) return res.json({ next_number: `PO-${year}-001` });
+    const num = parseInt(last.po_number.split('-')[2], 10) || 0;
+    res.json({ next_number: `PO-${year}-${String(num + 1).padStart(3, '0')}` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/purchaseorders/:id — single with items
+// GET /api/purchase-orders/:id — full PO
 router.get('/:id', (req, res) => {
   try {
-    const po = db.prepare(`SELECT po.*, s.name as supplier_name, s.code as supplier_code, s.phone as supplier_phone
-      FROM purchase_orders po
-      LEFT JOIN suppliers s ON s.id = po.supplier_id
-      WHERE po.id = ?`).get(req.params.id);
+    const po = db.prepare(`SELECT po.*, s.name as supplier_name, s.code as supplier_code
+      FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.id=?`).get(req.params.id);
     if (!po) return res.status(404).json({ error: 'Not found' });
-
-    po.items = db.prepare('SELECT * FROM purchase_order_items WHERE po_id = ? ORDER BY sort_order').all(po.id);
-
-    // Get payments for this PO
-    po.payments = db.prepare('SELECT * FROM supplier_payments WHERE po_id = ? ORDER BY payment_date DESC').all(po.id);
-    po.total_paid = po.payments.reduce((s, p) => s + p.amount, 0);
-    po.balance = po.total - po.total_paid;
-
+    po.items = db.prepare(`SELECT poi.*, f.name as fabric_name, a.name as accessory_name
+      FROM purchase_order_items poi LEFT JOIN fabrics f ON f.code=poi.fabric_code LEFT JOIN accessories a ON a.code=poi.accessory_code
+      WHERE poi.po_id=?`).all(po.id);
+    po.payments = db.prepare('SELECT * FROM supplier_payments WHERE po_id=? ORDER BY payment_date DESC').all(po.id);
+    po.balance = (po.total_amount || 0) - (po.paid_amount || 0);
     res.json(po);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/purchaseorders — create
+// POST /api/purchase-orders
 router.post('/', (req, res) => {
   try {
-    const { po_number, supplier_id, tax_pct, discount, expected_date, notes, items, status } = req.body;
+    const { po_number, supplier_id, po_type, expected_date, items, notes } = req.body;
     if (!po_number || !supplier_id) return res.status(400).json({ error: 'po_number and supplier_id required' });
 
-    const exists = db.prepare('SELECT id FROM purchase_orders WHERE po_number=?').get(po_number);
-    if (exists) return res.status(409).json({ error: 'رقم أمر الشراء موجود بالفعل' });
+    const transaction = db.transaction(() => {
+      const totalAmount = (items || []).reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
+      const r = db.prepare(`INSERT INTO purchase_orders (po_number,supplier_id,po_type,expected_date,total_amount,notes) VALUES (?,?,?,?,?,?)`)
+        .run(po_number, supplier_id, po_type || 'fabric', expected_date || null, totalAmount, notes || null);
+      const poId = r.lastInsertRowid;
 
-    const subtotal = (items || []).reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
-    const taxAmt = subtotal * ((parseFloat(tax_pct) || 0) / 100);
-    const total = subtotal + taxAmt - (parseFloat(discount) || 0);
-
-    const r = db.prepare(`INSERT INTO purchase_orders (po_number, supplier_id, subtotal, tax_pct, discount, total, expected_date, notes, status)
-      VALUES (?,?,?,?,?,?,?,?,?)`).run(po_number, parseInt(supplier_id), subtotal, parseFloat(tax_pct) || 0, parseFloat(discount) || 0, total, expected_date || null, notes || null, status || 'draft');
-
-    const poId = r.lastInsertRowid;
-
-    // Insert items
-    if (items?.length) {
-      const ins = db.prepare('INSERT INTO purchase_order_items (po_id, item_type, item_code, description, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?,?)');
-      const insertItems = db.transaction((items) => {
-        items.forEach((item, i) => {
-          const qty = parseFloat(item.quantity) || 0;
-          const price = parseFloat(item.unit_price) || 0;
-          ins.run(poId, item.item_type || 'fabric', item.item_code || '', item.description || '', qty, price, qty * price, i);
+      if (items?.length) {
+        const ins = db.prepare('INSERT INTO purchase_order_items (po_id,item_type,fabric_code,accessory_code,description,quantity,unit,unit_price) VALUES (?,?,?,?,?,?,?,?)');
+        items.forEach(i => {
+          ins.run(poId, i.item_type || 'fabric', i.fabric_code || null, i.accessory_code || null, i.description || null, i.quantity || 0, i.unit || 'meter', i.unit_price || 0);
         });
-      });
-      insertItems(items);
-    }
+      }
+      return poId;
+    });
 
-    const created = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
-    created.items = db.prepare('SELECT * FROM purchase_order_items WHERE po_id=?').all(poId);
-    res.status(201).json(created);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const poId = transaction();
+    const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
+    po.items = db.prepare('SELECT * FROM purchase_order_items WHERE po_id=?').all(poId);
+    logAudit(req, 'CREATE', 'purchase_order', poId, po_number);
+    res.status(201).json(po);
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'رقم أمر الشراء موجود بالفعل' });
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// PUT /api/purchaseorders/:id — update
+// PUT /api/purchase-orders/:id
 router.put('/:id', (req, res) => {
   try {
-    const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(req.params.id);
-    if (!po) return res.status(404).json({ error: 'Not found' });
+    const poId = parseInt(req.params.id);
+    const existing = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const { supplier_id, po_type, expected_date, items, notes } = req.body;
 
-    const { supplier_id, tax_pct, discount, expected_date, notes, items, status } = req.body;
+    const transaction = db.transaction(() => {
+      const totalAmount = items ? items.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0) : existing.total_amount;
+      db.prepare(`UPDATE purchase_orders SET supplier_id=COALESCE(?,supplier_id),po_type=COALESCE(?,po_type),expected_date=?,total_amount=?,notes=COALESCE(?,notes) WHERE id=?`)
+        .run(supplier_id ?? null, po_type || null, expected_date || null, totalAmount, notes || null, poId);
 
-    const subtotal = (items || []).reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
-    const taxAmt = subtotal * ((parseFloat(tax_pct) || 0) / 100);
-    const total = subtotal + taxAmt - (parseFloat(discount) || 0);
-
-    let receivedDate = po.received_date;
-    if (status === 'received' && !po.received_date) receivedDate = new Date().toISOString();
-
-    db.prepare(`UPDATE purchase_orders SET supplier_id=COALESCE(?,supplier_id), subtotal=?, tax_pct=?, discount=?, total=?,
-      expected_date=COALESCE(?,expected_date), notes=COALESCE(?,notes), status=COALESCE(?,status),
-      received_date=COALESCE(?,received_date), updated_at=datetime('now') WHERE id=?`)
-      .run(supplier_id ? parseInt(supplier_id) : null, subtotal, parseFloat(tax_pct) || 0, parseFloat(discount) || 0, total,
-        expected_date || null, notes || null, status || null, receivedDate, req.params.id);
-
-    // Replace items
-    db.prepare('DELETE FROM purchase_order_items WHERE po_id=?').run(po.id);
-    if (items?.length) {
-      const ins = db.prepare('INSERT INTO purchase_order_items (po_id, item_type, item_code, description, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?,?)');
-      const insertItems = db.transaction((items) => {
-        items.forEach((item, i) => {
-          const qty = parseFloat(item.quantity) || 0;
-          const price = parseFloat(item.unit_price) || 0;
-          ins.run(po.id, item.item_type || 'fabric', item.item_code || '', item.description || '', qty, price, qty * price, i);
+      if (items) {
+        db.prepare('DELETE FROM purchase_order_items WHERE po_id=?').run(poId);
+        const ins = db.prepare('INSERT INTO purchase_order_items (po_id,item_type,fabric_code,accessory_code,description,quantity,unit,unit_price) VALUES (?,?,?,?,?,?,?,?)');
+        items.forEach(i => {
+          ins.run(poId, i.item_type || 'fabric', i.fabric_code || null, i.accessory_code || null, i.description || null, i.quantity || 0, i.unit || 'meter', i.unit_price || 0);
         });
-      });
-      insertItems(items);
-    }
+      }
+    });
 
-    const updated = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(po.id);
-    updated.items = db.prepare('SELECT * FROM purchase_order_items WHERE po_id=?').all(po.id);
+    transaction();
+    const updated = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
+    logAudit(req, 'UPDATE', 'purchase_order', poId, existing.po_number, existing, updated);
     res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PATCH /api/purchaseorders/:id/status
+// PATCH /api/purchase-orders/:id/status
 router.patch('/:id/status', (req, res) => {
   try {
     const { status } = req.body;
-    if (!['draft', 'sent', 'partial', 'received', 'cancelled'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
-    }
-    let receivedDate = null;
-    if (status === 'received') receivedDate = new Date().toISOString();
-    db.prepare("UPDATE purchase_orders SET status=?, received_date=COALESCE(?,received_date), updated_at=datetime('now') WHERE id=?")
-      .run(status, receivedDate, req.params.id);
+    const sets = ['status=?'];
+    const params = [status];
+    if (status === 'received') sets.push("received_date=datetime('now')");
+    db.prepare(`UPDATE purchase_orders SET ${sets.join(',')} WHERE id=?`).run(...params, parseInt(req.params.id));
     res.json(db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(req.params.id));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE /api/purchaseorders/:id
+// POST /api/purchase-orders/:id/payments
+router.post('/:id/payments', (req, res) => {
+  try {
+    const poId = parseInt(req.params.id);
+    const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
+    if (!po) return res.status(404).json({ error: 'PO not found' });
+    const { amount, payment_method, reference, notes } = req.body;
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'Valid amount required' });
+
+    db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,reference,notes) VALUES (?,?,?,?,?,?)`)
+      .run(po.supplier_id, poId, parseFloat(amount), payment_method || 'cash', reference || null, notes || null);
+    const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE po_id=?').get(poId).v;
+    db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(totalPaid, poId);
+
+    const updated = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
+    updated.payments = db.prepare('SELECT * FROM supplier_payments WHERE po_id=? ORDER BY payment_date DESC').all(poId);
+    updated.balance = (updated.total_amount || 0) - (updated.paid_amount || 0);
+    res.status(201).json(updated);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /api/purchase-orders/:id/receive — receive items and create fabric batches
+router.patch('/:id/receive', (req, res) => {
+  try {
+    const poId = parseInt(req.params.id);
+    const po = db.prepare(`SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.id=?`).get(poId);
+    if (!po) return res.status(404).json({ error: 'PO not found' });
+
+    const { items, received_date } = req.body;
+    if (!items?.length) return res.status(400).json({ error: 'items required' });
+
+    const transaction = db.transaction(() => {
+      let allFullyReceived = true;
+
+      for (const item of items) {
+        const poItem = db.prepare('SELECT * FROM purchase_order_items WHERE id=? AND po_id=?').get(item.item_id, poId);
+        if (!poItem) throw new Error(`العنصر ${item.item_id} غير موجود`);
+
+        const receivedQty = parseFloat(item.received_qty);
+        if (isNaN(receivedQty) || receivedQty < 0) throw new Error('كمية غير صالحة');
+
+        const totalReceived = (poItem.received_qty_actual || 0) + receivedQty;
+        const variance = totalReceived - poItem.quantity;
+        db.prepare('UPDATE purchase_order_items SET received_qty_actual=?, quantity_variance=? WHERE id=?')
+          .run(totalReceived, variance, poItem.id);
+
+        if (totalReceived < poItem.quantity) allFullyReceived = false;
+
+        // Create fabric inventory batch for fabric items
+        if (poItem.item_type === 'fabric' && poItem.fabric_code && receivedQty > 0) {
+          const year = new Date().getFullYear();
+          const last = db.prepare("SELECT batch_code FROM fabric_inventory_batches WHERE batch_code LIKE ? ORDER BY id DESC LIMIT 1").get(`FB-${year}-%`);
+          let nextNum = 1;
+          if (last) nextNum = (parseInt(last.batch_code.split('-')[2], 10) || 0) + 1;
+          const batchCode = `FB-${year}-${String(nextNum).padStart(4, '0')}`;
+
+          db.prepare(`INSERT INTO fabric_inventory_batches (batch_code,fabric_code,supplier_id,po_id,po_item_id,received_meters,price_per_meter,used_meters,wasted_meters,received_date,batch_status) VALUES (?,?,?,?,?,?,?,0,0,?,?)`)
+            .run(batchCode, poItem.fabric_code, po.supplier_id, poId, poItem.id, receivedQty, poItem.unit_price, received_date || new Date().toISOString().split('T')[0], 'available');
+        }
+      }
+
+      const newStatus = allFullyReceived ? 'received' : 'partial';
+      const sets = [`status='${newStatus}'`];
+      if (allFullyReceived || newStatus === 'received') sets.push("received_date=COALESCE(received_date,datetime('now'))");
+      db.prepare(`UPDATE purchase_orders SET ${sets.join(',')} WHERE id=?`).run(poId);
+    });
+
+    transaction();
+
+    // Return full PO with items
+    const updated = db.prepare(`SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.id=?`).get(poId);
+    updated.items = db.prepare(`SELECT poi.*, f.name as fabric_name, a.name as accessory_name FROM purchase_order_items poi LEFT JOIN fabrics f ON f.code=poi.fabric_code LEFT JOIN accessories a ON a.code=poi.accessory_code WHERE poi.po_id=?`).all(poId);
+    updated.payments = db.prepare('SELECT * FROM supplier_payments WHERE po_id=? ORDER BY payment_date DESC').all(poId);
+    updated.balance = (updated.total_amount || 0) - (updated.paid_amount || 0);
+    res.json(updated);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// DELETE /api/purchase-orders/:id
 router.delete('/:id', (req, res) => {
   try {
-    db.prepare('DELETE FROM purchase_order_items WHERE po_id=?').run(req.params.id);
-    db.prepare('DELETE FROM purchase_orders WHERE id=?').run(req.params.id);
+    db.prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?").run(parseInt(req.params.id));
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -37,8 +37,10 @@ export default function useCostCalc({ fabrics = [], accessories = [], masnaiya =
 
     const m = safeParse(masnaiya);
     const r = safeParse(masrouf);
-    const total_cost = main_fabric_cost + lining_cost + accessories_cost + m + r;
     const gtp = Math.max(0, safeParse(grandTotalPieces));
+    const masnaiya_total = m * gtp;
+    const masrouf_total = r * gtp;
+    const total_cost = main_fabric_cost + lining_cost + accessories_cost + masnaiya_total + masrouf_total;
     const cost_per_piece = gtp > 0 ? total_cost / gtp : 0;
 
     return {
@@ -47,6 +49,8 @@ export default function useCostCalc({ fabrics = [], accessories = [], masnaiya =
       accessories_cost,
       masnaiya: m,
       masrouf: r,
+      masnaiya_total,
+      masrouf_total,
       total_cost,
       grand_total_pieces: gtp,
       cost_per_piece,

@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Printer, Edit2, Trash2 } from 'lucide-react';
-import axios from 'axios';
+import { Plus, Search, Printer, Edit2, Trash2, FileText } from 'lucide-react';
+import api from '../utils/api';
 import { useToast } from '../components/Toast';
+
+const CATEGORY_MAP = { men: 'رجالي', women: 'حريمي', kids: 'أطفال', unisex: 'يونيسكس' };
+const GENDER_MAP = { male: 'ذكر', female: 'أنثى', unisex: 'يونيسكس' };
 
 export default function ModelsList() {
   const navigate = useNavigate();
@@ -13,7 +16,7 @@ export default function ModelsList() {
 
   const fetchModels = async () => {
     try {
-      const { data } = await axios.get('/api/models', { params: search ? { search } : {} });
+      const { data } = await api.get('/models', { params: search ? { search } : {} });
       setModels(data);
     } catch (err) {
       toast.error('فشل تحميل الموديلات');
@@ -27,7 +30,7 @@ export default function ModelsList() {
   const handleDelete = async (code) => {
     if (!confirm('هل تريد إلغاء تفعيل هذا الموديل؟')) return;
     try {
-      await axios.delete(`/api/models/${code}`);
+      await api.delete(`/models/${code}`);
       toast.success('تم إلغاء تفعيل الموديل');
       fetchModels();
     } catch { toast.error('فشل الحذف'); }
@@ -82,20 +85,24 @@ export default function ModelsList() {
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">{m.serial_number}</span>
                   <span className="font-mono text-sm font-bold text-[#1a1a2e]">{m.model_code}</span>
+                  {m.category && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{CATEGORY_MAP[m.category] || m.category}</span>}
                 </div>
                 {m.model_name && <p className="text-sm text-gray-600 mt-0.5 truncate">{m.model_name}</p>}
                 <p className="text-[10px] text-gray-400 mt-0.5">{new Date(m.created_at).toLocaleDateString('ar-EG')}</p>
               </div>
 
-              {/* Cost Badge */}
-              <div className="text-left shrink-0">
-                <p className="text-[10px] text-gray-400">تكلفة القطعة</p>
-                <p className="font-mono font-bold text-[#c9a84c] text-lg">{fmt(m.cost_summary?.cost_per_piece)}</p>
-                <p className="text-[10px] text-gray-400">{m.cost_summary?.grand_total_pieces || 0} قطعة</p>
+              {/* BOM Templates badge */}
+              <div className="text-center shrink-0">
+                <p className="text-[10px] text-gray-400">قوالب BOM</p>
+                <p className="font-mono font-bold text-[#c9a84c] text-lg">{m.bom_template_count ?? '—'}</p>
               </div>
 
               {/* Actions */}
               <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                <button onClick={() => navigate(`/models/${m.model_code}/bom`)}
+                  className="p-2 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors" title="قوالب BOM">
+                  <FileText size={16} />
+                </button>
                 <button onClick={() => navigate(`/models/${m.model_code}/edit`)}
                   className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
                   <Edit2 size={16} />
