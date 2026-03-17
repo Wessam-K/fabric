@@ -151,11 +151,35 @@ function getFullWO(id) {
   wo.partial_invoices = db.prepare('SELECT * FROM partial_invoices WHERE wo_id=? ORDER BY created_at').all(id);
   wo.cost_summary = calculateWOCost(id);
 
+  // V7: Movement log
+  wo.movement_log = db.prepare('SELECT * FROM stage_movement_log WHERE wo_id=? ORDER BY moved_at DESC').all(id);
+
   wo.stage_wip_summary = wo.stages.map(s => ({
+    stage_id: s.id,
     stage_name: s.stage_name,
+    sort_order: s.sort_order,
+    status: s.status,
     quantity_in_stage: s.quantity_in_stage || 0,
     quantity_completed: s.quantity_completed || 0,
+    quantity_rejected: s.quantity_rejected || 0,
+    started_by_name: s.started_by_name || null,
+    completed_by_name: s.completed_by_name || null,
+    started_at: s.started_at,
+    completed_at: s.completed_at,
   }));
+
+  // V7: Quantity integrity check
+  const totalInStages = wo.stages.reduce((sum, s) => sum + (s.quantity_in_stage || 0), 0);
+  const totalCompleted = wo.stages.reduce((sum, s) => sum + (s.quantity_completed || 0), 0);
+  const totalRejected = wo.stages.reduce((sum, s) => sum + (s.quantity_rejected || 0), 0);
+  wo.quantity_integrity = {
+    total_ordered: wo.quantity || 0,
+    total_in_stages: totalInStages,
+    total_completed: totalCompleted,
+    total_rejected: totalRejected,
+    accounted: totalInStages + totalCompleted + totalRejected,
+    balanced: (totalInStages + totalCompleted + totalRejected) === (wo.quantity || 0),
+  };
 
   return wo;
 }
@@ -313,6 +337,11 @@ router.post('/', (req, res) => {
       if (useStages.length) {
         const ins = db.prepare('INSERT INTO wo_stages (wo_id,stage_name,sort_order,assigned_to) VALUES (?,?,?,?)');
         useStages.forEach((s, i) => { ins.run(woId, s.stage_name, s.sort_order ?? i, s.assigned_to || null); });
+        // V7: Init first stage quantity_in_stage from WO quantity
+        const firstStage = db.prepare('SELECT id FROM wo_stages WHERE wo_id=? ORDER BY sort_order LIMIT 1').get(woId);
+        if (firstStage && quantity > 0) {
+          db.prepare('UPDATE wo_stages SET quantity_in_stage=? WHERE id=?').run(quantity, firstStage.id);
+        }
       }
 
       return woId;
@@ -639,6 +668,123 @@ router.delete('/:id', (req, res) => {
     db.prepare("UPDATE work_orders SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(parseInt(req.params.id));
     logAudit(req, 'DELETE', 'work_order', req.params.id, `WO#${req.params.id}`);
     res.json({ message: 'Cancelled' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════
+// V7 — Stage Advance (move pieces between stages)
+// ═══════════════════════════════════════════════
+router.patch('/:id/stage-advance', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const { from_stage_id, qty_to_pass, qty_rejected, rejection_reason, notes } = req.body;
+
+    if (!from_stage_id || !qty_to_pass) return res.status(400).json({ error: 'from_stage_id و qty_to_pass مطلوبان' });
+    const qPass = parseInt(qty_to_pass) || 0;
+    const qReject = parseInt(qty_rejected) || 0;
+    if (qPass < 0 || qReject < 0) return res.status(400).json({ error: 'الكميات يجب أن تكون موجبة' });
+
+    const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
+    if (!wo) return res.status(404).json({ error: 'أمر الشغل غير موجود' });
+    if (wo.status !== 'in_progress') return res.status(400).json({ error: 'أمر الشغل ليس قيد التنفيذ' });
+
+    const fromStage = db.prepare('SELECT * FROM wo_stages WHERE id=? AND wo_id=?').get(from_stage_id, woId);
+    if (!fromStage) return res.status(404).json({ error: 'المرحلة غير موجودة' });
+
+    const available = (fromStage.quantity_in_stage || 0);
+    if (qPass + qReject > available) {
+      return res.status(400).json({ error: `الكمية المتاحة في المرحلة ${available} فقط — لا يمكن تمرير ${qPass} ورفض ${qReject}` });
+    }
+
+    // Find next stage
+    const nextStage = db.prepare('SELECT * FROM wo_stages WHERE wo_id=? AND sort_order > ? ORDER BY sort_order LIMIT 1').get(woId, fromStage.sort_order);
+
+    // Get user info
+    const userId = req.user?.id || null;
+    const userName = req.user?.full_name || req.user?.username || 'نظام';
+
+    const doAdvance = db.transaction(() => {
+      // Deduct from current stage
+      db.prepare('UPDATE wo_stages SET quantity_in_stage = quantity_in_stage - ?, quantity_completed = quantity_completed + ?, quantity_rejected = COALESCE(quantity_rejected,0) + ? WHERE id=?')
+        .run(qPass + qReject, qPass, qReject, from_stage_id);
+
+      // Mark from stage completed if fully processed
+      const updatedFrom = db.prepare('SELECT * FROM wo_stages WHERE id=?').get(from_stage_id);
+      if ((updatedFrom.quantity_in_stage || 0) === 0 && (updatedFrom.quantity_completed || 0) > 0) {
+        db.prepare("UPDATE wo_stages SET status='completed', completed_at=datetime('now','localtime'), completed_by_user_id=?, completed_by_name=? WHERE id=? AND status != 'completed'")
+          .run(userId, userName, from_stage_id);
+      }
+
+      // Add to next stage (if exists)
+      let toStageId = null;
+      let toStageName = null;
+      if (nextStage && qPass > 0) {
+        toStageId = nextStage.id;
+        toStageName = nextStage.stage_name;
+        db.prepare('UPDATE wo_stages SET quantity_in_stage = COALESCE(quantity_in_stage,0) + ? WHERE id=?').run(qPass, nextStage.id);
+        // Auto-start next stage
+        if (nextStage.status === 'pending') {
+          db.prepare("UPDATE wo_stages SET status='in_progress', started_at=datetime('now','localtime'), started_by_user_id=?, started_by_name=? WHERE id=?")
+            .run(userId, userName, nextStage.id);
+        }
+      }
+
+      // Log movement
+      db.prepare(`INSERT INTO stage_movement_log (wo_id, from_stage_id, to_stage_id, from_stage_name, to_stage_name, qty_moved, qty_rejected, rejection_reason, moved_by_user_id, moved_by_name, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(woId, from_stage_id, toStageId, fromStage.stage_name, toStageName, qPass, qReject, rejection_reason || null, userId, userName, notes || null);
+
+      // Update pieces_completed from last stage
+      const lastStage = db.prepare('SELECT quantity_completed FROM wo_stages WHERE wo_id=? ORDER BY sort_order DESC LIMIT 1').get(woId);
+      if (lastStage) db.prepare('UPDATE work_orders SET pieces_completed=? WHERE id=?').run(lastStage.quantity_completed || 0, woId);
+
+      // Auto-complete WO if all stages done
+      const allStages = db.prepare('SELECT status, quantity_in_stage FROM wo_stages WHERE wo_id=?').all(woId);
+      const allDone = allStages.length > 0 && allStages.every(s => (s.status === 'completed' || s.status === 'skipped') && (s.quantity_in_stage || 0) === 0);
+      if (allDone) {
+        db.prepare("UPDATE work_orders SET status='completed', completed_date=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=? AND status != 'completed'").run(woId);
+      }
+    });
+
+    doAdvance();
+    logAudit(req, 'STAGE_ADVANCE', 'work_order', woId, `${fromStage.stage_name}: ${qPass} passed, ${qReject} rejected`);
+    res.json(getFullWO(woId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════
+// V7 — Stage Start (explicitly start a stage)
+// ═══════════════════════════════════════════════
+router.patch('/:id/stage-start', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const { stage_id } = req.body;
+    if (!stage_id) return res.status(400).json({ error: 'stage_id مطلوب' });
+
+    const stage = db.prepare('SELECT * FROM wo_stages WHERE id=? AND wo_id=?').get(stage_id, woId);
+    if (!stage) return res.status(404).json({ error: 'المرحلة غير موجودة' });
+    if (stage.status !== 'pending') return res.status(400).json({ error: 'المرحلة ليست معلقة' });
+
+    const userId = req.user?.id || null;
+    const userName = req.user?.full_name || req.user?.username || 'نظام';
+
+    db.prepare("UPDATE wo_stages SET status='in_progress', started_at=datetime('now','localtime'), started_by_user_id=?, started_by_name=? WHERE id=?")
+      .run(userId, userName, stage_id);
+
+    // Also update WO status
+    db.prepare("UPDATE work_orders SET status='in_progress', start_date=COALESCE(start_date,datetime('now','localtime')), updated_at=datetime('now','localtime') WHERE id=? AND status IN ('draft','pending')").run(woId);
+
+    res.json(getFullWO(woId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════
+// V7 — Movement Log
+// ═══════════════════════════════════════════════
+router.get('/:id/movement-log', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const logs = db.prepare('SELECT * FROM stage_movement_log WHERE wo_id=? ORDER BY moved_at DESC').all(woId);
+    res.json(logs);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

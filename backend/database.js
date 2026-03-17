@@ -943,6 +943,61 @@ function runMigrations() {
     addColumnSafe('cost_snapshots', 'waste_cost', 'REAL DEFAULT 0');
     addColumnSafe('cost_snapshots', 'extra_expenses', 'REAL DEFAULT 0');
   }
+
+  // ═══════════════════════════════════════════════
+  // V7 — Unified WIP Stage Panel + Movement Log
+  // ═══════════════════════════════════════════════
+  if (currentVersion < 7) {
+    const addColumnSafe = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch {}
+    };
+
+    // wo_stages: track who started/completed + rejection count
+    addColumnSafe('wo_stages', 'started_by_user_id', 'INTEGER REFERENCES users(id)');
+    addColumnSafe('wo_stages', 'started_by_name', 'TEXT');
+    addColumnSafe('wo_stages', 'completed_by_user_id', 'INTEGER REFERENCES users(id)');
+    addColumnSafe('wo_stages', 'completed_by_name', 'TEXT');
+    addColumnSafe('wo_stages', 'quantity_rejected', 'INTEGER DEFAULT 0');
+
+    // Stage movement log table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS stage_movement_log (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        wo_id             INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+        from_stage_id     INTEGER REFERENCES wo_stages(id),
+        to_stage_id       INTEGER REFERENCES wo_stages(id),
+        from_stage_name   TEXT,
+        to_stage_name     TEXT,
+        qty_moved         INTEGER NOT NULL DEFAULT 0,
+        qty_rejected      INTEGER NOT NULL DEFAULT 0,
+        rejection_reason  TEXT,
+        moved_by_user_id  INTEGER REFERENCES users(id),
+        moved_by_name     TEXT,
+        moved_at          TEXT DEFAULT (datetime('now','localtime')),
+        notes             TEXT
+      );
+    `);
+
+    // One-time fix: set first stage quantity_in_stage = wo.quantity for existing WOs
+    const brokenWOs = db.prepare(`
+      SELECT wo.id, wo.quantity FROM work_orders wo
+      WHERE wo.status IN ('draft','in_progress')
+        AND wo.quantity > 0
+        AND EXISTS (
+          SELECT 1 FROM wo_stages ws WHERE ws.wo_id = wo.id AND ws.sort_order = (
+            SELECT MIN(sort_order) FROM wo_stages WHERE wo_id = wo.id
+          ) AND (ws.quantity_in_stage IS NULL OR ws.quantity_in_stage = 0)
+        )
+    `).all();
+    for (const w of brokenWOs) {
+      const firstStage = db.prepare('SELECT id FROM wo_stages WHERE wo_id=? ORDER BY sort_order LIMIT 1').get(w.id);
+      if (firstStage) {
+        db.prepare('UPDATE wo_stages SET quantity_in_stage=? WHERE id=?').run(w.quantity, firstStage.id);
+      }
+    }
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (7)`);
+  }
 }
 
 initializeDatabase();

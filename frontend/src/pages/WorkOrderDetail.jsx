@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import StatusBadge from '../components/StatusBadge';
@@ -46,6 +46,27 @@ export default function WorkOrderDetail() {
     try {
       const { data } = await api.patch(`/work-orders/${id}/stages/${stageId}`, { status });
       setWo(data); toast.success('تم تحديث المرحلة');
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
+
+  const handleStageAdvance = async (advanceData) => {
+    try {
+      const { data } = await api.patch(`/work-orders/${id}/stage-advance`, advanceData);
+      setWo(data); toast.success(`تم تمرير ${advanceData.qty_to_pass} قطعة`);
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
+
+  const handleStageStart = async (stageId) => {
+    try {
+      const { data } = await api.patch(`/work-orders/${id}/stage-start`, { stage_id: stageId });
+      setWo(data); toast.success('تم بدء المرحلة');
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
+
+  const handleStageSkip = async (stageId) => {
+    try {
+      const { data } = await api.patch(`/work-orders/${id}/stages/${stageId}`, { status: 'skipped' });
+      setWo(data); toast.success('تم تخطي المرحلة');
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
@@ -102,10 +123,10 @@ export default function WorkOrderDetail() {
 
   const completedStages = wo.stages?.filter(s => s.status === 'completed').length || 0;
   const totalStages = wo.stages?.length || 0;
-  const progressPct = totalStages > 0 ? Math.round((completedStages / totalStages) * 100) : 0;
   const cs = wo.cost_summary || {};
-  const totalPieces = cs.total_pieces || cs.grand_total_pieces || 0;
+  const totalPieces = wo.quantity || cs.total_pieces || cs.grand_total_pieces || 0;
   const piecesCompleted = wo.pieces_completed || 0;
+  const progressPct = totalPieces > 0 ? Math.round((piecesCompleted / totalPieces) * 100) : 0;
   const alreadyInvoiced = (wo.partial_invoices || []).reduce((s, i) => s + (i.pieces_invoiced || 0), 0);
 
   return (
@@ -160,39 +181,44 @@ export default function WorkOrderDetail() {
             <div className="space-y-4">
               <div className="bg-white rounded-2xl shadow-sm p-5">
                 <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">مراحل الإنتاج</h3>
-                <StageChecklist stages={wo.stages || []} editable={wo.status === 'in_progress'} onAction={handleStageAction} />
+                <StageChecklist
+                  stages={wo.stages || []}
+                  editable={wo.status === 'in_progress'}
+                  totalQty={wo.quantity || 0}
+                  onAdvance={handleStageAdvance}
+                  onStart={handleStageStart}
+                  onSkip={handleStageSkip}
+                />
               </div>
-              {/* WIP tracking */}
-              {wo.stages?.length > 0 && (
+              {/* Quantity Integrity */}
+              {wo.quantity_integrity && !wo.quantity_integrity.balanced && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-xs text-red-600">
+                  <AlertTriangle size={14} />
+                  <span>تحذير: الكميات غير متوازنة — إجمالي الأمر: {wo.quantity_integrity.total_ordered}، في المراحل: {wo.quantity_integrity.total_in_stages}، مكتمل: {wo.quantity_integrity.total_completed}، مرفوض: {wo.quantity_integrity.total_rejected}</span>
+                </div>
+              )}
+              {/* Movement Log */}
+              {wo.movement_log?.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm p-5">
-                  <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2"><Layers size={16} className="text-purple-500" /> تتبع الكميات (WIP)</h3>
-                  <table className="w-full text-xs">
-                    <thead><tr className="text-gray-400"><th className="text-right pb-2">المرحلة</th><th className="text-center pb-2">في المرحلة</th><th className="text-center pb-2">مكتمل</th><th className="text-center pb-2">الحالة</th></tr></thead>
-                    <tbody>
-                      {wo.stages.map(s => (
-                        <tr key={s.id} className="border-t border-gray-100">
-                          <td className="py-2 font-bold">{s.stage_name}</td>
-                          <td className="py-2 text-center">
-                            {wo.status === 'in_progress' ? (
-                              <input type="number" min="0" value={s.quantity_in_stage || 0} onChange={e => handleStageQty(s.id, 'quantity_in_stage', e.target.value)}
-                                className="w-16 border border-gray-200 rounded px-1 py-0.5 text-center font-mono text-xs" />
-                            ) : <span className="font-mono">{s.quantity_in_stage || 0}</span>}
-                          </td>
-                          <td className="py-2 text-center">
-                            {wo.status === 'in_progress' ? (
-                              <input type="number" min="0" value={s.quantity_completed || 0} onChange={e => handleStageQty(s.id, 'quantity_completed', e.target.value)}
-                                className="w-16 border border-gray-200 rounded px-1 py-0.5 text-center font-mono text-xs" />
-                            ) : <span className="font-mono">{s.quantity_completed || 0}</span>}
-                          </td>
-                          <td className="py-2 text-center">
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.status === 'completed' ? 'bg-green-100 text-green-700' : s.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                              {s.status === 'completed' ? 'مكتمل' : s.status === 'in_progress' ? 'جاري' : 'معلق'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <h3 className="text-sm font-bold text-[#1a1a2e] mb-3 flex items-center gap-2"><History size={16} className="text-indigo-500" /> سجل التحركات</h3>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {wo.movement_log.map(log => (
+                      <div key={log.id} className="flex items-start gap-3 text-xs bg-gray-50 rounded-lg p-2">
+                        <div className="flex-1">
+                          <span className="font-bold">{log.from_stage_name}</span>
+                          <span className="text-gray-400 mx-1">←</span>
+                          <span className="font-bold text-blue-600">{log.to_stage_name || 'نهاية'}</span>
+                          <span className="font-mono text-green-600 mx-2">+{log.qty_moved}</span>
+                          {log.qty_rejected > 0 && <span className="font-mono text-red-500">-{log.qty_rejected}</span>}
+                          {log.rejection_reason && <span className="text-gray-400 mr-1">({log.rejection_reason})</span>}
+                        </div>
+                        <div className="text-[10px] text-gray-400 text-left whitespace-nowrap">
+                          <div>{log.moved_by_name}</div>
+                          <div>{new Date(log.moved_at).toLocaleString('ar-EG')}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -385,7 +411,7 @@ export default function WorkOrderDetail() {
             <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2">
               <div className="h-full bg-[#c9a84c] rounded-full transition-all" style={{ width: `${progressPct}%` }} />
             </div>
-            <p className="text-xs text-gray-400 text-center">{completedStages} من {totalStages} مراحل مكتملة</p>
+            <p className="text-xs text-gray-400 text-center">{piecesCompleted} من {totalPieces} قطعة مكتملة ({completedStages}/{totalStages} مراحل)</p>
             <div className="mt-3 pt-3 border-t border-white/10">
               <div className="flex justify-between text-sm"><span className="text-gray-400">القطع المكتملة</span><span className="font-mono font-bold">{piecesCompleted} / {totalPieces}</span></div>
             </div>
