@@ -2,30 +2,47 @@ const db = require('./database');
 const bcrypt = require('bcryptjs');
 
 function seed() {
-  console.log('Seeding WK-Hub database (v6 schema)...');
+  console.log('Seeding WK-Hub database (v9 schema)...');
 
-  // ──────────── Clear data (new schema tables) ────────────
+  // Disable FK constraints during seed
+  db.pragma('foreign_keys = OFF');
+
+  // ──────────── Clear data (all tables including V9) ────────────
   const tables = [
+    'fabric_stock_movements', 'accessory_stock_movements', 'notifications',
     'user_permissions', 'hr_adjustments', 'payroll_records', 'payroll_periods',
     'attendance', 'attendance_imports',
     'partial_invoices', 'wo_extra_expenses', 'wo_accessories_detail', 'wo_fabric_batches', 'fabric_inventory_batches',
+    'wo_accessory_consumption', 'wo_fabric_consumption', 'wo_waste', 'wo_invoices', 'stage_movement_log',
     'cost_snapshots', 'supplier_payments', 'purchase_order_items', 'purchase_orders',
     'invoice_items', 'invoices',
     'wo_stages', 'wo_sizes', 'wo_accessories', 'wo_fabrics', 'work_orders',
     'bom_template_sizes', 'bom_template_accessories', 'bom_template_fabrics', 'bom_templates',
-    'accessories', 'fabrics', 'suppliers', 'settings', 'stage_templates', 'models',
+    'accessories', 'fabrics', 'suppliers', 'customers', 'settings', 'stage_templates', 'models',
     'audit_log', 'users', 'employees'
   ];
   for (const t of tables) {
     try { db.exec(`DELETE FROM ${t}`); } catch {}
   }
-  for (const t of ['model_accessories', 'model_fabrics', 'model_sizes', 'work_order_stages', 'production_stages']) {
+  for (const t of ['model_accessories', 'model_fabrics', 'model_sizes', 'work_order_stages', 'production_stages', 'role_permissions', 'permission_definitions']) {
     try { db.exec(`DELETE FROM ${t}`); } catch {}
   }
+
+  // Re-enable FK constraints
+  db.pragma('foreign_keys = ON');
 
   // ──────────── Settings ────────────
   const insSetting = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
   [['masnaiya_default', '90'], ['masrouf_default', '50'], ['waste_pct_default', '5'], ['margin_default', '25'], ['low_stock_threshold', '10'], ['default_currency', 'EGP']].forEach(s => insSetting.run(...s));
+
+  // ──────────── Customers (5) ────────────
+  const insCust = db.prepare('INSERT INTO customers (code, name, phone, email, address, city, tax_number, credit_limit, notes) VALUES (?,?,?,?,?,?,?,?,?)');
+  const cust1 = insCust.run('CUST-001', 'شركة الأناقة للملابس', '01012345678', 'elegance@example.com', 'شارع عباس العقاد - مدينة نصر', 'القاهرة', '123-456-789', 50000, 'عميل VIP - توريد شهري');
+  const cust2 = insCust.run('CUST-002', 'بوتيك الورد', '01198765432', 'ward@example.com', 'شارع النيل - الدقي', 'الجيزة', '987-654-321', 30000, 'بوتيك نسائي فاخر');
+  const cust3 = insCust.run('CUST-003', 'محلات الزيتون', '01055544433', 'zeitoun@example.com', 'شارع الهرم', 'الجيزة', null, 20000, 'سلسلة محلات - فرعين');
+  const cust4 = insCust.run('CUST-004', 'مؤسسة النخبة للأزياء', '01077788899', 'elite@fashion.com', 'شارع التحرير - وسط البلد', 'القاهرة', '456-789-123', 100000, 'أكبر عميل - عقد سنوي');
+  const cust5 = insCust.run('CUST-005', 'أتيليه سارة', '01033322211', 'sara.atelier@example.com', 'المعادي', 'القاهرة', null, 15000, 'أتيليه عرائس وسهرات');
+  const custIds = { c1: cust1.lastInsertRowid, c2: cust2.lastInsertRowid, c3: cust3.lastInsertRowid, c4: cust4.lastInsertRowid, c5: cust5.lastInsertRowid };
 
   // ──────────── Stage Templates ────────────
   const insStage = db.prepare('INSERT INTO stage_templates (name, color, sort_order, is_default) VALUES (?,?,?,1)');
@@ -50,49 +67,49 @@ function seed() {
   const sup5 = insSup.run('SUP-005', 'واردات الحرير', 'fabric', 'سارة أحمد', '01033322211', 'silk@imports.com', 'الإسكندرية', 'حرير طبيعي ومستورد');
   const sup6 = insSup.run('SUP-006', 'مصنع البطائن', 'fabric', 'يوسف إبراهيم', '01099988877', 'lining@factory.com', 'المنصورة', 'بطائن بجميع الأنواع');
 
-  // ──────────── Fabrics (20) ────────────
-  const insFab = db.prepare('INSERT INTO fabrics (code, name, fabric_type, price_per_m, supplier, supplier_id, color) VALUES (?,?,?,?,?,?,?)');
+  // ──────────── Fabrics (20) — with stock tracking ────────────
+  const insFab = db.prepare('INSERT INTO fabrics (code, name, fabric_type, price_per_m, supplier, supplier_id, color, available_meters, low_stock_threshold) VALUES (?,?,?,?,?,?,?,?,?)');
   [
-    ['CTN-001', 'قطن مصري ممتاز',  'main',   120, 'مصنع النسيج المصري',      sup1.lastInsertRowid, 'أبيض'],
-    ['CTN-002', 'قطن مخلوط',       'main',    95, 'مصنع النسيج المصري',      sup1.lastInsertRowid, 'بيج'],
-    ['CTN-003', 'قطن لايكرا',       'main',   130, 'مصنع النسيج المصري',      sup1.lastInsertRowid, 'أسود'],
-    ['PLY-001', 'بوليستر ساتان',    'main',    85, 'شركة الأقمشة الدولية',    sup2.lastInsertRowid, 'أسود'],
-    ['PLY-002', 'بوليستر كريب',     'main',    90, 'شركة الأقمشة الدولية',    sup2.lastInsertRowid, 'كحلي'],
-    ['SLK-001', 'حرير شيفون',      'main',   250, 'واردات الحرير',           sup5.lastInsertRowid, 'كحلي'],
-    ['SLK-002', 'حرير طبيعي',      'main',   320, 'واردات الحرير',           sup5.lastInsertRowid, 'أوف وايت'],
-    ['LNN-001', 'كتان طبيعي',      'main',   180, 'مصنع الكتان',            null,                 'أوف وايت'],
-    ['DNM-001', 'جينز ثقيل',       'main',   110, 'مصانع الجينز',           null,                 'أزرق'],
-    ['DNM-002', 'جينز خفيف',       'main',    90, 'مصانع الجينز',           null,                 'أزرق فاتح'],
-    ['WOL-001', 'صوف مخلوط',       'main',   200, 'شركة الصوف',             null,                 'رمادي'],
-    ['WOL-002', 'صوف كشمير',       'main',   350, 'شركة الصوف',             null,                 'بيج'],
-    ['CRP-001', 'كريب ثقيل',       'main',   150, 'مصنع الأقمشة',           null,                 'أسود'],
-    ['VLV-001', 'قطيفة',           'both',   170, 'مصنع القطيفة',           null,                 'عنابي'],
-    ['TFL-001', 'تافتا',           'main',   140, 'مصنع الأقمشة',           null,                 'ذهبي'],
-    ['LNG-001', 'بطانة قطن',       'lining',  45, 'مصنع البطائن',           sup6.lastInsertRowid, 'أبيض'],
-    ['LNG-002', 'بطانة بوليستر',    'lining',  35, 'مصنع البطائن',           sup6.lastInsertRowid, 'أسود'],
-    ['LNG-003', 'بطانة ساتان',     'lining',  55, 'مصنع البطائن',           sup6.lastInsertRowid, 'بيج'],
-    ['LNG-004', 'بطانة حرير',      'lining',  90, 'مصنع البطائن',           sup6.lastInsertRowid, 'كحلي'],
-    ['LNG-005', 'بطانة شفافة',     'lining',  25, 'مصنع البطائن',           sup6.lastInsertRowid, 'أبيض'],
+    ['CTN-001', 'قطن مصري ممتاز',  'main',   120, 'مصنع النسيج المصري',      sup1.lastInsertRowid, 'أبيض',     80,  20],
+    ['CTN-002', 'قطن مخلوط',       'main',    95, 'مصنع النسيج المصري',      sup1.lastInsertRowid, 'بيج',      55,  20],
+    ['CTN-003', 'قطن لايكرا',       'main',   130, 'مصنع النسيج المصري',      sup1.lastInsertRowid, 'أسود',     45,  20],
+    ['PLY-001', 'بوليستر ساتان',    'main',    85, 'شركة الأقمشة الدولية',    sup2.lastInsertRowid, 'أسود',     30,  15],
+    ['PLY-002', 'بوليستر كريب',     'main',    90, 'شركة الأقمشة الدولية',    sup2.lastInsertRowid, 'كحلي',     25,  15],
+    ['SLK-001', 'حرير شيفون',      'main',   250, 'واردات الحرير',           sup5.lastInsertRowid, 'كحلي',     18,  10],
+    ['SLK-002', 'حرير طبيعي',      'main',   320, 'واردات الحرير',           sup5.lastInsertRowid, 'أوف وايت', 12,  10],
+    ['LNN-001', 'كتان طبيعي',      'main',   180, 'مصنع الكتان',            null,                 'أوف وايت', 35,  15],
+    ['DNM-001', 'جينز ثقيل',       'main',   110, 'مصانع الجينز',           null,                 'أزرق',     60,  20],
+    ['DNM-002', 'جينز خفيف',       'main',    90, 'مصانع الجينز',           null,                 'أزرق فاتح', 40,  20],
+    ['WOL-001', 'صوف مخلوط',       'main',   200, 'شركة الصوف',             null,                 'رمادي',     22,  10],
+    ['WOL-002', 'صوف كشمير',       'main',   350, 'شركة الصوف',             null,                 'بيج',       15,  10],
+    ['CRP-001', 'كريب ثقيل',       'main',   150, 'مصنع الأقمشة',           null,                 'أسود',      50,  15],
+    ['VLV-001', 'قطيفة',           'both',   170, 'مصنع القطيفة',           null,                 'عنابي',     20,  10],
+    ['TFL-001', 'تافتا',           'main',   140, 'مصنع الأقمشة',           null,                 'ذهبي',      28,  10],
+    ['LNG-001', 'بطانة قطن',       'lining',  45, 'مصنع البطائن',           sup6.lastInsertRowid, 'أبيض',     70,  30],
+    ['LNG-002', 'بطانة بوليستر',    'lining',  35, 'مصنع البطائن',           sup6.lastInsertRowid, 'أسود',     55,  30],
+    ['LNG-003', 'بطانة ساتان',     'lining',  55, 'مصنع البطائن',           sup6.lastInsertRowid, 'بيج',      40,  25],
+    ['LNG-004', 'بطانة حرير',      'lining',  90, 'مصنع البطائن',           sup6.lastInsertRowid, 'كحلي',     20,  10],
+    ['LNG-005', 'بطانة شفافة',     'lining',  25, 'مصنع البطائن',           sup6.lastInsertRowid, 'أبيض',     35,  15],
   ].forEach(f => insFab.run(...f));
 
-  // ──────────── Accessories (15) ────────────
-  const insAcc = db.prepare('INSERT INTO accessories (code, acc_type, name, unit_price, unit, supplier, supplier_id) VALUES (?,?,?,?,?,?,?)');
+  // ──────────── Accessories (15) — with stock tracking ────────────
+  const insAcc = db.prepare('INSERT INTO accessories (code, acc_type, name, unit_price, unit, supplier, supplier_id, quantity_on_hand, low_stock_threshold, reorder_qty) VALUES (?,?,?,?,?,?,?,?,?,?)');
   [
-    ['BTN-001', 'button',       'زرار بلاستيك صغير',    0.5,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid],
-    ['BTN-002', 'button',       'زرار معدني فضي',       2.0,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid],
-    ['BTN-003', 'button',       'زرار خشب طبيعي',       3.5,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid],
-    ['BTN-004', 'button',       'زرار كبس معدني',       1.0,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid],
-    ['ZPR-001', 'zipper',       'سوستة معدنية 20سم',    8.0,  'piece', 'شركة السوست',   sup4.lastInsertRowid],
-    ['ZPR-002', 'zipper',       'سوستة مخفية 50سم',    12.0,  'piece', 'شركة السوست',   sup4.lastInsertRowid],
-    ['ZPR-003', 'zipper',       'سوستة بلاستيك 15سم',   5.0,  'piece', 'شركة السوست',   sup4.lastInsertRowid],
-    ['THR-001', 'thread',       'خيط بوليستر أبيض',    15.0,  'roll',  'مصنع الخيوط',   null],
-    ['THR-002', 'thread',       'خيط حرير',            25.0,  'roll',  'مصنع الخيوط',   null],
-    ['LBL-001', 'label',        'ليبل ماركة منسوج',     1.5,  'piece', 'مصنع الليبلات',  null],
-    ['LBL-002', 'label',        'ليبل مقاس',            0.3,  'piece', 'مصنع الليبلات',  null],
-    ['PAD-001', 'padding',      'حشو كتف',              3.0,  'piece', 'مصنع الحشو',    null],
-    ['PAD-002', 'padding',      'حشو صدر',              5.0,  'piece', 'مصنع الحشو',    null],
-    ['ITF-001', 'interfacing',  'فازلين لاصق',         20.0,  'meter', 'مصنع الفازلين',  null],
-    ['OTH-001', 'other',        'شريط ساتان',           5.0,  'meter', 'مصنع الشرائط',   null],
+    ['BTN-001', 'button',       'زرار بلاستيك صغير',    0.5,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid, 500, 100, 500],
+    ['BTN-002', 'button',       'زرار معدني فضي',       2.0,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid, 200, 50, 200],
+    ['BTN-003', 'button',       'زرار خشب طبيعي',       3.5,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid, 150, 30, 100],
+    ['BTN-004', 'button',       'زرار كبس معدني',       1.0,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid, 300, 50, 200],
+    ['ZPR-001', 'zipper',       'سوستة معدنية 20سم',    8.0,  'piece', 'شركة السوست',   sup4.lastInsertRowid, 80,  20, 100],
+    ['ZPR-002', 'zipper',       'سوستة مخفية 50سم',    12.0,  'piece', 'شركة السوست',   sup4.lastInsertRowid, 60,  15, 80],
+    ['ZPR-003', 'zipper',       'سوستة بلاستيك 15سم',   5.0,  'piece', 'شركة السوست',   sup4.lastInsertRowid, 120, 25, 100],
+    ['THR-001', 'thread',       'خيط بوليستر أبيض',    15.0,  'roll',  'مصنع الخيوط',   null,                  40, 10, 50],
+    ['THR-002', 'thread',       'خيط حرير',            25.0,  'roll',  'مصنع الخيوط',   null,                  8,  5,  20],
+    ['LBL-001', 'label',        'ليبل ماركة منسوج',     1.5,  'piece', 'مصنع الليبلات',  null,                 400, 100, 500],
+    ['LBL-002', 'label',        'ليبل مقاس',            0.3,  'piece', 'مصنع الليبلات',  null,                 600, 100, 500],
+    ['PAD-001', 'padding',      'حشو كتف',              3.0,  'piece', 'مصنع الحشو',    null,                  45, 20, 50],
+    ['PAD-002', 'padding',      'حشو صدر',              5.0,  'piece', 'مصنع الحشو',    null,                  30, 10, 40],
+    ['ITF-001', 'interfacing',  'فازلين لاصق',         20.0,  'meter', 'مصنع الفازلين',  null,                  25, 10, 50],
+    ['OTH-001', 'other',        'شريط ساتان',           5.0,  'meter', 'مصنع الشرائط',   null,                  35, 10, 30],
   ].forEach(a => insAcc.run(...a));
 
   // ──────────── Models (10 — simplified, no cost fields) ────────────
@@ -182,8 +199,8 @@ function seed() {
     [{ color: 'بيج', s: 2, m: 5, l: 8, xl: 6, xxl: 3, xxxl: 1 }, { color: 'أسود', s: 2, m: 4, l: 7, xl: 5, xxl: 3, xxxl: 1 }]
   );
 
-  // ──────────── Work Orders (3) ────────────
-  const insWO = db.prepare('INSERT INTO work_orders (wo_number, model_id, template_id, status, priority, assigned_to, masnaiya, masrouf, margin_pct, consumer_price, wholesale_price, notes, start_date, due_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  // ──────────── Work Orders (4) ────────────
+  const insWO = db.prepare('INSERT INTO work_orders (wo_number, model_id, template_id, status, priority, assigned_to, masnaiya, masrouf, margin_pct, consumer_price, wholesale_price, notes, start_date, due_date, customer_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
   const insWF = db.prepare('INSERT INTO wo_fabrics (wo_id, fabric_code, role, meters_per_piece, waste_pct, color_note, sort_order) VALUES (?,?,?,?,?,?,?)');
   const insWA = db.prepare('INSERT INTO wo_accessories (wo_id, accessory_code, accessory_name, quantity, unit_price) VALUES (?,?,?,?,?)');
   const insWS = db.prepare('INSERT INTO wo_sizes (wo_id, color_label, qty_s, qty_m, qty_l, qty_xl, qty_2xl, qty_3xl) VALUES (?,?,?,?,?,?,?,?)');
@@ -192,11 +209,12 @@ function seed() {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString().replace('T', ' ').slice(0, 19);
   const twentyDaysAgo = new Date(Date.now() - 20 * 86400000).toISOString().replace('T', ' ').slice(0, 19);
+  const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString().replace('T', ' ').slice(0, 19);
   const inTenDays = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
   const inTwentyDays = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
 
   // WO-001: in_progress (DRS-001 فستان سهرة) — first 2 stages done, 3rd in progress
-  const wo1 = insWO.run('WO-2026-001', modelIds.m1, null, 'in_progress', 'high', 'ورشة 1', 90, 50, 25, 450, 350, 'طلبية محل الزيتون', fiveDaysAgo, inTenDays);
+  const wo1 = insWO.run('WO-2026-001', modelIds.m1, null, 'in_progress', 'high', 'ورشة 1', 90, 50, 25, 450, 350, 'طلبية محل الزيتون', fiveDaysAgo, inTenDays, custIds.c3);
   const wo1id = wo1.lastInsertRowid;
   insWF.run(wo1id, 'SLK-001', 'main', 2.5, 5, 'كحلي', 0);
   insWF.run(wo1id, 'LNG-003', 'lining', 2.0, 0, 'بيج', 1);
@@ -215,7 +233,7 @@ function seed() {
   });
 
   // WO-002: draft (PNT-001 بنطلون)
-  const wo2 = insWO.run('WO-2026-002', modelIds.m2, null, 'draft', 'normal', 'ورشة 2', 70, 40, 20, 280, 220, 'طلبية شركة', null, inTwentyDays);
+  const wo2 = insWO.run('WO-2026-002', modelIds.m2, null, 'draft', 'normal', 'ورشة 2', 70, 40, 20, 280, 220, 'طلبية شركة', null, inTwentyDays, custIds.c4);
   const wo2id = wo2.lastInsertRowid;
   insWF.run(wo2id, 'DNM-001', 'main', 1.8, 3, 'أزرق', 0);
   insWF.run(wo2id, 'LNG-001', 'lining', 0.5, 0, 'أبيض', 1);
@@ -230,7 +248,7 @@ function seed() {
   stageTemplates.forEach(s => insWSt.run(wo2id, s.name, s.sort_order, 'pending', null, null, null));
 
   // WO-003: completed (TSH-001 تيشيرت)
-  const wo3 = insWO.run('WO-2026-003', modelIds.m7, null, 'completed', 'low', 'ورشة 1', 40, 20, 30, 120, 90, 'طلبية سنوية', twentyDaysAgo, null);
+  const wo3 = insWO.run('WO-2026-003', modelIds.m7, null, 'completed', 'low', 'ورشة 1', 40, 20, 30, 120, 90, 'طلبية سنوية', twentyDaysAgo, null, custIds.c1);
   const wo3id = wo3.lastInsertRowid;
   insWF.run(wo3id, 'CTN-003', 'main', 1.0, 3, 'أسود', 0);
   insWA.run(wo3id, 'LBL-001', 'ليبل ماركة', 1, 1.5);
@@ -241,6 +259,19 @@ function seed() {
   insWS.run(wo3id, 'رمادي', 10, 18, 22, 18, 10, 3);
   insWS.run(wo3id, 'كحلي', 8, 15, 20, 15, 8, 2);
   stageTemplates.forEach(s => insWSt.run(wo3id, s.name, s.sort_order, 'completed', 'ورشة 1', twentyDaysAgo, twentyDaysAgo));
+
+  // WO-004: cancelled (SKR-001 تنورة كريب) — cancelled after fabric receipt
+  const wo4 = insWO.run('WO-2026-004', modelIds.m5, null, 'cancelled', 'normal', 'ورشة 1', 55, 30, 25, 180, 140, 'تم الإلغاء - تغيير طلب العميل', tenDaysAgo, inTenDays, custIds.c5);
+  const wo4id = wo4.lastInsertRowid;
+  db.prepare('UPDATE work_orders SET cancel_reason=?, cancelled_at=? WHERE id=?').run('العميل غيّر الطلبية بالكامل وطلب تصميم مختلف', tenDaysAgo, wo4id);
+  insWF.run(wo4id, 'CRP-001', 'main', 1.2, 3, 'أسود', 0);
+  insWF.run(wo4id, 'LNG-002', 'lining', 0.8, 0, 'أسود', 1);
+  insWA.run(wo4id, 'ZPR-002', 'سوستة مخفية', 1, 12);
+  insWA.run(wo4id, 'LBL-001', 'ليبل ماركة', 1, 1.5);
+  insWA.run(wo4id, 'LBL-002', 'ليبل مقاس', 1, 0.3);
+  insWA.run(wo4id, 'OTH-001', 'شريط ساتان', 0.8, 5);
+  insWS.run(wo4id, 'أسود', 6, 12, 18, 12, 6, 0);
+  stageTemplates.forEach(s => insWSt.run(wo4id, s.name, s.sort_order, 'skipped', null, null, null));
 
   // ──────────── Purchase Orders (4) ────────────
   const insPO = db.prepare('INSERT INTO purchase_orders (po_number, supplier_id, po_type, total_amount, paid_amount, status, expected_date, notes) VALUES (?,?,?,?,?,?,?,?)');
@@ -280,31 +311,31 @@ function seed() {
   const batch4 = insBatch.run('FB-2026-0004', 'LNG-002', sup6.lastInsertRowid, po4.lastInsertRowid, null, 15, 35, 0, 0, 'available', '2026-02-28', 'دفعة من PO-2026-004');
   const batch5 = insBatch.run('FB-2026-0005', 'LNG-003', sup6.lastInsertRowid, po4.lastInsertRowid, null, 10, 55, 0, 0, 'available', '2026-02-28', 'دفعة من PO-2026-004');
 
-  // ──────────── Invoices (6) ────────────
-  const insInv = db.prepare('INSERT INTO invoices (invoice_number, customer_name, customer_phone, customer_email, notes, subtotal, tax_pct, discount, total, status, due_date, wo_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  // ──────────── Invoices (6) — with customer_id ────────────
+  const insInv = db.prepare('INSERT INTO invoices (invoice_number, customer_name, customer_phone, customer_email, notes, subtotal, tax_pct, discount, total, status, due_date, wo_id, customer_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
   const insII = db.prepare('INSERT INTO invoice_items (invoice_id, model_code, description, variant, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?,?)');
 
-  const inv1 = insInv.run('INV-001', 'أحمد محمد العلي', '01012345678', 'ahmed@example.com',
-    'طلبية محل الزيتون - الدفعة الأولى', 15750, 14, 500, 17455, 'paid', '2026-02-28', wo1id, '2026-02-10 10:00:00');
+  const inv1 = insInv.run('INV-001', 'محلات الزيتون', '01055544433', 'zeitoun@example.com',
+    'طلبية محل الزيتون - الدفعة الأولى', 15750, 14, 500, 17455, 'paid', '2026-02-28', wo1id, custIds.c3, '2026-02-10 10:00:00');
   insII.run(inv1.lastInsertRowid, 'DRS-001', 'فستان سهرة كلاسيك - كحلي', 'كحلي', 15, 450, 6750, 0);
   insII.run(inv1.lastInsertRowid, 'SKR-001', 'تنورة كريب ميدي - أسود', 'أسود', 20, 180, 3600, 1);
   insII.run(inv1.lastInsertRowid, 'SHR-001', 'قميص رسمي قطن - أبيض', 'أبيض', 30, 220, 6600, 2);
   insII.run(inv1.lastInsertRowid, null, 'خدمة توصيل', null, 1, 200, 200, 3);
 
-  const inv2 = insInv.run('INV-002', 'فاطمة حسن', '01198765432', 'fatima.h@example.com',
-    'طلبية خاصة - حفل زفاف', 22500, 14, 1000, 24650, 'sent', '2026-03-20', null, '2026-03-01 14:30:00');
+  const inv2 = insInv.run('INV-002', 'بوتيك الورد', '01198765432', 'ward@example.com',
+    'طلبية خاصة - حفل زفاف', 22500, 14, 1000, 24650, 'sent', '2026-03-20', null, custIds.c2, '2026-03-01 14:30:00');
   insII.run(inv2.lastInsertRowid, 'DRS-001', 'فستان سهرة كلاسيك - عنابي', 'عنابي', 25, 450, 11250, 0);
   insII.run(inv2.lastInsertRowid, 'ABY-001', 'عباية كريب مطرزة - أسود/ذهبي', 'أسود/ذهبي', 15, 550, 8250, 1);
   insII.run(inv2.lastInsertRowid, 'VES-001', 'فيست صوف كشمير - بيج', 'بيج', 10, 400, 4000, 2);
   insII.run(inv2.lastInsertRowid, null, 'تعديلات خاصة', null, 1, 500, 500, 3);
 
-  const inv3 = insInv.run('INV-003', 'محمد سعيد الخطيب', '01055544433', null,
-    'عرض سعر مبدئي - محل الأناقة', 9600, 0, 0, 9600, 'draft', '2026-04-01', null, '2026-03-10 09:00:00');
+  const inv3 = insInv.run('INV-003', 'مؤسسة النخبة للأزياء', '01077788899', 'elite@fashion.com',
+    'عرض سعر مبدئي - محل الأناقة', 9600, 0, 0, 9600, 'draft', '2026-04-01', null, custIds.c4, '2026-03-10 09:00:00');
   insII.run(inv3.lastInsertRowid, 'PNT-001', 'بنطلون جينز كاجوال - أزرق', 'أزرق فاتح', 20, 280, 5600, 0);
   insII.run(inv3.lastInsertRowid, 'TSH-001', 'تيشيرت قطن لايكرا - أسود', 'أسود', 40, 120, 4800, 1);
 
-  const inv4 = insInv.run('INV-004', 'سارة عبدالله', '01077788899', 'sara.a@example.com',
-    'طلبية شهرية - بوتيك الورد', 18200, 14, 200, 20548, 'overdue', '2026-02-15', null, '2026-01-20 11:00:00');
+  const inv4 = insInv.run('INV-004', 'شركة الأناقة للملابس', '01012345678', 'elegance@example.com',
+    'طلبية شهرية - بوتيك الورد', 18200, 14, 200, 20548, 'overdue', '2026-02-15', null, custIds.c1, '2026-01-20 11:00:00');
   insII.run(inv4.lastInsertRowid, 'DRS-002', 'فستان كتان صيفي - أوف وايت', 'أوف وايت', 12, 320, 3840, 0);
   insII.run(inv4.lastInsertRowid, 'SKR-001', 'تنورة كريب ميدي - عنابي', 'عنابي', 18, 180, 3240, 1);
   insII.run(inv4.lastInsertRowid, 'ABY-001', 'عباية كريب مطرزة - أسود/فضي', 'أسود/فضي', 10, 550, 5500, 2);
@@ -312,15 +343,15 @@ function seed() {
   insII.run(inv4.lastInsertRowid, null, 'تغليف هدايا', null, 10, 15, 150, 4);
   insII.run(inv4.lastInsertRowid, null, 'شحن سريع', null, 1, 350, 350, 5);
 
-  const inv5 = insInv.run('INV-005', 'يوسف إبراهيم', '01033322211', 'youssef@example.com',
-    'طلبية شركة - ملابس رسمية', 35200, 14, 2000, 37828, 'paid', '2026-03-01', wo3id, '2026-02-15 16:00:00');
+  const inv5 = insInv.run('INV-005', 'مؤسسة النخبة للأزياء', '01077788899', 'elite@fashion.com',
+    'طلبية شركة - ملابس رسمية', 35200, 14, 2000, 37828, 'paid', '2026-03-01', wo3id, custIds.c4, '2026-02-15 16:00:00');
   insII.run(inv5.lastInsertRowid, 'JKT-001', 'جاكيت صوف رسمي - رمادي', 'رمادي', 20, 650, 13000, 0);
   insII.run(inv5.lastInsertRowid, 'VES-001', 'فيست صوف كشمير - رمادي غامق', 'رمادي غامق', 20, 400, 8000, 1);
   insII.run(inv5.lastInsertRowid, 'SHR-001', 'قميص رسمي - أبيض', 'أبيض', 40, 220, 8800, 2);
   insII.run(inv5.lastInsertRowid, 'PNT-001', 'بنطلون جينز - أسود', 'أسود', 20, 280, 5600, 3);
 
-  const inv6 = insInv.run('INV-006', 'نورا علي', '01099988877', null,
-    'تم الإلغاء بطلب العميل', 5400, 0, 0, 5400, 'cancelled', '2026-03-10', null, '2026-03-05 08:30:00');
+  const inv6 = insInv.run('INV-006', 'أتيليه سارة', '01033322211', 'sara.atelier@example.com',
+    'تم الإلغاء بطلب العميل', 5400, 0, 0, 5400, 'cancelled', '2026-03-10', null, custIds.c5, '2026-03-05 08:30:00');
   insII.run(inv6.lastInsertRowid, 'TSH-001', 'تيشيرت قطن - رمادي', 'رمادي', 30, 120, 3600, 0);
   insII.run(inv6.lastInsertRowid, 'TSH-001', 'تيشيرت قطن - كحلي', 'كحلي', 15, 120, 1800, 1);
 
@@ -460,31 +491,59 @@ function seed() {
   insAudit.run(admin_id, 'admin', 'create', 'user', 'hr1', 'سارة عبدالرحمن', new Date(Date.now() - 86400000 * 27).toISOString());
   insAudit.run(admin_id, 'admin', 'login', 'session', null, 'تسجيل دخول', new Date(Date.now() - 3600000).toISOString());
 
+  // ──────────── Notifications (sample) ────────────
+  const insNotif = db.prepare('INSERT INTO notifications (user_id, type, title, body, reference_type, reference_id, is_read) VALUES (?,?,?,?,?,?,?)');
+  insNotif.run(admin_id, 'low_stock', 'مخزون منخفض: خيط حرير', 'وصل مخزون خيط حرير (THR-002) إلى 8 وحدات — أقل من الحد الأدنى', 'accessory', null, 0);
+  insNotif.run(admin_id, 'low_stock', 'مخزون منخفض: حرير طبيعي', 'وصل مخزون حرير طبيعي (SLK-002) إلى 12 متر — أقل من الحد الأدنى', 'fabric', null, 0);
+  insNotif.run(admin_id, 'wo_overdue', 'أمر تشغيل متأخر', 'أمر التشغيل WO-2026-001 تجاوز موعد التسليم', 'work_order', wo1id, 0);
+  insNotif.run(admin_id, 'invoice_overdue', 'فاتورة متأخرة', 'الفاتورة INV-004 متأخرة عن موعد السداد', 'invoice', inv4.lastInsertRowid, 1);
+  insNotif.run(admin_id, 'wo_cancelled', 'إلغاء أمر تشغيل', 'تم إلغاء أمر التشغيل WO-2026-004 — السبب: تغيير طلب العميل', 'work_order', wo4id, 1);
+
+  // ──────────── Accessory Stock Movements (sample) ────────────
+  const insASM = db.prepare('INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes) VALUES (?,?,?,?,?,?)');
+  insASM.run('BTN-001', 'in', 500, 'po', po2.lastInsertRowid, 'استلام من PO-2026-002');
+  insASM.run('BTN-002', 'in', 200, 'po', po2.lastInsertRowid, 'استلام من PO-2026-002');
+  insASM.run('ZPR-001', 'in', 80, 'po', po2.lastInsertRowid, 'استلام من PO-2026-002');
+  insASM.run('LBL-001', 'out', 3, 'work_order', wo1id, 'صرف لأمر تشغيل WO-2026-001');
+  insASM.run('THR-002', 'out', 0.5, 'work_order', wo1id, 'صرف لأمر تشغيل WO-2026-001');
+  insASM.run('BTN-001', 'adjustment', 10, null, null, 'تسوية جرد سنوي');
+
+  // ──────────── Fabric Stock Movements (sample) ────────────
+  const insFSM = db.prepare('INSERT INTO fabric_stock_movements (fabric_code, movement_type, qty_meters, batch_id, reference_type, reference_id, notes) VALUES (?,?,?,?,?,?,?)');
+  insFSM.run('CTN-001', 'in', 30, batch1.lastInsertRowid, 'po', po1.lastInsertRowid, 'استلام من PO-2026-001');
+  insFSM.run('CTN-002', 'in', 25, batch2.lastInsertRowid, 'po', po1.lastInsertRowid, 'استلام من PO-2026-001');
+  insFSM.run('LNG-001', 'in', 20, batch3.lastInsertRowid, 'po', po4.lastInsertRowid, 'استلام من PO-2026-004');
+  insFSM.run('SLK-001', 'out', 5, null, 'work_order', wo1id, 'صرف لأمر تشغيل WO-2026-001');
+
   // ──────────── Summary ────────────
   const counts = {};
-  for (const [key, table] of [['settings','settings'],['stageTemplates','stage_templates'],['suppliers','suppliers'],['fabrics','fabrics'],['accessories','accessories'],['models','models'],['bomTemplates','bom_templates'],['workOrders','work_orders'],['woStages','wo_stages'],['purchaseOrders','purchase_orders'],['invoices','invoices'],['fabricBatches','fabric_inventory_batches'],['employees','employees'],['users','users'],['attendance','attendance'],['payrollPeriods','payroll_periods'],['payrollRecords','payroll_records'],['hrAdjustments','hr_adjustments'],['auditLog','audit_log']]) {
+  for (const [key, table] of [['settings','settings'],['stageTemplates','stage_templates'],['customers','customers'],['suppliers','suppliers'],['fabrics','fabrics'],['accessories','accessories'],['models','models'],['bomTemplates','bom_templates'],['workOrders','work_orders'],['woStages','wo_stages'],['purchaseOrders','purchase_orders'],['invoices','invoices'],['fabricBatches','fabric_inventory_batches'],['employees','employees'],['users','users'],['attendance','attendance'],['payrollPeriods','payroll_periods'],['payrollRecords','payroll_records'],['hrAdjustments','hr_adjustments'],['notifications','notifications'],['accStockMvts','accessory_stock_movements'],['fabStockMvts','fabric_stock_movements'],['auditLog','audit_log']]) {
     counts[key] = db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get().c;
   }
 
-  console.log(`Seed complete! (v6)
+  console.log(`Seed complete! (v9)
   - ${counts.settings} settings
   - ${counts.stageTemplates} stage templates
+  - ${counts.customers} customers
   - ${counts.suppliers} suppliers
   - ${counts.fabrics} fabrics (15 main + 5 lining)
-  - ${counts.accessories} accessories
+  - ${counts.accessories} accessories (with stock tracking)
   - ${counts.models} models
   - ${counts.bomTemplates} BOM templates (1 per model)
-  - ${counts.workOrders} work orders
+  - ${counts.workOrders} work orders (incl. 1 cancelled)
   - ${counts.woStages} wo_stages total
   - ${counts.purchaseOrders} purchase orders with items
   - ${counts.fabricBatches} fabric inventory batches
-  - ${counts.invoices} invoices with items
+  - ${counts.invoices} invoices with items (customer-linked)
   - ${counts.employees} employees
   - ${counts.users} users (all passwords: 123456)
   - ${counts.attendance} attendance records (2 months)
   - ${counts.payrollPeriods} payroll periods
   - ${counts.payrollRecords} payroll records
   - ${counts.hrAdjustments} HR adjustments
+  - ${counts.notifications} notifications
+  - ${counts.accStockMvts} accessory stock movements
+  - ${counts.fabStockMvts} fabric stock movements
   - ${counts.auditLog} audit log entries`);
 
   console.log('\nLogin credentials (all passwords: 123456):');

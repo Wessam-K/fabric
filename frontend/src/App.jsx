@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, Printer, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, Printer, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, Bell, UserCheck } from 'lucide-react';
 import Toast from './components/Toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
@@ -18,6 +18,7 @@ import WorkOrdersList from './pages/WorkOrdersList';
 import WorkOrderForm from './pages/WorkOrderForm';
 import WorkOrderDetail from './pages/WorkOrderDetail';
 import Suppliers from './pages/Suppliers';
+import Customers from './pages/Customers';
 import PurchaseOrders from './pages/PurchaseOrders';
 import FabricInventory from './pages/FabricInventory';
 import Login from './pages/Login';
@@ -29,6 +30,7 @@ import Attendance from './pages/HR/Attendance';
 import Payroll from './pages/HR/Payroll';
 import PaySlip from './pages/HR/PaySlip';
 import GlobalSearch from './components/GlobalSearch';
+import NotificationBell from './components/NotificationBell';
 import { ToastProvider } from './components/Toast';
 
 function ProtectedRoute({ children, roles, perm }) {
@@ -75,6 +77,7 @@ function AppLayout() {
       label: 'المالية والموردين',
       show: () => can('invoices', 'view') || can('suppliers', 'view'),
       items: [
+        { path: '/customers', label: 'العملاء', icon: UserCheck, hide: () => !can('invoices', 'view') },
         { path: '/invoices', label: 'الفواتير', icon: FileText, hide: () => !can('invoices', 'view') },
         { path: '/purchase-orders', label: 'أوامر الشراء', icon: ShoppingCart, hide: () => !can('purchase_orders', 'view') },
         { path: '/suppliers', label: 'الموردين', icon: Truck, hide: () => !can('suppliers', 'view') },
@@ -112,8 +115,9 @@ function AppLayout() {
           <h1 className="text-xl font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</h1>
           <p className="text-[10px] text-gray-400 mt-0.5">نظام إدارة المصنع — v6</p>
         </div>
-        <div className="px-3 pt-2">
-          <GlobalSearch />
+        <div className="px-3 pt-2 flex items-center gap-2">
+          <div className="flex-1"><GlobalSearch /></div>
+          <NotificationBell />
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navGroups.map((group, gi) => {
@@ -176,6 +180,7 @@ function AppLayout() {
           <Route path="/work-orders/:id/edit" element={<ProtectedRoute perm={['work_orders','edit']}><WorkOrderForm /></ProtectedRoute>} />
           <Route path="/work-orders/:id" element={<ProtectedRoute perm={['work_orders','view']}><WorkOrderDetail /></ProtectedRoute>} />
           <Route path="/suppliers" element={<ProtectedRoute perm={['suppliers','view']}><Suppliers /></ProtectedRoute>} />
+          <Route path="/customers" element={<ProtectedRoute perm={['invoices','view']}><Customers /></ProtectedRoute>} />
           <Route path="/purchase-orders" element={<ProtectedRoute perm={['purchase_orders','view']}><PurchaseOrders /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute perm={['reports','view']}><Reports /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute perm={['invoices','view']}><Invoices /></ProtectedRoute>} />

@@ -6,18 +6,19 @@ const { logAudit } = require('../middleware/auth');
 // GET /api/invoices — list with search, status filter, date range
 router.get('/', (req, res) => {
   try {
-    const { search, status, date_from, date_to, page = 1, limit = 50 } = req.query;
-    let q = 'SELECT * FROM invoices WHERE 1=1';
+    const { search, status, date_from, date_to, customer_id, page = 1, limit = 50 } = req.query;
+    let q = `SELECT i.*, c.name as customer_name_linked FROM invoices i LEFT JOIN customers c ON c.id=i.customer_id WHERE 1=1`;
     const p = [];
 
+    if (customer_id) { q += ' AND i.customer_id = ?'; p.push(customer_id); }
     if (search) {
-      q += ' AND (invoice_number LIKE ? OR customer_name LIKE ?)';
+      q += ' AND (i.invoice_number LIKE ? OR i.customer_name LIKE ? OR c.name LIKE ?)';
       const s = `%${search}%`;
-      p.push(s, s);
+      p.push(s, s, s);
     }
-    if (status) { q += ' AND status = ?'; p.push(status); }
-    if (date_from) { q += ' AND created_at >= ?'; p.push(date_from); }
-    if (date_to) { q += ' AND created_at <= ?'; p.push(date_to + 'T23:59:59'); }
+    if (status) { q += ' AND i.status = ?'; p.push(status); }
+    if (date_from) { q += ' AND i.created_at >= ?'; p.push(date_from); }
+    if (date_to) { q += ' AND i.created_at <= ?'; p.push(date_to + 'T23:59:59'); }
 
     q += ' ORDER BY created_at DESC';
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -55,7 +56,7 @@ router.get('/next-number', (req, res) => {
 router.get('/:id', (req, res) => {
   try {
     const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    if (!invoice) return res.status(404).json({ error: 'الفاتورة غير موجودة' });
     invoice.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order').all(invoice.id);
     res.json(invoice);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -64,21 +65,21 @@ router.get('/:id', (req, res) => {
 // POST /api/invoices — create invoice
 router.post('/', (req, res) => {
   try {
-    const { invoice_number, customer_name, customer_phone, customer_email, notes, tax_pct, discount, due_date, items, status } = req.body;
-    if (!invoice_number || !customer_name) return res.status(400).json({ error: 'invoice_number and customer_name required' });
+    const { invoice_number, customer_name, customer_phone, customer_email, customer_id, notes, tax_pct, discount, due_date, items, status } = req.body;
+    if (!invoice_number || !customer_name) return res.status(400).json({ error: 'رقم الفاتورة واسم العميل مطلوبين' });
 
     // Check duplicate
     const exists = db.prepare('SELECT id FROM invoices WHERE invoice_number = ?').get(invoice_number);
-    if (exists) return res.status(409).json({ error: 'Invoice number already exists' });
+    if (exists) return res.status(409).json({ error: 'رقم الفاتورة موجود بالفعل' });
 
     const subtotal = (items || []).reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
     const taxAmt = subtotal * ((parseFloat(tax_pct) || 0) / 100);
     const total = subtotal + taxAmt - (parseFloat(discount) || 0);
 
-    const ins = db.prepare(`INSERT INTO invoices (invoice_number, customer_name, customer_phone, customer_email, notes, subtotal, tax_pct, discount, total, status, due_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const ins = db.prepare(`INSERT INTO invoices (invoice_number, customer_name, customer_phone, customer_email, customer_id, notes, subtotal, tax_pct, discount, total, status, due_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
-    const result = ins.run(invoice_number, customer_name, customer_phone || null, customer_email || null, notes || null,
+    const result = ins.run(invoice_number, customer_name, customer_phone || null, customer_email || null, customer_id || null, notes || null,
       subtotal, parseFloat(tax_pct) || 0, parseFloat(discount) || 0, total, status || 'draft', due_date || null);
 
     const invoiceId = result.lastInsertRowid;
@@ -105,18 +106,18 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-    if (!invoice) return res.status(404).json({ error: 'Not found' });
+    if (!invoice) return res.status(404).json({ error: 'غير موجود' });
 
-    const { customer_name, customer_phone, customer_email, notes, tax_pct, discount, due_date, items, status } = req.body;
+    const { customer_name, customer_phone, customer_email, customer_id, notes, tax_pct, discount, due_date, items, status } = req.body;
 
     const subtotal = (items || []).reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
     const taxAmt = subtotal * ((parseFloat(tax_pct) || 0) / 100);
     const total = subtotal + taxAmt - (parseFloat(discount) || 0);
 
-    db.prepare(`UPDATE invoices SET customer_name=?, customer_phone=?, customer_email=?, notes=?, subtotal=?, tax_pct=?, discount=?, total=?, status=?, due_date=?, updated_at=datetime('now')
+    db.prepare(`UPDATE invoices SET customer_name=?, customer_phone=?, customer_email=?, customer_id=?, notes=?, subtotal=?, tax_pct=?, discount=?, total=?, status=?, due_date=?, updated_at=datetime('now')
       WHERE id=?`).run(
       customer_name || invoice.customer_name, customer_phone ?? invoice.customer_phone, customer_email ?? invoice.customer_email,
-      notes ?? invoice.notes, subtotal, parseFloat(tax_pct) ?? invoice.tax_pct, parseFloat(discount) ?? invoice.discount,
+      customer_id !== undefined ? customer_id : invoice.customer_id, notes ?? invoice.notes, subtotal, parseFloat(tax_pct) ?? invoice.tax_pct, parseFloat(discount) ?? invoice.discount,
       total, status || invoice.status, due_date ?? invoice.due_date, invoice.id
     );
 
@@ -144,7 +145,7 @@ router.patch('/:id/status', (req, res) => {
   try {
     const { status } = req.body;
     if (!['draft', 'sent', 'paid', 'overdue', 'cancelled'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
+      return res.status(400).json({ error: 'حالة غير صالحة' });
     }
     db.prepare("UPDATE invoices SET status=?, updated_at=datetime('now') WHERE id=?").run(status, req.params.id);
     res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id));

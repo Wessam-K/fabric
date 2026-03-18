@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon } from 'lucide-react';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
@@ -22,6 +22,8 @@ const TABS = [
   { key: 'model-production', label: 'إنتاج الموديلات', icon: BarChart2 },
   { key: 'supplier-consumption', label: 'استهلاك الموردين', icon: Warehouse },
   { key: 'hr', label: 'الموارد البشرية', icon: Users },
+  { key: 'customer-summary', label: 'ملخص العملاء', icon: UserCheck },
+  { key: 'inventory-status', label: 'حالة المخزون', icon: Warehouse },
   { key: 'pivot', label: 'جدول محوري', icon: Table2 },
 ];
 
@@ -67,6 +69,8 @@ export default function Reports() {
   const [modelProductionData, setModelProductionData] = useState(null);
   const [supplierConsumptionData, setSupplierConsumptionData] = useState(null);
   const [hrData, setHrData] = useState(null);
+  const [customerSummary, setCustomerSummary] = useState(null);
+  const [inventoryStatus, setInventoryStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -124,6 +128,12 @@ export default function Reports() {
         } else if (tab === 'hr') {
           const { data } = await api.get('/reports/hr-summary');
           setHrData(data);
+        } else if (tab === 'customer-summary') {
+          const { data } = await api.get('/reports/customer-summary');
+          setCustomerSummary(data);
+        } else if (tab === 'inventory-status') {
+          const { data } = await api.get('/reports/inventory-status');
+          setInventoryStatus(data);
         } else if (tab === 'pivot') {
           setLoading(false); return; // PivotTable loads its own data
         }
@@ -679,6 +689,132 @@ export default function Reports() {
     );
   };
 
+  const renderCustomerSummary = () => {
+    if (!customerSummary) return null;
+    const { customers, totals } = customerSummary;
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <KPICard label="إجمالي العملاء" value={totals.total_customers} icon={UserCheck} color="bg-blue-50 text-blue-600" />
+          <KPICard label="إجمالي الإيرادات" value={`${fmt(totals.total_revenue)} ج.م`} icon={DollarSign} color="bg-green-50 text-green-600" />
+          <KPICard label="المستحقات المعلقة" value={`${fmt(totals.total_outstanding)} ج.م`} icon={AlertTriangle} color="bg-red-50 text-red-600" />
+        </div>
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(customers.map(c => ({ code: c.code, name: c.name, city: c.city, invoice_count: c.invoice_count, total_revenue: c.total_revenue, outstanding: c.outstanding, active_wos: c.active_wos })), 'customer-summary.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الكود</th>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الاسم</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">المدينة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">الفواتير</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">إجمالي الإيرادات</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">المستحقات</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">أوامر نشطة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customers.map(c => (
+                <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-3 font-mono text-xs font-bold">{c.code}</td>
+                  <td className="px-4 py-3 font-bold text-[#1a1a2e]">{c.name}</td>
+                  <td className="px-4 py-3 text-center text-xs text-gray-500">{c.city || '—'}</td>
+                  <td className="px-4 py-3 text-center font-mono">{c.invoice_count}</td>
+                  <td className="px-4 py-3 text-center font-mono font-bold text-green-600">{fmt(c.total_revenue)} ج.م</td>
+                  <td className="px-4 py-3 text-center font-mono font-bold text-red-500">{fmt(c.outstanding)} ج.م</td>
+                  <td className="px-4 py-3 text-center font-mono">{c.active_wos}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderInventoryStatus = () => {
+    if (!inventoryStatus) return null;
+    const { fabrics, accessories, low_stock_fabrics, low_stock_accessories } = inventoryStatus;
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard label="أقمشة نشطة" value={fabrics.length} icon={Scissors} color="bg-blue-50 text-blue-600" />
+          <KPICard label="أقمشة منخفضة المخزون" value={low_stock_fabrics} icon={AlertTriangle} color="bg-red-50 text-red-600" />
+          <KPICard label="إكسسوارات نشطة" value={accessories.length} icon={Package} color="bg-purple-50 text-purple-600" />
+          <KPICard label="إكسسوارات منخفضة" value={low_stock_accessories} icon={AlertTriangle} color="bg-amber-50 text-amber-600" />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">حالة مخزون الأقمشة</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-right text-xs text-gray-500">الكود</th>
+                  <th className="px-3 py-2 text-right text-xs text-gray-500">الاسم</th>
+                  <th className="px-3 py-2 text-center text-xs text-gray-500">اللون</th>
+                  <th className="px-3 py-2 text-center text-xs text-gray-500">متر متاح</th>
+                  <th className="px-3 py-2 text-center text-xs text-gray-500">الحد الأدنى</th>
+                  <th className="px-3 py-2 text-center text-xs text-gray-500">الحالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fabrics.map(f => (
+                  <tr key={f.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2 font-mono text-xs">{f.code}</td>
+                    <td className="px-3 py-2 text-xs">{f.name}</td>
+                    <td className="px-3 py-2 text-center text-xs">{f.color || '—'}</td>
+                    <td className="px-3 py-2 text-center font-mono text-xs">{f.available_meters || 0}</td>
+                    <td className="px-3 py-2 text-center font-mono text-xs">{f.low_stock_threshold || 10}</td>
+                    <td className="px-3 py-2 text-center">
+                      {f.is_low_stock ? <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">منخفض</span> : <span className="text-[10px] bg-green-100 text-green-600 px-2 py-0.5 rounded-full">جيد</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">حالة مخزون الإكسسوارات</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-right text-xs text-gray-500">الكود</th>
+                  <th className="px-3 py-2 text-right text-xs text-gray-500">الاسم</th>
+                  <th className="px-3 py-2 text-center text-xs text-gray-500">النوع</th>
+                  <th className="px-3 py-2 text-center text-xs text-gray-500">الكمية</th>
+                  <th className="px-3 py-2 text-center text-xs text-gray-500">الحد الأدنى</th>
+                  <th className="px-3 py-2 text-center text-xs text-gray-500">الحالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accessories.map(a => (
+                  <tr key={a.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2 font-mono text-xs">{a.code}</td>
+                    <td className="px-3 py-2 text-xs">{a.name}</td>
+                    <td className="px-3 py-2 text-center text-xs">{a.acc_type}</td>
+                    <td className="px-3 py-2 text-center font-mono text-xs">{a.quantity_on_hand || 0}</td>
+                    <td className="px-3 py-2 text-center font-mono text-xs">{a.low_stock_threshold || 10}</td>
+                    <td className="px-3 py-2 text-center">
+                      {a.is_low_stock ? <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">منخفض</span> : <span className="text-[10px] bg-green-100 text-green-600 px-2 py-0.5 rounded-full">جيد</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderModelProduction = () => {
     if (!modelProductionData || modelProductionData.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات إنتاج للموديلات</div>;
     const chartData = {
@@ -852,6 +988,8 @@ export default function Reports() {
           {tab === 'model-production' && renderModelProduction()}
           {tab === 'supplier-consumption' && renderSupplierConsumption()}
           {tab === 'hr' && renderHR()}
+          {tab === 'customer-summary' && renderCustomerSummary()}
+          {tab === 'inventory-status' && renderInventoryStatus()}
           {tab === 'pivot' && <PivotTable />}
         </>
       )}

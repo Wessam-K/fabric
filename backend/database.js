@@ -1085,6 +1085,104 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (8)`);
   }
+
+  // ═══════════════════════════════════════════════
+  // V9 — Customers, Accessory Stock, Notifications, WO Cancel, Fabric Stock Movements
+  // ═══════════════════════════════════════════════
+  if (currentVersion < 9) {
+    const addColumnSafe = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch {}
+    };
+
+    // 1.1 Customers table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        code         TEXT UNIQUE NOT NULL,
+        name         TEXT NOT NULL,
+        phone        TEXT,
+        email        TEXT,
+        address      TEXT,
+        city         TEXT,
+        tax_number   TEXT,
+        credit_limit REAL DEFAULT 0,
+        balance      REAL DEFAULT 0,
+        notes        TEXT,
+        status       TEXT DEFAULT 'active' CHECK(status IN ('active','inactive')),
+        created_at   TEXT DEFAULT (datetime('now')),
+        updated_at   TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // 1.2 customer_id FK on work_orders and invoices
+    addColumnSafe('work_orders', 'customer_id', 'INTEGER REFERENCES customers(id)');
+    addColumnSafe('invoices', 'customer_id', 'INTEGER REFERENCES customers(id)');
+
+    // 1.3 Accessory stock tracking columns
+    addColumnSafe('accessories', 'quantity_on_hand', 'REAL DEFAULT 0');
+    addColumnSafe('accessories', 'low_stock_threshold', 'REAL DEFAULT 10');
+    addColumnSafe('accessories', 'reorder_qty', 'REAL DEFAULT 50');
+
+    // Fabric stock tracking columns
+    addColumnSafe('fabrics', 'available_meters', 'REAL DEFAULT 0');
+    addColumnSafe('fabrics', 'low_stock_threshold', 'REAL DEFAULT 20');
+
+    // Accessory stock movements
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS accessory_stock_movements (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        accessory_code  TEXT NOT NULL REFERENCES accessories(code),
+        movement_type   TEXT NOT NULL CHECK(movement_type IN ('in','out','adjustment','return')),
+        qty             REAL NOT NULL,
+        reference_type  TEXT,
+        reference_id    INTEGER,
+        notes           TEXT,
+        created_by      INTEGER REFERENCES users(id),
+        created_at      TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // 1.4 Notifications table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id        INTEGER REFERENCES users(id),
+        type           TEXT NOT NULL,
+        title          TEXT NOT NULL,
+        body           TEXT NOT NULL,
+        reference_type TEXT,
+        reference_id   INTEGER,
+        is_read        INTEGER DEFAULT 0,
+        created_at     TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // 1.5 Fabric stock movements
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS fabric_stock_movements (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        fabric_code     TEXT NOT NULL REFERENCES fabrics(code),
+        movement_type   TEXT NOT NULL CHECK(movement_type IN ('in','out','adjustment','return','waste')),
+        qty_meters      REAL NOT NULL,
+        batch_id        INTEGER REFERENCES fabric_inventory_batches(id),
+        reference_type  TEXT,
+        reference_id    INTEGER,
+        notes           TEXT,
+        created_by      INTEGER REFERENCES users(id),
+        created_at      TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // 1.6 WO cancellation columns
+    addColumnSafe('work_orders', 'cancel_reason', 'TEXT');
+    addColumnSafe('work_orders', 'cancelled_by', 'INTEGER REFERENCES users(id)');
+    addColumnSafe('work_orders', 'cancelled_at', 'TEXT');
+
+    // 1.7 Ensure notifications has user_id
+    addColumnSafe('notifications', 'user_id', 'INTEGER REFERENCES users(id)');
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (9)`);
+  }
 }
 
 initializeDatabase();

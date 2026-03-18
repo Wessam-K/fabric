@@ -19,10 +19,10 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   try {
-    const { code, acc_type, name, unit_price, unit, supplier, supplier_id, notes } = req.body;
-    if (!code || !acc_type || !name || unit_price == null) return res.status(400).json({ error: 'code, acc_type, name, unit_price required' });
-    const r = db.prepare(`INSERT INTO accessories (code,acc_type,name,unit_price,unit,supplier,supplier_id,notes) VALUES (?,?,?,?,?,?,?,?)`)
-      .run(code, acc_type, name, parseFloat(unit_price), unit || 'piece', supplier || null, supplier_id || null, notes || null);
+    const { code, acc_type, name, unit_price, unit, supplier, supplier_id, notes, quantity_on_hand, low_stock_threshold, reorder_qty } = req.body;
+    if (!code || !acc_type || !name || unit_price == null) return res.status(400).json({ error: 'الكود والنوع والاسم وسعر الوحدة مطلوبين' });
+    const r = db.prepare(`INSERT INTO accessories (code,acc_type,name,unit_price,unit,supplier,supplier_id,notes,quantity_on_hand,low_stock_threshold,reorder_qty) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(code, acc_type, name, parseFloat(unit_price), unit || 'piece', supplier || null, supplier_id || null, notes || null, quantity_on_hand || 0, low_stock_threshold || 10, reorder_qty || 50);
     const created = db.prepare('SELECT * FROM accessories WHERE id=?').get(r.lastInsertRowid);
     logAudit(req, 'CREATE', 'accessory', code, name);
     res.status(201).json(created);
@@ -35,10 +35,10 @@ router.post('/', (req, res) => {
 router.put('/:code', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
-    const { acc_type, name, unit_price, unit, supplier, supplier_id, status, notes } = req.body;
-    db.prepare(`UPDATE accessories SET acc_type=COALESCE(?,acc_type),name=COALESCE(?,name),unit_price=COALESCE(?,unit_price),unit=COALESCE(?,unit),supplier=COALESCE(?,supplier),supplier_id=COALESCE(?,supplier_id),status=COALESCE(?,status),notes=COALESCE(?,notes) WHERE code=?`)
-      .run(acc_type||null, name||null, unit_price!=null?parseFloat(unit_price):null, unit||null, supplier||null, supplier_id||null, status||null, notes||null, req.params.code);
+    if (!existing) return res.status(404).json({ error: 'غير موجود' });
+    const { acc_type, name, unit_price, unit, supplier, supplier_id, status, notes, low_stock_threshold, reorder_qty } = req.body;
+    db.prepare(`UPDATE accessories SET acc_type=COALESCE(?,acc_type),name=COALESCE(?,name),unit_price=COALESCE(?,unit_price),unit=COALESCE(?,unit),supplier=COALESCE(?,supplier),supplier_id=COALESCE(?,supplier_id),status=COALESCE(?,status),notes=COALESCE(?,notes),low_stock_threshold=COALESCE(?,low_stock_threshold),reorder_qty=COALESCE(?,reorder_qty) WHERE code=?`)
+      .run(acc_type||null, name||null, unit_price!=null?parseFloat(unit_price):null, unit||null, supplier||null, supplier_id||null, status||null, notes||null, low_stock_threshold!=null?parseInt(low_stock_threshold):null, reorder_qty!=null?parseInt(reorder_qty):null, req.params.code);
     const updated = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     logAudit(req, 'UPDATE', 'accessory', req.params.code, existing.name, existing, updated);
     res.json(updated);
@@ -48,10 +48,42 @@ router.put('/:code', (req, res) => {
 router.delete('/:code', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: 'غير موجود' });
     db.prepare("UPDATE accessories SET status='inactive' WHERE code=?").run(req.params.code);
     logAudit(req, 'DELETE', 'accessory', req.params.code, existing.name);
-    res.json({ message: 'Deactivated', code: req.params.code });
+    res.json({ message: 'تم التعطيل', code: req.params.code });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Stock management
+router.get('/:code/stock', (req, res) => {
+  try {
+    const acc = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
+    if (!acc) return res.status(404).json({ error: 'الاكسسوار غير موجود' });
+    const movements = db.prepare(`SELECT asm.*, u.full_name as user_name FROM accessory_stock_movements asm LEFT JOIN users u ON u.id=asm.created_by WHERE asm.accessory_code=? ORDER BY asm.created_at DESC LIMIT 50`).all(acc.code);
+    const low_stock = acc.quantity_on_hand <= acc.low_stock_threshold;
+    res.json({ accessory: acc, movements, low_stock });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:code/stock/adjust', (req, res) => {
+  try {
+    const acc = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
+    if (!acc) return res.status(404).json({ error: 'الاكسسوار غير موجود' });
+    const { qty_change, notes } = req.body;
+    if (qty_change == null || qty_change === 0) return res.status(400).json({ error: 'الكمية مطلوبة ويجب أن لا تساوي صفر' });
+    const change = parseInt(qty_change);
+    const newQty = acc.quantity_on_hand + change;
+    if (newQty < 0) return res.status(400).json({ error: 'الكمية الناتجة لا يمكن أن تكون سالبة' });
+    const userId = req.user ? req.user.id : null;
+    db.transaction(() => {
+      db.prepare('UPDATE accessories SET quantity_on_hand=? WHERE id=?').run(newQty, acc.id);
+      db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, notes, created_by) VALUES (?,?,?,?,?,?)`)
+        .run(acc.code, 'adjustment', change, 'manual', notes || null, userId);
+    })();
+    const updated = db.prepare('SELECT * FROM accessories WHERE id=?').get(acc.id);
+    logAudit(req, 'STOCK_ADJUST', 'accessory', acc.code, acc.name, { old_qty: acc.quantity_on_hand }, { new_qty: newQty });
+    res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

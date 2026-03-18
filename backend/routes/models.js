@@ -52,7 +52,7 @@ router.get('/next-serial', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const { serial_number, model_code, model_name, category, gender, notes } = req.body;
-    if (!model_code) return res.status(400).json({ error: 'model_code required' });
+    if (!model_code) return res.status(400).json({ error: 'كود الموديل مطلوب' });
     const r = db.prepare(`INSERT INTO models (serial_number,model_code,model_name,category,gender,notes) VALUES (?,?,?,?,?,?)`)
       .run(serial_number || null, model_code, model_name || null, category || null, gender || 'unisex', notes || null);
     const model = db.prepare('SELECT * FROM models WHERE id=?').get(r.lastInsertRowid);
@@ -68,7 +68,7 @@ router.post('/', (req, res) => {
 router.get('/:code', (req, res) => {
   try {
     const model = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
-    if (!model) return res.status(404).json({ error: 'Not found' });
+    if (!model) return res.status(404).json({ error: 'غير موجود' });
     model.bom_templates = db.prepare('SELECT id, template_name, is_default, masnaiya, masrouf, margin_pct, created_at FROM bom_templates WHERE model_id=? ORDER BY is_default DESC, id').all(model.id);
     res.json(model);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -78,7 +78,7 @@ router.get('/:code', (req, res) => {
 router.put('/:code', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { model_name, category, gender, notes } = req.body;
     db.prepare(`UPDATE models SET model_name=COALESCE(?,model_name),category=COALESCE(?,category),gender=COALESCE(?,gender),notes=COALESCE(?,notes),updated_at=datetime('now') WHERE model_code=?`)
       .run(model_name || null, category || null, gender || null, notes || null, req.params.code);
@@ -92,17 +92,17 @@ router.put('/:code', (req, res) => {
 router.delete('/:code', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: 'غير موجود' });
     db.prepare("UPDATE models SET status='inactive',updated_at=datetime('now') WHERE model_code=?").run(req.params.code);
     logAudit(req, 'DELETE', 'model', req.params.code, existing.model_name || existing.model_code);
-    res.json({ message: 'Deactivated' });
+    res.json({ message: 'تم التعطيل' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // POST /api/models/:code/image — upload model image
 router.post('/:code/image', upload.single('image'), (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No image' });
+    if (!req.file) return res.status(400).json({ error: 'لا توجد صورة' });
     const image_path = `/uploads/models/${req.file.filename}`;
     db.prepare("UPDATE models SET model_image=?,updated_at=datetime('now') WHERE model_code=?").run(image_path, req.params.code);
     res.json({ image_path });
@@ -132,7 +132,7 @@ function getFullTemplate(templateId) {
 router.get('/:code/bom-templates', (req, res) => {
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
-    if (!model) return res.status(404).json({ error: 'Model not found' });
+    if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
     const templates = db.prepare('SELECT * FROM bom_templates WHERE model_id=? ORDER BY is_default DESC, id').all(model.id);
     // Attach summary counts
     for (const t of templates) {
@@ -148,7 +148,7 @@ router.get('/:code/bom-templates', (req, res) => {
 router.post('/:code/bom-templates', (req, res) => {
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
-    if (!model) return res.status(404).json({ error: 'Model not found' });
+    if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
     const { template_name, is_default, masnaiya, masrouf, margin_pct, notes, fabrics, accessories, sizes } = req.body;
 
     const transaction = db.transaction(() => {
@@ -181,7 +181,7 @@ router.post('/:code/bom-templates', (req, res) => {
 router.get('/:code/bom-templates/:templateId', (req, res) => {
   try {
     const tmpl = getFullTemplate(parseInt(req.params.templateId));
-    if (!tmpl) return res.status(404).json({ error: 'Template not found' });
+    if (!tmpl) return res.status(404).json({ error: 'القالب غير موجود' });
     res.json(tmpl);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -191,7 +191,7 @@ router.put('/:code/bom-templates/:templateId', (req, res) => {
   try {
     const tid = parseInt(req.params.templateId);
     const tmpl = db.prepare('SELECT * FROM bom_templates WHERE id=?').get(tid);
-    if (!tmpl) return res.status(404).json({ error: 'Template not found' });
+    if (!tmpl) return res.status(404).json({ error: 'القالب غير موجود' });
     const { template_name, is_default, masnaiya, masrouf, margin_pct, notes, fabrics, accessories, sizes } = req.body;
 
     const transaction = db.transaction(() => {
@@ -225,11 +225,11 @@ router.put('/:code/bom-templates/:templateId', (req, res) => {
 router.delete('/:code/bom-templates/:templateId', (req, res) => {
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
-    if (!model) return res.status(404).json({ error: 'Model not found' });
+    if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
     const count = db.prepare('SELECT COUNT(*) as c FROM bom_templates WHERE model_id=?').get(model.id).c;
     if (count <= 1) return res.status(400).json({ error: 'لا يمكن حذف آخر وصفة' });
     db.prepare('DELETE FROM bom_templates WHERE id=?').run(parseInt(req.params.templateId));
-    res.json({ message: 'Deleted' });
+    res.json({ message: 'تم الحذف' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -237,10 +237,10 @@ router.delete('/:code/bom-templates/:templateId', (req, res) => {
 router.post('/:code/bom-templates/:templateId/set-default', (req, res) => {
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
-    if (!model) return res.status(404).json({ error: 'Model not found' });
+    if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
     db.prepare('UPDATE bom_templates SET is_default=0 WHERE model_id=?').run(model.id);
     db.prepare('UPDATE bom_templates SET is_default=1 WHERE id=?').run(parseInt(req.params.templateId));
-    res.json({ message: 'Default set' });
+    res.json({ message: 'تم التعيين كافتراضي' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

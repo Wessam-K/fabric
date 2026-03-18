@@ -13,7 +13,7 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const { name, color, sort_order } = req.body;
-    if (!name) return res.status(400).json({ error: 'name required' });
+    if (!name) return res.status(400).json({ error: 'الاسم مطلوب' });
     const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM stage_templates').get().m || 0;
     const r = db.prepare('INSERT INTO stage_templates (name, sort_order, color, is_default) VALUES (?,?,?,1)')
       .run(name, sort_order ?? maxOrder + 1, color || '#6b7280');

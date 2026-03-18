@@ -22,6 +22,8 @@ const purchaseordersRouter = require('./routes/purchaseorders');
 const stageTemplatesRouter = require('./routes/stagetemplates');
 const inventoryRouter = require('./routes/inventory');
 const permissionsRouter = require('./routes/permissions');
+const customersRouter = require('./routes/customers');
+const notificationsRouter = require('./routes/notifications');
 
 const app = express();
 const PORT = process.env.PORT || 9002;
@@ -44,7 +46,7 @@ app.get('/api/setup/status', (req, res) => {
 app.post('/api/setup/create-admin', (req, res) => {
   try {
     const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
-    if (count > 0) return res.status(403).json({ error: 'Setup already completed' });
+    if (count > 0) return res.status(403).json({ error: 'تم إكمال الإعداد بالفعل' });
     const { username, full_name, password } = req.body;
     if (!username || !full_name || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
     if (password.length < 6) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' });
@@ -71,6 +73,8 @@ app.use('/api/purchase-orders', requireAuth, purchaseordersRouter);
 app.use('/api/stage-templates', requireAuth, stageTemplatesRouter);
 app.use('/api/inventory', requireAuth, inventoryRouter);
 app.use('/api/permissions', requireAuth, permissionsRouter);
+app.use('/api/customers', requireAuth, customersRouter);
+app.use('/api/notifications', requireAuth, notificationsRouter);
 
 // Dashboard
 app.get('/api/dashboard', requireAuth, (req, res) => {
@@ -98,6 +102,26 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id
       ORDER BY po.created_at DESC LIMIT 5`).all();
 
+    // V9 — production pipeline
+    const productionPipeline = db.prepare(`
+      SELECT ws.stage_name, SUM(ws.quantity_in_stage) as pieces_in_stage,
+        COUNT(DISTINCT ws.wo_id) as wo_count
+      FROM wo_stages ws
+      JOIN work_orders wo ON wo.id = ws.wo_id
+      WHERE wo.status = 'in_progress' AND ws.status = 'in_progress'
+      GROUP BY ws.stage_name
+      ORDER BY SUM(ws.quantity_in_stage) DESC
+    `).all();
+
+    // V9 — low stock alerts
+    const lowStockFabrics = db.prepare(`SELECT COUNT(*) as c FROM fabrics WHERE status='active' AND available_meters < low_stock_threshold AND low_stock_threshold > 0`).get().c;
+    const lowStockAccessories = db.prepare(`SELECT COUNT(*) as c FROM accessories WHERE status='active' AND quantity_on_hand < low_stock_threshold AND low_stock_threshold > 0`).get().c;
+    const overdueWorkOrders = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE due_date < date('now') AND status NOT IN ('completed','cancelled')`).get().c;
+
+    // V9 — monthly financials
+    const monthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status='paid' AND created_at >= date('now','start of month')`).get().r;
+    const monthlyCost = db.prepare(`SELECT COALESCE(SUM(total_production_cost),0) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month')`).get().c;
+
     res.json({
       total_models: totalModels, total_fabrics: totalFabrics, total_accessories: totalAccessories,
       total_invoices: totalInvoices, active_work_orders: activeWorkOrders,
@@ -105,6 +129,12 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       pending_invoices: pendingInvoices, outstanding_payables: Math.round(outstandingPayables * 100) / 100,
       total_suppliers: totalSuppliers,
       recent_work_orders: recentWorkOrders, recent_pos: recentPOs,
+      production_pipeline: productionPipeline,
+      low_stock_fabrics: lowStockFabrics,
+      low_stock_accessories: lowStockAccessories,
+      overdue_work_orders: overdueWorkOrders,
+      monthly_revenue: Math.round(monthlyRevenue * 100) / 100,
+      monthly_cost: Math.round(monthlyCost * 100) / 100,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -122,7 +152,8 @@ app.get('/api/search', requireAuth, (req, res) => {
     const suppliers = db.prepare(`SELECT id, code, name, supplier_type FROM suppliers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR contact_name LIKE ?) LIMIT 8`).all(like, like, like);
     const workOrders = db.prepare(`SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.assigned_to, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ? LIMIT 8`).all(like, like, like, like);
     const purchaseOrders = db.prepare(`SELECT po.id, po.po_number, po.status, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.po_number LIKE ? OR s.name LIKE ? LIMIT 8`).all(like, like);
-    res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders });
+    const customers = db.prepare(`SELECT id, code, name, phone, city FROM customers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR phone LIKE ?) LIMIT 8`).all(like, like, like);
+    res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -139,5 +170,5 @@ if (fs.existsSync(frontendDist)) {
 }
 
 app.listen(PORT, () => {
-  console.log(`WK-Hub Factory API v5 running on http://localhost:${PORT}`);
+  console.log(`WK-Hub Factory API v9 running on http://localhost:${PORT}`);
 });

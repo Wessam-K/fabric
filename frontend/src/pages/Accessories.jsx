@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
@@ -39,6 +39,9 @@ export default function Accessories() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
+  const [stockModal, setStockModal] = useState(null);
+  const [stockAdjust, setStockAdjust] = useState({ qty_change: '', notes: '' });
+  const [confirmDel, setConfirmDel] = useState(null);
 
   const fetchList = async () => {
     try {
@@ -81,7 +84,11 @@ export default function Accessories() {
   };
 
   const handleDelete = async (code) => {
-    if (!confirm('إلغاء تفعيل هذا الاكسسوار؟')) return;
+    setConfirmDel(code);
+  };
+  const doDelete = async () => {
+    const code = confirmDel;
+    setConfirmDel(null);
     try {
       await api.delete(`/accessories/${code}`);
       toast.success('تم إلغاء التفعيل');
@@ -89,11 +96,34 @@ export default function Accessories() {
     } catch { toast.error('فشل'); }
   };
 
+  const handleStockAdjust = async () => {
+    if (!stockAdjust.qty_change || parseInt(stockAdjust.qty_change) === 0) { toast.error('الكمية مطلوبة'); return; }
+    try {
+      await api.post(`/accessories/${stockModal.code}/stock/adjust`, stockAdjust);
+      toast.success('تم تعديل المخزون');
+      setStockModal(null);
+      setStockAdjust({ qty_change: '', notes: '' });
+      fetchList();
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
+
   const typeLabel = (t) => ACC_TYPES.find(x => x.value === t)?.label || t;
   const TypeIcon = (t) => ACC_TYPES.find(x => x.value === t)?.icon || MoreHorizontal;
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-5">
+      {confirmDel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-base font-bold text-[#1a1a2e] mb-2">تأكيد الحذف</h3>
+            <p className="text-sm text-gray-500 mb-5">إلغاء تفعيل هذا الاكسسوار؟</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setConfirmDel(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600">إلغاء</button>
+              <button onClick={doDelete} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-bold">تأكيد</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-[#1a1a2e]">سجل الاكسسوارات</h2>
@@ -168,10 +198,18 @@ export default function Accessories() {
                       <span className="font-mono text-[#c9a84c] text-sm font-bold">{a.unit_price} ج/{a.unit === 'piece' ? 'قطعة' : a.unit === 'meter' ? 'متر' : a.unit === 'roll' ? 'رول' : a.unit}</span>
                     </div>
                     {a.supplier && <p className="text-[10px] text-gray-400 mt-1">مورد: {a.supplier}</p>}
+                    {/* Stock info */}
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${(a.quantity_on_hand || 0) <= (a.low_stock_threshold || 10) ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                        مخزون: {a.quantity_on_hand || 0}
+                      </span>
+                      {(a.quantity_on_hand || 0) <= (a.low_stock_threshold || 10) && <AlertTriangle size={12} className="text-amber-500" />}
+                    </div>
                   </div>
                 </div>
                 {/* Actions */}
                 <div className="flex gap-1 mt-3 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => { setStockModal(a); setStockAdjust({ qty_change: '', notes: '' }); }} className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg text-[10px]">تعديل مخزون</button>
                   <button onClick={() => openEdit(a)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={14} /></button>
                   <button onClick={() => handleDelete(a.code)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
                 </div>
@@ -244,6 +282,31 @@ export default function Accessories() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Stock Adjustment Modal */}
+      {stockModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setStockModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-[#1a1a2e]">تعديل مخزون: {stockModal.name}</h3>
+            <p className="text-xs text-gray-400">المخزون الحالي: <span className="font-mono font-bold">{stockModal.quantity_on_hand || 0}</span></p>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">التعديل (+ إضافة / - سحب) *</label>
+              <input type="number" value={stockAdjust.qty_change} onChange={e => setStockAdjust({...stockAdjust, qty_change: e.target.value})}
+                placeholder="مثال: +50 أو -10"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:border-[#c9a84c] outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">ملاحظات</label>
+              <input type="text" value={stockAdjust.notes} onChange={e => setStockAdjust({...stockAdjust, notes: e.target.value})}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setStockModal(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
+              <button onClick={handleStockAdjust} className="px-5 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold">تنفيذ</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

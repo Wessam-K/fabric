@@ -379,7 +379,7 @@ router.get('/pivot', (req, res) => {
         ORDER BY name
       `).all();
     } else {
-      return res.status(400).json({ error: 'Invalid source. Use: production, financial, hr, inventory' });
+      return res.status(400).json({ error: 'مصدر غير صالح. استخدم: production, financial, hr, inventory' });
     }
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -510,6 +510,53 @@ router.get('/fabric-consumption-by-supplier', (req, res) => {
     `).all();
 
     res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/customer-summary — revenue + balance per customer
+router.get('/customer-summary', (req, res) => {
+  try {
+    const customers = db.prepare(`
+      SELECT c.id, c.code, c.name, c.phone, c.city, c.credit_limit, c.balance, c.status,
+        (SELECT COUNT(*) FROM invoices i WHERE i.customer_id=c.id) as invoice_count,
+        (SELECT COALESCE(SUM(i.total),0) FROM invoices i WHERE i.customer_id=c.id) as total_revenue,
+        (SELECT COALESCE(SUM(i.total),0) FROM invoices i WHERE i.customer_id=c.id AND i.status NOT IN ('cancelled','paid')) as outstanding,
+        (SELECT COUNT(*) FROM work_orders wo WHERE wo.customer_id=c.id) as wo_count,
+        (SELECT COUNT(*) FROM work_orders wo WHERE wo.customer_id=c.id AND wo.status IN ('pending','in_progress')) as active_wos
+      FROM customers c WHERE c.status='active' ORDER BY total_revenue DESC
+    `).all();
+    const totals = {
+      total_customers: customers.length,
+      total_revenue: Math.round(customers.reduce((s, c) => s + c.total_revenue, 0) * 100) / 100,
+      total_outstanding: Math.round(customers.reduce((s, c) => s + c.outstanding, 0) * 100) / 100,
+    };
+    res.json({ customers, totals });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/inventory-status — fabric + accessory stock overview
+router.get('/inventory-status', (req, res) => {
+  try {
+    const fabrics = db.prepare(`
+      SELECT f.id, f.code, f.name, f.color, f.available_meters, f.low_stock_threshold,
+        CASE WHEN COALESCE(f.available_meters,0) <= COALESCE(f.low_stock_threshold,10) THEN 1 ELSE 0 END as is_low_stock,
+        (SELECT COUNT(*) FROM fabric_inventory_batches b WHERE b.fabric_code=f.code AND b.batch_status='available') as available_batches,
+        (SELECT COALESCE(SUM(b.received_meters - b.used_meters - b.wasted_meters),0) FROM fabric_inventory_batches b WHERE b.fabric_code=f.code AND b.batch_status='available') as batch_available_meters
+      FROM fabrics f WHERE f.status='active' ORDER BY is_low_stock DESC, f.name
+    `).all();
+
+    const accessories = db.prepare(`
+      SELECT a.id, a.code, a.name, a.acc_type, a.quantity_on_hand, a.low_stock_threshold, a.reorder_qty, a.unit,
+        CASE WHEN COALESCE(a.quantity_on_hand,0) <= COALESCE(a.low_stock_threshold,10) THEN 1 ELSE 0 END as is_low_stock
+      FROM accessories a WHERE a.status='active' ORDER BY is_low_stock DESC, a.name
+    `).all();
+
+    res.json({
+      fabrics,
+      accessories,
+      low_stock_fabrics: fabrics.filter(f => f.is_low_stock).length,
+      low_stock_accessories: accessories.filter(a => a.is_low_stock).length,
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

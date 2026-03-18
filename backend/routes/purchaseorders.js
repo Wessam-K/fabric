@@ -46,7 +46,7 @@ router.get('/:id', (req, res) => {
   try {
     const po = db.prepare(`SELECT po.*, s.name as supplier_name, s.code as supplier_code
       FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.id=?`).get(req.params.id);
-    if (!po) return res.status(404).json({ error: 'Not found' });
+    if (!po) return res.status(404).json({ error: 'غير موجود' });
     po.items = db.prepare(`SELECT poi.*, f.name as fabric_name, a.name as accessory_name
       FROM purchase_order_items poi LEFT JOIN fabrics f ON f.code=poi.fabric_code LEFT JOIN accessories a ON a.code=poi.accessory_code
       WHERE poi.po_id=?`).all(po.id);
@@ -60,7 +60,7 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const { po_number, supplier_id, po_type, expected_date, items, notes } = req.body;
-    if (!po_number || !supplier_id) return res.status(400).json({ error: 'po_number and supplier_id required' });
+    if (!po_number || !supplier_id) return res.status(400).json({ error: 'رقم أمر الشراء ومعرف المورد مطلوبان' });
 
     const transaction = db.transaction(() => {
       const totalAmount = (items || []).reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
@@ -93,7 +93,7 @@ router.put('/:id', (req, res) => {
   try {
     const poId = parseInt(req.params.id);
     const existing = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { supplier_id, po_type, expected_date, items, notes } = req.body;
 
     const transaction = db.transaction(() => {
@@ -134,9 +134,9 @@ router.post('/:id/payments', (req, res) => {
   try {
     const poId = parseInt(req.params.id);
     const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
-    if (!po) return res.status(404).json({ error: 'PO not found' });
+    if (!po) return res.status(404).json({ error: 'أمر الشراء غير موجود' });
     const { amount, payment_method, reference, notes } = req.body;
-    if (!amount || amount <= 0) return res.status(400).json({ error: 'Valid amount required' });
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'المبلغ المطلوب غير صالح' });
 
     db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,reference,notes) VALUES (?,?,?,?,?,?)`)
       .run(po.supplier_id, poId, parseFloat(amount), payment_method || 'cash', reference || null, notes || null);
@@ -155,10 +155,10 @@ router.patch('/:id/receive', (req, res) => {
   try {
     const poId = parseInt(req.params.id);
     const po = db.prepare(`SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.id=?`).get(poId);
-    if (!po) return res.status(404).json({ error: 'PO not found' });
+    if (!po) return res.status(404).json({ error: 'أمر الشراء غير موجود' });
 
     const { items, received_date } = req.body;
-    if (!items?.length) return res.status(400).json({ error: 'items required' });
+    if (!items?.length) return res.status(400).json({ error: 'العناصر مطلوبة' });
 
     const userId = req.user?.id || null;
 
@@ -190,6 +190,28 @@ router.patch('/:id/receive', (req, res) => {
 
           db.prepare(`INSERT INTO fabric_inventory_batches (batch_code,fabric_code,supplier_id,po_id,po_item_id,received_meters,price_per_meter,used_meters,wasted_meters,received_date,batch_status) VALUES (?,?,?,?,?,?,?,0,0,?,?)`)
             .run(batchCode, poItem.fabric_code, po.supplier_id, poId, poItem.id, receivedQty, poItem.unit_price, received_date || new Date().toISOString().split('T')[0], 'available');
+
+          // Update fabric available_meters
+          db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) + ? WHERE code=?')
+            .run(receivedQty, poItem.fabric_code);
+
+          // Record fabric stock movement
+          const fabric = db.prepare('SELECT id, available_meters FROM fabrics WHERE code=?').get(poItem.fabric_code);
+          if (fabric) {
+            db.prepare(`INSERT INTO fabric_stock_movements (fabric_code, movement_type, qty_meters, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+              .run(poItem.fabric_code, 'in', receivedQty, 'purchase_order', poId, 'استلام من أمر شراء ' + po.po_number, userId);
+          }
+        }
+
+        // Restock accessories
+        if (poItem.item_type === 'accessory' && poItem.accessory_code && receivedQty > 0) {
+          const acc = db.prepare('SELECT id, quantity_on_hand FROM accessories WHERE code=?').get(poItem.accessory_code);
+          if (acc) {
+            const newQty = (acc.quantity_on_hand || 0) + receivedQty;
+            db.prepare('UPDATE accessories SET quantity_on_hand=? WHERE id=?').run(newQty, acc.id);
+            db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+              .run(poItem.accessory_code, 'in', receivedQty, 'purchase_order', poId, 'استلام من أمر شراء ' + po.po_number, userId);
+          }
         }
       }
 

@@ -81,8 +81,14 @@ export default function Fabrics() {
     }
   };
 
+  const [confirmDel, setConfirmDel] = useState(null);
+
   const handleDelete = async (code) => {
-    if (!confirm('إلغاء تفعيل هذا القماش؟')) return;
+    setConfirmDel(code);
+  };
+  const doDelete = async () => {
+    const code = confirmDel;
+    setConfirmDel(null);
     try {
       await api.delete(`/fabrics/${code}`);
       toast.success('تم إلغاء التفعيل');
@@ -92,6 +98,18 @@ export default function Fabrics() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-5">
+      {confirmDel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-base font-bold text-[#1a1a2e] mb-2">تأكيد الحذف</h3>
+            <p className="text-sm text-gray-500 mb-5">إلغاء تفعيل هذا القماش؟</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setConfirmDel(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600">إلغاء</button>
+              <button onClick={doDelete} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-bold">تأكيد</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-[#1a1a2e]">سجل الأقمشة</h2>

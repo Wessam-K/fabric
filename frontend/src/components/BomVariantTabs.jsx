@@ -11,6 +11,7 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [expanded, setExpanded] = useState(true);
+  const [confirmDel, setConfirmDel] = useState(null);
 
   const load = async () => {
     if (!modelCode) { setLoading(false); return; }
@@ -41,7 +42,11 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
   };
 
   const deleteVariant = async (vid) => {
-    if (!confirm('حذف هذا المتغير؟')) return;
+    setConfirmDel(vid);
+  };
+  const doDeleteVariant = async () => {
+    const vid = confirmDel;
+    setConfirmDel(null);
     try {
       await api.delete(`/models/${modelCode}/variants/${vid}`);
       toast.success('تم الحذف');
@@ -99,6 +104,17 @@ export default function BomVariantTabs({ modelCode, fabricsList, accessoriesList
 
   return (
     <div className="space-y-3">
+      {confirmDel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl text-center space-y-4">
+            <p className="text-[#1a1a2e] font-bold">حذف هذا المتغير؟</p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={doDeleteVariant} className="px-5 py-2 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700">حذف</button>
+              <button onClick={() => setConfirmDel(null)} className="px-5 py-2 rounded-xl bg-gray-200 text-[#1a1a2e] text-sm font-bold hover:bg-gray-300">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-sm font-bold text-[#1a1a2e]">
           {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}

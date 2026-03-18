@@ -68,6 +68,100 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Production Pipeline + Financial + Stock Alerts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Production Pipeline */}
+        {data?.production_pipeline && (
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-bold text-[#1a1a2e] mb-3">خط الإنتاج</h3>
+            <div className="space-y-2">
+              {[
+                { key: 'pending', label: 'معلق', color: 'bg-gray-200' },
+                { key: 'in_progress', label: 'جاري', color: 'bg-blue-500' },
+                { key: 'completed', label: 'مكتمل', color: 'bg-green-500' },
+                { key: 'delivered', label: 'مُسلّم', color: 'bg-emerald-500' },
+                { key: 'cancelled', label: 'ملغي', color: 'bg-red-400' },
+              ].map(s => {
+                const count = data.production_pipeline[s.key] || 0;
+                const total = Object.values(data.production_pipeline).reduce((a, b) => a + b, 0) || 1;
+                return (
+                  <div key={s.key} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 w-14">{s.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                      <div className={`h-full rounded-full ${s.color}`} style={{ width: `${(count / total) * 100}%` }} />
+                    </div>
+                    <span className="text-xs font-mono font-bold w-6 text-left">{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Monthly Revenue/Cost */}
+        {(data?.monthly_revenue != null || data?.monthly_cost != null) && (
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-bold text-[#1a1a2e] mb-3">مالية الشهر</h3>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-gray-400">إيرادات الشهر</p>
+                <p className="text-xl font-bold font-mono text-green-600">{(data.monthly_revenue || 0).toLocaleString('ar-EG')} ج.م</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">تكاليف الشهر</p>
+                <p className="text-xl font-bold font-mono text-red-500">{(data.monthly_cost || 0).toLocaleString('ar-EG')} ج.م</p>
+              </div>
+              <div className="border-t pt-2">
+                <p className="text-xs text-gray-400">صافي الربح</p>
+                <p className={`text-xl font-bold font-mono ${(data.monthly_revenue || 0) - (data.monthly_cost || 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                  {((data.monthly_revenue || 0) - (data.monthly_cost || 0)).toLocaleString('ar-EG')} ج.م
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Low Stock Alerts */}
+        {((data?.low_stock_fabrics?.length || 0) + (data?.low_stock_accessories?.length || 0)) > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-bold text-[#1a1a2e] mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-amber-500" /> تنبيهات المخزون</h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {(data.low_stock_fabrics || []).map(f => (
+                <div key={f.code} className="flex items-center justify-between text-xs p-2 bg-amber-50 rounded-lg">
+                  <span className="text-gray-700">{f.name}</span>
+                  <span className="font-mono text-amber-600">{f.available_meters || 0} متر</span>
+                </div>
+              ))}
+              {(data.low_stock_accessories || []).map(a => (
+                <div key={a.code} className="flex items-center justify-between text-xs p-2 bg-orange-50 rounded-lg">
+                  <span className="text-gray-700">{a.name}</span>
+                  <span className="font-mono text-orange-600">{a.quantity_on_hand || 0} {a.unit || 'قطعة'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Overdue Work Orders */}
+      {data?.overdue_work_orders?.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h3 className="text-sm font-bold text-[#1a1a2e] mb-3 flex items-center gap-2"><Clock size={14} className="text-red-500" /> أوامر إنتاج متأخرة</h3>
+          <div className="space-y-2">
+            {data.overdue_work_orders.map(wo => (
+              <div key={wo.id} onClick={() => navigate(`/work-orders/${wo.id}`)}
+                className="flex items-center justify-between p-3 bg-red-50 rounded-xl cursor-pointer hover:bg-red-100 transition-colors">
+                <div>
+                  <span className="font-mono text-xs font-bold">{wo.wo_number}</span>
+                  <span className="text-xs text-gray-500 mr-2">{wo.model_name || wo.model_code}</span>
+                </div>
+                <span className="text-xs text-red-600">مطلوب: {wo.deadline ? new Date(wo.deadline).toLocaleDateString('ar-EG') : '—'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* HR Quick Stats (for HR/Admin roles) */}
       {hrData && hasRole('superadmin', 'hr', 'manager') && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -27,6 +27,7 @@ export default function WorkOrderForm() {
   const [assignedTo, setAssignedTo] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [woNotes, setWoNotes] = useState('');
+  const [customerId, setCustomerId] = useState('');
 
   // Manufacturing data
   const [mainFabrics, setMainFabrics] = useState([emptyFabric('main')]);
@@ -53,6 +54,7 @@ export default function WorkOrderForm() {
   const [bomTemplates, setBomTemplates] = useState([]);
   const [fabricsList, setFabricsList] = useState([]);
   const [accessoriesList, setAccessoriesList] = useState([]);
+  const [customersList, setCustomersList] = useState([]);
   const [defaultWaste, setDefaultWaste] = useState(5);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,15 +80,17 @@ export default function WorkOrderForm() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [modelsRes, fabRes, accRes, settingsRes] = await Promise.all([
+        const [modelsRes, fabRes, accRes, settingsRes, custRes] = await Promise.all([
           api.get('/models'),
           api.get('/fabrics'),
           api.get('/accessories'),
           api.get('/settings'),
+          api.get('/customers').catch(() => ({ data: { customers: [] } })),
         ]);
         setModels(modelsRes.data);
         setFabricsList(fabRes.data);
         setAccessoriesList(accRes.data);
+        setCustomersList(custRes.data.customers || custRes.data || []);
         const s = settingsRes.data || {};
         setDefaultWaste(parseFloat(s.waste_pct_default) || 5);
         setMasnaiya(s.masnaiya_default ?? '90');
@@ -102,6 +106,7 @@ export default function WorkOrderForm() {
           setAssignedTo(data.assigned_to || '');
           setDueDate(data.due_date || '');
           setWoNotes(data.notes || '');
+          setCustomerId(data.customer_id ? String(data.customer_id) : '');
           setMasnaiya(String(data.masnaiya ?? 90));
           setMasrouf(String(data.masrouf ?? 50));
           setMarginPct(String(data.margin_pct ?? 25));
@@ -228,6 +233,7 @@ export default function WorkOrderForm() {
         assigned_to: assignedTo.trim() || null,
         due_date: dueDate || null,
         notes: woNotes.trim() || null,
+        customer_id: customerId ? parseInt(customerId) : null,
         masnaiya: parseFloat(masnaiya) || 0,
         masrouf: parseFloat(masrouf) || 0,
         margin_pct: parseFloat(marginPct) || 25,
@@ -329,6 +335,14 @@ export default function WorkOrderForm() {
                 <label className="block text-[11px] text-gray-500 mb-1">تاريخ التسليم</label>
                 <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
                   className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-[#c9a84c] outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-500 mb-1">العميل</label>
+                <select value={customerId} onChange={e => setCustomerId(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-[#c9a84c] outline-none">
+                  <option value="">بدون عميل</option>
+                  {customersList.map(c => <option key={c.id} value={c.id}>[{c.code}] {c.name}</option>)}
+                </select>
               </div>
               {bomTemplates.length > 0 && (
                 <div>

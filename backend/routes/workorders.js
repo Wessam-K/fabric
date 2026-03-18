@@ -288,7 +288,7 @@ router.post('/', (req, res) => {
             quantity, is_size_based,
             fabrics, accessories, sizes, stages, notes,
             fabric_batches, accessories_detail, extra_expenses } = req.body;
-    if (!wo_number) return res.status(400).json({ error: 'wo_number required' });
+    if (!wo_number) return res.status(400).json({ error: 'رقم أمر العمل مطلوب' });
 
     const transaction = db.transaction(() => {
       const r = db.prepare(`INSERT INTO work_orders (wo_number,model_id,template_id,priority,due_date,assigned_to,masnaiya,masrouf,margin_pct,consumer_price,wholesale_price,notes,quantity,is_size_based) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -398,7 +398,7 @@ router.get('/:id', (req, res) => {
   try {
     if (req.params.id === 'next-number' || req.params.id === 'by-stage') return;
     const wo = getFullWO(parseInt(req.params.id));
-    if (!wo) return res.status(404).json({ error: 'Not found' });
+    if (!wo) return res.status(404).json({ error: 'غير موجود' });
     res.json(wo);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -407,7 +407,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/cost-summary', (req, res) => {
   try {
     const cost = calculateWOCost(parseInt(req.params.id));
-    if (!cost) return res.status(404).json({ error: 'Not found' });
+    if (!cost) return res.status(404).json({ error: 'غير موجود' });
     res.json(cost);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -417,7 +417,7 @@ router.put('/:id', (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const existing = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { model_id, priority, due_date, assigned_to, masnaiya, masrouf, margin_pct,
             consumer_price, wholesale_price, quantity, is_size_based,
             fabrics, accessories, sizes, notes,
@@ -479,7 +479,7 @@ router.patch('/:id/status', (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { status } = req.body;
-    if (!status) return res.status(400).json({ error: 'status required' });
+    if (!status) return res.status(400).json({ error: 'الحالة مطلوبة' });
     const updates = [`status=?`, `updated_at=datetime('now')`];
     const params = [status];
     if (status === 'in_progress') updates.push(`start_date=COALESCE(start_date,datetime('now'))`);
@@ -497,7 +497,7 @@ router.patch('/:id/stages/:stageId', (req, res) => {
     const { status, assigned_to, quantity_done, quantity_in_stage, quantity_completed, notes } = req.body;
 
     const stage = db.prepare('SELECT * FROM wo_stages WHERE id=? AND wo_id=?').get(stageId, woId);
-    if (!stage) return res.status(404).json({ error: 'Stage not found' });
+    if (!stage) return res.status(404).json({ error: 'المرحلة غير موجودة' });
 
     const sets = [];
     const params = [];
@@ -538,10 +538,10 @@ router.patch('/:id/stage-quantity', (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { stage_id, quantity_in_stage, quantity_completed, assigned_to, notes } = req.body;
-    if (!stage_id) return res.status(400).json({ error: 'stage_id required' });
+    if (!stage_id) return res.status(400).json({ error: 'معرف المرحلة مطلوب' });
 
     const stage = db.prepare('SELECT * FROM wo_stages WHERE id=? AND wo_id=?').get(stage_id, woId);
-    if (!stage) return res.status(404).json({ error: 'Stage not found' });
+    if (!stage) return res.status(404).json({ error: 'المرحلة غير موجودة' });
 
     const sets = [];
     const params = [];
@@ -564,10 +564,10 @@ router.patch('/:id/actual-fabric', (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { batch_id, actual_meters_per_piece, actual_total_meters, waste_meters } = req.body;
-    if (!batch_id) return res.status(400).json({ error: 'batch_id required' });
+    if (!batch_id) return res.status(400).json({ error: 'معرف الدفعة مطلوب' });
 
     const wfb = db.prepare('SELECT * FROM wo_fabric_batches WHERE wo_id=? AND batch_id=?').get(woId, batch_id);
-    if (!wfb) return res.status(404).json({ error: 'Fabric batch not found in this WO' });
+    if (!wfb) return res.status(404).json({ error: 'دفعة القماش غير موجودة في أمر العمل' });
 
     const transaction = db.transaction(() => {
       const actualMeters = actual_total_meters ?? wfb.actual_total_meters ?? wfb.planned_total_meters;
@@ -608,7 +608,7 @@ router.post('/:id/expenses', (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { description, amount, stage_id, notes } = req.body;
-    if (!description || !amount) return res.status(400).json({ error: 'description and amount required' });
+    if (!description || !amount) return res.status(400).json({ error: 'الوصف والمبلغ مطلوبان' });
 
     db.prepare('INSERT INTO wo_extra_expenses (wo_id,description,amount,stage_id,notes) VALUES (?,?,?,?,?)')
       .run(woId, description, parseFloat(amount), stage_id || null, notes || null);
@@ -701,9 +701,9 @@ router.post('/:id/partial-invoice', (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
-    if (!wo) return res.status(404).json({ error: 'Not found' });
+    if (!wo) return res.status(404).json({ error: 'غير موجود' });
     const { pieces_invoiced, cost_per_piece, invoice_price_per_piece, notes } = req.body;
-    if (!pieces_invoiced || pieces_invoiced <= 0) return res.status(400).json({ error: 'pieces_invoiced required' });
+    if (!pieces_invoiced || pieces_invoiced <= 0) return res.status(400).json({ error: 'عدد القطع المفوترة مطلوب' });
 
     const alreadyInvoiced = db.prepare('SELECT COALESCE(SUM(pieces_invoiced),0) as v FROM partial_invoices WHERE wo_id=?').get(woId).v;
     const totalPieces = wo.pieces_completed || wo.quantity || 0;
@@ -723,7 +723,7 @@ router.post('/:id/partial-invoice', (req, res) => {
 router.post('/:id/cost-snapshot', (req, res) => {
   try {
     const wo = getFullWO(parseInt(req.params.id));
-    if (!wo) return res.status(404).json({ error: 'Not found' });
+    if (!wo) return res.status(404).json({ error: 'غير موجود' });
     const c = wo.cost_summary;
     const r = db.prepare(`INSERT INTO cost_snapshots (wo_id,model_id,total_pieces,total_meters_main,total_meters_lining,main_fabric_cost,lining_cost,accessories_cost,masnaiya,masrouf,waste_cost,extra_expenses,total_cost,cost_per_piece) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(wo.id, wo.model_id, c.total_pieces, c.total_meters_main, c.total_meters_lining, c.main_fabric_cost, c.lining_cost, c.accessories_cost, c.masnaiya_total, c.masrouf_total, c.waste_cost, c.extra_expenses, c.total_cost, c.cost_per_piece);
@@ -736,7 +736,7 @@ router.delete('/:id', (req, res) => {
   try {
     db.prepare("UPDATE work_orders SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(parseInt(req.params.id));
     logAudit(req, 'DELETE', 'work_order', req.params.id, `WO#${req.params.id}`);
-    res.json({ message: 'Cancelled' });
+    res.json({ message: 'تم الإلغاء' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1090,6 +1090,77 @@ router.post('/:id/create-invoice', (req, res) => {
     const result = transaction();
     logAudit(req, 'INVOICE_FROM_WO', 'work_order', woId, `فاتورة ${result.invoice_number} — ${qty_to_invoice} قطعة`);
     res.status(201).json({ ...result, wo: getFullWO(woId) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/work-orders/:id/cancel — cancel a WO
+router.post('/:id/cancel', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
+    if (!wo) return res.status(404).json({ error: 'أمر التشغيل غير موجود' });
+
+    // Cannot cancel already completed/cancelled/delivered WOs
+    const forbidden = ['completed', 'cancelled', 'delivered'];
+    if (forbidden.includes(wo.status)) {
+      return res.status(400).json({ error: 'لا يمكن إلغاء أمر تشغيل في حالة: ' + wo.status });
+    }
+
+    // Check for invoices
+    const invoiceCount = db.prepare('SELECT COUNT(*) as c FROM wo_invoices WHERE work_order_id=?').get(woId).c;
+    if (invoiceCount > 0) {
+      return res.status(400).json({ error: 'لا يمكن إلغاء أمر تشغيل له فواتير مرتبطة' });
+    }
+
+    const { cancel_reason } = req.body;
+    if (!cancel_reason || !cancel_reason.trim()) {
+      return res.status(400).json({ error: 'سبب الإلغاء مطلوب' });
+    }
+
+    const userId = req.user ? req.user.id : null;
+
+    db.transaction(() => {
+      db.prepare(`UPDATE work_orders SET status='cancelled', cancel_reason=?, cancelled_by=?, cancelled_at=datetime('now','localtime') WHERE id=?`)
+        .run(cancel_reason.trim(), userId, woId);
+
+      // Return allocated fabric batches
+      const wfBatches = db.prepare('SELECT * FROM wo_fabric_batches WHERE wo_id=?').all(woId);
+      for (const wfb of wfBatches) {
+        const meters = wfb.actual_total_meters || wfb.planned_total_meters || 0;
+        if (meters > 0) {
+          db.prepare('UPDATE fabric_inventory_batches SET used_meters = MAX(0, used_meters - ?), batch_status = CASE WHEN used_meters - ? <= 0 THEN ? ELSE batch_status END WHERE id=?')
+            .run(meters, meters, 'available', wfb.batch_id);
+          // Update fabric available_meters
+          const batch = db.prepare('SELECT fabric_code FROM fabric_inventory_batches WHERE id=?').get(wfb.batch_id);
+          if (batch) {
+            db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) + ? WHERE code=?')
+              .run(meters, batch.fabric_code);
+            const fabric = db.prepare('SELECT id, available_meters FROM fabrics WHERE code=?').get(batch.fabric_code);
+            if (fabric) {
+              db.prepare(`INSERT INTO fabric_stock_movements (fabric_code, movement_type, qty_meters, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+                .run(batch.fabric_code, 'return', meters, 'work_order', woId, 'إرجاع قماش - إلغاء أمر تشغيل ' + wo.wo_number, userId);
+            }
+          }
+        }
+      }
+
+      // Return allocated accessories
+      const accDetails = db.prepare('SELECT * FROM wo_accessories_detail WHERE wo_id=?').all(woId);
+      for (const ad of accDetails) {
+        if (ad.total_qty > 0) {
+          const acc = db.prepare('SELECT id, quantity_on_hand FROM accessories WHERE code=?').get(ad.accessory_code);
+          if (acc) {
+            const newQty = (acc.quantity_on_hand || 0) + ad.total_qty;
+            db.prepare('UPDATE accessories SET quantity_on_hand=? WHERE id=?').run(newQty, acc.id);
+            db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+              .run(ad.accessory_code, 'return', ad.total_qty, 'work_order', woId, 'إرجاع إكسسوار - إلغاء أمر تشغيل ' + wo.wo_number, userId);
+          }
+        }
+      }
+    })();
+
+    logAudit(req, 'CANCEL', 'work_order', woId, wo.wo_number + ' — ' + cancel_reason.trim());
+    res.json(getFullWO(woId));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

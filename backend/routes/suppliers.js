@@ -37,7 +37,7 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   try {
     const supplier = db.prepare('SELECT * FROM suppliers WHERE id=?').get(req.params.id);
-    if (!supplier) return res.status(404).json({ error: 'Not found' });
+    if (!supplier) return res.status(404).json({ error: 'غير موجود' });
     supplier.purchase_orders = db.prepare('SELECT * FROM purchase_orders WHERE supplier_id=? ORDER BY created_at DESC LIMIT 20').all(supplier.id);
     supplier.payments = db.prepare('SELECT * FROM supplier_payments WHERE supplier_id=? ORDER BY payment_date DESC').all(supplier.id);
     const totOrd = db.prepare(`SELECT COALESCE(SUM(total_amount),0) as v FROM purchase_orders WHERE supplier_id=? AND status NOT IN ('cancelled','draft')`).get(supplier.id).v;
@@ -54,7 +54,7 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const { code, name, supplier_type, phone, email, address, contact_name, payment_terms, rating, notes } = req.body;
-    if (!code || !name) return res.status(400).json({ error: 'code and name required' });
+    if (!code || !name) return res.status(400).json({ error: 'الكود والاسم مطلوبين' });
     const r = db.prepare(`INSERT INTO suppliers (code,name,supplier_type,phone,email,address,contact_name,payment_terms,rating,notes) VALUES (?,?,?,?,?,?,?,?,?,?)`)
       .run(code, name, supplier_type || 'both', phone || null, email || null, address || null, contact_name || null, payment_terms || null, rating || 3, notes || null);
     const created = db.prepare('SELECT * FROM suppliers WHERE id=?').get(r.lastInsertRowid);
@@ -70,7 +70,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM suppliers WHERE id=?').get(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { name, supplier_type, phone, email, address, contact_name, payment_terms, rating, status, notes } = req.body;
     db.prepare(`UPDATE suppliers SET name=COALESCE(?,name),supplier_type=COALESCE(?,supplier_type),phone=COALESCE(?,phone),email=COALESCE(?,email),address=COALESCE(?,address),contact_name=COALESCE(?,contact_name),payment_terms=COALESCE(?,payment_terms),rating=COALESCE(?,rating),status=COALESCE(?,status),notes=COALESCE(?,notes) WHERE id=?`)
       .run(name||null, supplier_type||null, phone||null, email||null, address||null, contact_name||null, payment_terms||null, rating||null, status||null, notes||null, req.params.id);
@@ -84,7 +84,7 @@ router.put('/:id', (req, res) => {
 router.post('/:id/payments', (req, res) => {
   try {
     const { po_id, amount, payment_method, reference, notes } = req.body;
-    if (!amount || amount <= 0) return res.status(400).json({ error: 'Valid amount required' });
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'المبلغ المطلوب غير صالح' });
     const r = db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,reference,notes) VALUES (?,?,?,?,?,?)`)
       .run(parseInt(req.params.id), po_id || null, parseFloat(amount), payment_method || 'cash', reference || null, notes || null);
     // Update paid_amount on PO if po_id provided

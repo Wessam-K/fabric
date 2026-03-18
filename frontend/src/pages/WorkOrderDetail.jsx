@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker } from 'lucide-react';
+import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker, Printer, XCircle } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import StatusBadge from '../components/StatusBadge';
@@ -66,6 +66,8 @@ export default function WorkOrderDetail() {
   const [consumptionForm, setConsumptionForm] = useState({ fabric_code: '', batch_id: '', actual_meters: '', notes: '' });
   // V8: Create invoice from WO
   const [invoiceForm, setInvoiceForm] = useState({ qty: '', price: '', customer_name: '', notes: '' });
+  const [cancelReason, setCancelReason] = useState('');
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const load = async () => {
     try {
@@ -230,6 +232,21 @@ export default function WorkOrderDetail() {
     );
   };
 
+  const handleCancel = async () => {
+    if (!cancelReason.trim()) { toast.error('سبب الإلغاء مطلوب'); return; }
+    try {
+      const { data } = await api.post(`/work-orders/${id}/cancel`, { cancel_reason: cancelReason.trim() });
+      setWo(data);
+      setShowCancelModal(false);
+      setCancelReason('');
+      toast.success('تم إلغاء أمر التشغيل');
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ في الإلغاء'); }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
   if (loading) return <div className="flex items-center justify-center h-96"><div className="animate-spin h-10 w-10 border-4 border-[#c9a84c] border-t-transparent rounded-full" /></div>;
   if (!wo) return null;
 
@@ -261,10 +278,26 @@ export default function WorkOrderDetail() {
         <div className="flex gap-2">
           {wo.status === 'draft' && <button onClick={() => handleStatusChange('in_progress')} className="flex items-center gap-1.5 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-bold"><Play size={14} /> بدء التنفيذ</button>}
           {wo.status === 'in_progress' && <button onClick={handleFinalize} className="flex items-center gap-1.5 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-bold"><CheckCircle size={14} /> إنهاء الإنتاج</button>}
+          {!['completed', 'cancelled', 'delivered'].includes(wo.status) && (
+            <button onClick={() => setShowCancelModal(true)} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm"><XCircle size={14} /> إلغاء</button>
+          )}
+          <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700"><Printer size={14} /> طباعة</button>
           <button onClick={() => navigate(`/work-orders/${id}/edit`)} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700"><Edit2 size={14} /> تعديل</button>
           <button onClick={handleDelete} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
         </div>
       </div>
+
+      {/* Cancellation banner */}
+      {wo.status === 'cancelled' && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
+          <XCircle size={20} className="text-red-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-red-700">تم إلغاء أمر التشغيل</p>
+            {wo.cancel_reason && <p className="text-xs text-red-600 mt-1">السبب: {wo.cancel_reason}</p>}
+            {wo.cancelled_at && <p className="text-[10px] text-red-400 mt-1">بتاريخ: {new Date(wo.cancelled_at).toLocaleString('ar-EG')}</p>}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: tabs + main content */}
@@ -769,6 +802,28 @@ export default function WorkOrderDetail() {
         onConfirm={confirmModal.onConfirm}
         onCancel={closeConfirm}
       />
+
+      {/* Cancel Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-base font-bold text-[#1a1a2e] mb-2">إلغاء أمر التشغيل</h3>
+            <p className="text-sm text-gray-500 mb-3">سيتم إرجاع المواد المخصصة. هذا الإجراء لا يمكن التراجع عنه.</p>
+            <div className="mb-4">
+              <label className="block text-xs text-gray-500 mb-1">سبب الإلغاء *</label>
+              <textarea rows={3} value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+                placeholder="اكتب سبب الإلغاء..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-red-400 outline-none resize-none" />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600">تراجع</button>
+              <button onClick={handleCancel}
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-bold">تأكيد الإلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

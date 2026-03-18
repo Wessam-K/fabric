@@ -210,6 +210,8 @@ function InvoiceForm({ invoice, onClose, onSaved }) {
   const [customerName, setCustomerName] = useState(invoice?.customer_name || '');
   const [customerPhone, setCustomerPhone] = useState(invoice?.customer_phone || '');
   const [customerEmail, setCustomerEmail] = useState(invoice?.customer_email || '');
+  const [customerId, setCustomerId] = useState(invoice?.customer_id || '');
+  const [customersList, setCustomersList] = useState([]);
   const [notes, setNotes] = useState(invoice?.notes || '');
   const [taxPct, setTaxPct] = useState(String(invoice?.tax_pct || 0));
   const [discount, setDiscount] = useState(String(invoice?.discount || 0));
@@ -227,6 +229,7 @@ function InvoiceForm({ invoice, onClose, onSaved }) {
       api.get('/invoices/next-number').then(r => setNumber(r.data.next_number));
     }
     api.get('/models').then(r => setModels(r.data));
+    api.get('/customers').then(r => setCustomersList(r.data.customers || r.data || [])).catch(() => {});
   }, []);
 
   const subtotal = items.reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0), 0);
@@ -260,6 +263,7 @@ function InvoiceForm({ invoice, onClose, onSaved }) {
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim() || null,
         customer_email: customerEmail.trim() || null,
+        customer_id: customerId ? parseInt(customerId) : null,
         notes: notes.trim() || null,
         tax_pct: parseFloat(taxPct) || 0,
         discount: parseFloat(discount) || 0,
@@ -289,6 +293,24 @@ function InvoiceForm({ invoice, onClose, onSaved }) {
         </div>
 
         <div className="p-5 space-y-5 max-h-[75vh] overflow-y-auto">
+          {/* Customer selector */}
+          {customersList.length > 0 && (
+            <div>
+              <label className="block text-[11px] text-gray-500 mb-1">اختيار عميل مسجّل</label>
+              <select value={customerId} onChange={e => {
+                const cid = e.target.value;
+                setCustomerId(cid);
+                if (cid) {
+                  const c = customersList.find(c => String(c.id) === String(cid));
+                  if (c) { setCustomerName(c.name || ''); setCustomerPhone(c.phone || ''); setCustomerEmail(c.email || ''); }
+                }
+              }} className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-[#c9a84c] outline-none">
+                <option value="">— عميل جديد —</option>
+                {customersList.map(c => <option key={c.id} value={c.id}>{c.name} ({c.customer_code})</option>)}
+              </select>
+            </div>
+          )}
+
           {/* Header fields */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>

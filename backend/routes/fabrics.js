@@ -34,7 +34,7 @@ router.get('/', (req, res) => {
 router.post('/', upload.single('image'), (req, res) => {
   try {
     const { code, name, fabric_type, price_per_m, supplier, supplier_id, color, notes } = req.body;
-    if (!code || !name || !price_per_m) return res.status(400).json({ error: 'code, name, price_per_m required' });
+    if (!code || !name || !price_per_m) return res.status(400).json({ error: 'الكود والاسم وسعر المتر مطلوبين' });
     const image_path = req.file ? `/uploads/fabrics/${req.file.filename}` : null;
     const r = db.prepare(`INSERT INTO fabrics (code,name,fabric_type,price_per_m,supplier,supplier_id,color,image_path,notes) VALUES (?,?,?,?,?,?,?,?,?)`)
       .run(code, name, fabric_type || 'main', parseFloat(price_per_m), supplier || null, supplier_id || null, color || null, image_path, notes || null);
@@ -50,7 +50,7 @@ router.post('/', upload.single('image'), (req, res) => {
 router.put('/:code', upload.single('image'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM fabrics WHERE code=?').get(req.params.code);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { name, fabric_type, price_per_m, supplier, supplier_id, color, status, notes } = req.body;
     const image_path = req.file ? `/uploads/fabrics/${req.file.filename}` : existing.image_path;
     db.prepare(`UPDATE fabrics SET name=COALESCE(?,name),fabric_type=COALESCE(?,fabric_type),price_per_m=COALESCE(?,price_per_m),supplier=COALESCE(?,supplier),supplier_id=COALESCE(?,supplier_id),color=COALESCE(?,color),image_path=COALESCE(?,image_path),status=COALESCE(?,status),notes=COALESCE(?,notes) WHERE code=?`)
@@ -63,7 +63,7 @@ router.put('/:code', upload.single('image'), (req, res) => {
 
 router.post('/:code/image', upload.single('image'), (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No image' });
+    if (!req.file) return res.status(400).json({ error: 'لا توجد صورة' });
     const image_path = `/uploads/fabrics/${req.file.filename}`;
     db.prepare('UPDATE fabrics SET image_path=? WHERE code=?').run(image_path, req.params.code);
     res.json({ image_path });
@@ -73,10 +73,10 @@ router.post('/:code/image', upload.single('image'), (req, res) => {
 router.delete('/:code', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM fabrics WHERE code=?').get(req.params.code);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: 'غير موجود' });
     db.prepare("UPDATE fabrics SET status='inactive' WHERE code=?").run(req.params.code);
     logAudit(req, 'DELETE', 'fabric', req.params.code, existing.name);
-    res.json({ message: 'Deactivated', code: req.params.code });
+    res.json({ message: 'تم التعطيل', code: req.params.code });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
