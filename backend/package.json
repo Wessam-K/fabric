@@ -3,7 +3,9 @@
   "version": "2.0.0",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test tests/api.test.js",
+    "test:watch": "node --test --watch tests/api.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -12,7 +14,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.1",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
     "multer": "^1.4.5-lts.1",
     "xlsx": "^0.18.5"
   }

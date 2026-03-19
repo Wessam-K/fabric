@@ -3,6 +3,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const path = require('path');
+const helmet = require('helmet');
+const morgan = require('morgan');
 
 const db = require('./database');
 const { requireAuth, logAudit } = require('./middleware/auth');
@@ -29,6 +31,8 @@ const machinesRouter = require('./routes/machines');
 const app = express();
 const PORT = process.env.PORT || 9002;
 
+app.use(helmet({ contentSecurityPolicy: false }));
+if (process.env.NODE_ENV !== 'test') app.use(morgan('short'));
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -66,6 +70,11 @@ app.use('/api/auth/login', (req, res, next) => {
     return res.status(429).json({ error: 'عدد المحاولات تجاوز الحد المسموح. حاول مرة أخرى بعد 15 دقيقة' });
   }
   next();
+});
+
+// ═══ Health check (public, no auth) ═══
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', version: 'v10', timestamp: new Date().toISOString() });
 });
 
 // ═══ Public routes (no auth) ═══
@@ -224,9 +233,28 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`WK-Hub Factory API v9 running on http://localhost:${PORT}`);
+// ═══ Global error handler ═══
+app.use((err, req, res, _next) => {
+  console.error('Unhandled error:', err.stack || err.message || err);
+  res.status(err.status || 500).json({ error: process.env.NODE_ENV === 'production' ? 'خطأ داخلي في الخادم' : err.message });
+});
+
+const server = app.listen(PORT, () => {
+  console.log(`WK-Hub Factory API v10 running on http://localhost:${PORT}`);
   // Run notification generation on startup and every 5 minutes
   try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
   setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);
 });
+
+// ═══ Graceful shutdown ═══
+function shutdown(signal) {
+  console.log(`\n${signal} received — shutting down gracefully`);
+  server.close(() => {
+    try { db.close(); } catch (e) { /* already closed */ }
+    console.log('Server closed');
+    process.exit(0);
+  });
+  setTimeout(() => { process.exit(1); }, 5000);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

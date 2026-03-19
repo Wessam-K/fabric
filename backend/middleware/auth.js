@@ -4,6 +4,10 @@ const db = require('../database');
 const JWT_SECRET = process.env.JWT_SECRET || 'wk-hub-secret-2026-change-in-prod';
 const JWT_EXPIRES = '24h';
 
+if (JWT_SECRET === 'wk-hub-secret-2026-change-in-prod') {
+  console.warn('⚠️  WARNING: Using default JWT_SECRET. Set JWT_SECRET in .env for production!');
+}
+
 function generateToken(user) {
   return jwt.sign(
     { id: user.id, username: user.username, role: user.role, full_name: user.full_name },
@@ -52,8 +56,9 @@ function requirePermission(module, action) {
       const rolePerm = db.prepare('SELECT allowed FROM role_permissions WHERE role=? AND module=? AND action=?').get(req.user.role, module, action);
       if (rolePerm && rolePerm.allowed) return next();
       return res.status(403).json({ error: 'ليس لديك صلاحية للقيام بهذا الإجراء' });
-    } catch {
-      return next(); // fail open on DB error to not break existing functionality
+    } catch (err) {
+      console.error('Permission check DB error:', err.message);
+      return res.status(403).json({ error: 'خطأ في التحقق من الصلاحيات' });
     }
   };
 }

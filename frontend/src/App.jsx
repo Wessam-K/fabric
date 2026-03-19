@@ -1,6 +1,5 @@
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, Printer, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, Bell, UserCheck, Cog } from 'lucide-react';
-import Toast from './components/Toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -33,6 +32,7 @@ import PaySlip from './pages/HR/PaySlip';
 import GlobalSearch from './components/GlobalSearch';
 import NotificationBell from './components/NotificationBell';
 import { ToastProvider } from './components/Toast';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function ProtectedRoute({ children, roles, perm }) {
   const { user, loading, can } = useAuth();
@@ -48,7 +48,7 @@ function ProtectedRoute({ children, roles, perm }) {
 }
 
 function AppLayout() {
-  const { user, logout, hasRole, can, ROLE_LABELS, ROLE_COLORS } = useAuth();
+  const { user, logout, can, ROLE_LABELS, ROLE_COLORS } = useAuth();
 
   const navGroups = [
     {
@@ -224,12 +224,14 @@ function AuthRouter() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <BrowserRouter>
-        <AuthProvider>
-          <AuthRouter />
-        </AuthProvider>
-      </BrowserRouter>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <AuthRouter />
+          </AuthProvider>
+        </BrowserRouter>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

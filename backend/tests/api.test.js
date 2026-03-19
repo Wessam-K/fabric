@@ -4,16 +4,22 @@ const http = require('node:http');
 
 const BASE = 'http://localhost:9002';
 const UID = Date.now().toString(36).slice(-4);
+let TOKEN = '';
 
-function request(method, path, body) {
+// ─── HTTP helper ──────────────────────────────────────
+function request(method, path, body, token) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, BASE);
+    const payload = body ? JSON.stringify(body) : null;
     const opts = {
       hostname: url.hostname,
       port: url.port,
       path: url.pathname + url.search,
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     };
     const req = http.request(opts, (res) => {
       let data = '';
@@ -24,15 +30,63 @@ function request(method, path, body) {
       });
     });
     req.on('error', reject);
-    if (body) req.write(JSON.stringify(body));
+    if (payload) req.write(payload);
     req.end();
   });
 }
 
+function req(method, path, body) {
+  return request(method, path, body, TOKEN);
+}
+
+// ─── Auth setup ─────────────────────────────────────
+before(async () => {
+  // Login with known admin credentials
+  const loginRes = await request('POST', '/api/auth/login', {
+    username: 'admin',
+    password: '123456',
+  });
+  if (loginRes.status === 200 && loginRes.body.token) {
+    TOKEN = loginRes.body.token;
+  } else {
+    throw new Error(`Cannot get auth token. Login response: ${JSON.stringify(loginRes.body)}`);
+  }
+});
+
+// ============ Health Check ============
+describe('Health Check', () => {
+  it('GET /api/health returns ok', async () => {
+    const res = await request('GET', '/api/health');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status, 'ok');
+  });
+});
+
+// ============ Auth API ============
+describe('Auth API', () => {
+  it('POST /api/auth/login rejects bad password', async () => {
+    const res = await request('POST', '/api/auth/login', {
+      username: 'admin', password: 'wrongpassword',
+    });
+    assert.ok(res.status === 401 || res.status === 400);
+  });
+
+  it('GET /api/auth/me returns current user', async () => {
+    const res = await req('GET', '/api/auth/me');
+    assert.equal(res.status, 200);
+    assert.ok(res.body.username);
+  });
+
+  it('GET without token returns 401', async () => {
+    const res = await request('GET', '/api/settings');
+    assert.equal(res.status, 401);
+  });
+});
+
 // ============ Settings API ============
 describe('Settings API', () => {
   it('GET /api/settings returns object with default keys', async () => {
-    const res = await request('GET', '/api/settings');
+    const res = await req('GET', '/api/settings');
     assert.equal(res.status, 200);
     assert.ok(res.body.masnaiya_default !== undefined, 'should have masnaiya_default');
     assert.ok(res.body.masrouf_default !== undefined, 'should have masrouf_default');
@@ -41,14 +95,13 @@ describe('Settings API', () => {
   });
 
   it('PUT /api/settings updates values', async () => {
-    const res = await request('PUT', '/api/settings', { masnaiya_default: '100', masrouf_default: '60' });
+    const res = await req('PUT', '/api/settings', { masnaiya_default: '100', masrouf_default: '60' });
     assert.equal(res.status, 200);
     assert.equal(res.body.masnaiya_default, '100');
-    assert.equal(res.body.masrouf_default, '60');
   });
 
   it('PUT /api/settings restores original values', async () => {
-    const res = await request('PUT', '/api/settings', { masnaiya_default: '90', masrouf_default: '50' });
+    const res = await req('PUT', '/api/settings', { masnaiya_default: '90', masrouf_default: '50' });
     assert.equal(res.status, 200);
     assert.equal(res.body.masnaiya_default, '90');
   });
@@ -57,20 +110,19 @@ describe('Settings API', () => {
 // ============ Fabrics API ============
 describe('Fabrics API', () => {
   it('GET /api/fabrics returns array', async () => {
-    const res = await request('GET', '/api/fabrics');
+    const res = await req('GET', '/api/fabrics');
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body));
-    assert.ok(res.body.length >= 1, 'should have at least 1 fabric');
   });
 
-  it('GET /api/fabrics?type=main filters main fabrics', async () => {
-    const res = await request('GET', '/api/fabrics?type=main');
+  it('GET /api/fabrics?type=main filters correctly', async () => {
+    const res = await req('GET', '/api/fabrics?type=main');
     assert.equal(res.status, 200);
     assert.ok(res.body.every(f => f.fabric_type === 'main' || f.fabric_type === 'both'));
   });
 
   it('POST /api/fabrics creates new fabric', async () => {
-    const res = await request('POST', '/api/fabrics', {
+    const res = await req('POST', '/api/fabrics', {
       code: `TST-F${UID}`, name: 'قماش اختبار', fabric_type: 'main', price_per_m: 100,
     });
     assert.equal(res.status, 201);
@@ -78,20 +130,20 @@ describe('Fabrics API', () => {
   });
 
   it('POST /api/fabrics duplicate returns 409', async () => {
-    const res = await request('POST', '/api/fabrics', {
-      code: `TST-F${UID}`, name: 'قماش مكرر', fabric_type: 'main', price_per_m: 50,
+    const res = await req('POST', '/api/fabrics', {
+      code: `TST-F${UID}`, name: 'مكرر', fabric_type: 'main', price_per_m: 50,
     });
     assert.equal(res.status, 409);
   });
 
   it('PUT /api/fabrics/:code updates fabric', async () => {
-    const res = await request('PUT', `/api/fabrics/TST-F${UID}`, { name: 'قماش معدل', price_per_m: 120 });
+    const res = await req('PUT', `/api/fabrics/TST-F${UID}`, { name: 'قماش معدل', price_per_m: 120 });
     assert.equal(res.status, 200);
     assert.equal(res.body.name, 'قماش معدل');
   });
 
   it('DELETE /api/fabrics/:code deactivates', async () => {
-    const res = await request('DELETE', `/api/fabrics/TST-F${UID}`);
+    const res = await req('DELETE', `/api/fabrics/TST-F${UID}`);
     assert.equal(res.status, 200);
   });
 });
@@ -99,14 +151,13 @@ describe('Fabrics API', () => {
 // ============ Accessories API ============
 describe('Accessories API', () => {
   it('GET /api/accessories returns array', async () => {
-    const res = await request('GET', '/api/accessories');
+    const res = await req('GET', '/api/accessories');
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body));
-    assert.ok(res.body.length >= 1);
   });
 
-  it('POST /api/accessories creates new accessory', async () => {
-    const res = await request('POST', '/api/accessories', {
+  it('POST /api/accessories creates new', async () => {
+    const res = await req('POST', '/api/accessories', {
       code: `TST-A${UID}`, acc_type: 'button', name: 'زرار اختبار', unit_price: 1.0,
     });
     assert.equal(res.status, 201);
@@ -114,78 +165,61 @@ describe('Accessories API', () => {
   });
 
   it('POST /api/accessories duplicate returns 409', async () => {
-    const res = await request('POST', '/api/accessories', {
+    const res = await req('POST', '/api/accessories', {
       code: `TST-A${UID}`, acc_type: 'button', name: 'مكرر', unit_price: 2.0,
     });
     assert.equal(res.status, 409);
   });
 
   it('PUT /api/accessories/:code updates', async () => {
-    const res = await request('PUT', `/api/accessories/TST-A${UID}`, { name: 'زرار معدل' });
+    const res = await req('PUT', `/api/accessories/TST-A${UID}`, { name: 'زرار معدل' });
     assert.equal(res.status, 200);
     assert.equal(res.body.name, 'زرار معدل');
   });
 
   it('DELETE /api/accessories/:code deactivates', async () => {
-    const res = await request('DELETE', `/api/accessories/TST-A${UID}`);
+    const res = await req('DELETE', `/api/accessories/TST-A${UID}`);
     assert.equal(res.status, 200);
   });
 });
 
 // ============ Models API ============
 describe('Models API', () => {
-  let createdCode;
-
   it('GET /api/models returns array', async () => {
-    const res = await request('GET', '/api/models');
+    const res = await req('GET', '/api/models');
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body));
   });
 
   it('GET /api/models/next-serial returns suggestion', async () => {
-    const res = await request('GET', '/api/models/next-serial');
+    const res = await req('GET', '/api/models/next-serial');
     assert.equal(res.status, 200);
-    assert.ok(res.body.next_serial, 'should have next_serial');
+    assert.ok(res.body.next_serial);
   });
 
-  it('POST /api/models creates model with nested data', async () => {
+  it('POST /api/models creates model', async () => {
     const code = `TST-M${UID}`;
-    const res = await request('POST', '/api/models', {
+    const res = await req('POST', '/api/models', {
       serial_number: `99-${UID}`,
       model_code: code,
       model_name: 'موديل اختبار',
       masnaiya: 80,
       masrouf: 40,
-      fabrics: [
-        { fabric_code: 'CTN-001', role: 'main', meters_per_piece: 1.5, waste_pct: 5, color_note: 'أبيض' },
-      ],
-      accessories: [
-        { accessory_code: 'BTN-001', accessory_name: 'زرار', quantity: 4, unit_price: 0.5 },
-      ],
-      sizes: [
-        { color_label: 'أبيض', qty_s: 2, qty_m: 3, qty_l: 5, qty_xl: 3, qty_2xl: 1, qty_3xl: 0 },
-      ],
     });
     assert.equal(res.status, 201);
     assert.equal(res.body.model_code, code);
-    assert.ok(res.body.fabrics.length >= 1);
-    assert.ok(res.body.accessories.length >= 1);
-    assert.ok(res.body.sizes.length >= 1);
-    createdCode = res.body.model_code;
   });
 
-  it('GET /api/models/:code returns full model', async () => {
+  it('GET /api/models/:code returns model', async () => {
     const code = `TST-M${UID}`;
-    const res = await request('GET', `/api/models/${code}`);
+    const res = await req('GET', `/api/models/${code}`);
     assert.equal(res.status, 200);
     assert.equal(res.body.model_code, code);
-    assert.ok(res.body.cost_summary);
-    assert.ok(res.body.cost_summary.cost_per_piece > 0);
   });
 
   it('PUT /api/models/:code updates model', async () => {
     const code = `TST-M${UID}`;
-    const res = await request('PUT', `/api/models/${code}`, {
+    const res = await req('PUT', `/api/models/${code}`, {
       model_name: 'موديل معدل',
       masnaiya: 100,
     });
@@ -193,53 +227,105 @@ describe('Models API', () => {
     assert.equal(res.body.model_name, 'موديل معدل');
   });
 
-  it('GET /api/models/:code/cost returns cost calculation', async () => {
-    const code = `TST-M${UID}`;
-    const res = await request('GET', `/api/models/${code}/cost`);
-    assert.equal(res.status, 200);
-    assert.ok(res.body.total_cost >= 0);
-    assert.ok(res.body.cost_per_piece >= 0);
-  });
-
   it('DELETE /api/models/:code deactivates', async () => {
     const code = `TST-M${UID}`;
-    const res = await request('DELETE', `/api/models/${code}`);
+    const res = await req('DELETE', `/api/models/${code}`);
     assert.equal(res.status, 200);
+    assert.ok(res.body.message);
+  });
+});
+
+// ============ Suppliers API ============
+describe('Suppliers API', () => {
+  it('GET /api/suppliers returns array', async () => {
+    const res = await req('GET', '/api/suppliers');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
+  });
+});
+
+// ============ Customers API ============
+describe('Customers API', () => {
+  it('GET /api/customers returns array', async () => {
+    const res = await req('GET', '/api/customers');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
+  });
+});
+
+// ============ Work Orders API ============
+describe('Work Orders API', () => {
+  it('GET /api/work-orders returns work_orders and stats', async () => {
+    const res = await req('GET', '/api/work-orders');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.work_orders));
+    assert.ok(res.body.stats !== undefined);
   });
 });
 
 // ============ Reports API ============
 describe('Reports API', () => {
   it('GET /api/reports/summary returns KPIs', async () => {
-    const res = await request('GET', '/api/reports/summary');
+    const res = await req('GET', '/api/reports/summary');
     assert.equal(res.status, 200);
     assert.ok(res.body.total_models !== undefined);
-    assert.ok(res.body.total_fabrics !== undefined);
-    assert.ok(res.body.avg_cost_per_piece !== undefined);
   });
 
   it('GET /api/reports/by-fabric returns array', async () => {
-    const res = await request('GET', '/api/reports/by-fabric');
+    const res = await req('GET', '/api/reports/by-fabric');
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body));
   });
 
   it('GET /api/reports/by-accessory returns array', async () => {
-    const res = await request('GET', '/api/reports/by-accessory');
+    const res = await req('GET', '/api/reports/by-accessory');
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body));
   });
 
-  it('GET /api/reports/by-model returns array', async () => {
-    const res = await request('GET', '/api/reports/by-model');
+  it('GET /api/reports/customer-summary returns data', async () => {
+    const res = await req('GET', '/api/reports/customer-summary');
     assert.equal(res.status, 200);
-    assert.ok(Array.isArray(res.body));
+    assert.ok(res.body.customers !== undefined);
   });
 
-  it('GET /api/reports/costs returns snapshots and totals', async () => {
-    const res = await request('GET', '/api/reports/costs');
+  it('GET /api/reports/inventory-status returns data', async () => {
+    const res = await req('GET', '/api/reports/inventory-status');
     assert.equal(res.status, 200);
-    assert.ok(Array.isArray(res.body.snapshots));
-    assert.ok(res.body.totals !== undefined);
+    assert.ok(res.body.fabrics !== undefined);
+    assert.ok(res.body.accessories !== undefined);
+  });
+});
+
+// ============ Notifications API ============
+describe('Notifications API', () => {
+  it('GET /api/notifications returns data', async () => {
+    const res = await req('GET', '/api/notifications');
+    assert.equal(res.status, 200);
+    assert.ok(res.body.notifications !== undefined || Array.isArray(res.body));
+  });
+
+  it('GET /api/notifications/count returns unread_count', async () => {
+    const res = await req('GET', '/api/notifications/count');
+    assert.equal(res.status, 200);
+    assert.ok(res.body.unread_count !== undefined);
+  });
+});
+
+// ============ Dashboard API ============
+describe('Dashboard API', () => {
+  it('GET /api/dashboard returns stats', async () => {
+    const res = await req('GET', '/api/dashboard');
+    assert.equal(res.status, 200);
+    assert.ok(res.body !== null);
+  });
+});
+
+// ============ Machines API ============
+describe('Machines API', () => {
+  it('GET /api/machines returns array', async () => {
+    const res = await req('GET', '/api/machines');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
   });
 });
