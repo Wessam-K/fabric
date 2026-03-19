@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Printer, Camera, Layers, FileText, ClipboardList } from 'lucide-react';
+import { Save, Printer, Camera, Layers, FileText, ClipboardList, DollarSign } from 'lucide-react';
 import api from '../utils/api';
 import ImageUpload from '../components/ImageUpload';
 import { useToast } from '../components/Toast';
@@ -20,6 +20,7 @@ export default function ModelForm() {
   const [modelImage, setModelImage] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [bomTemplates, setBomTemplates] = useState([]);
+  const [costData, setCostData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -36,6 +37,12 @@ export default function ModelForm() {
           setNotes(data.notes || '');
           setModelImage(data.model_image || null);
           setBomTemplates(data.bom_templates || []);
+          // Fetch cost data for this model
+          try {
+            const costRes = await api.get('/reports/by-model', { params: { search: code } });
+            const match = (costRes.data || []).find(r => r.model_code === code);
+            if (match) setCostData(match);
+          } catch {}
         } else {
           const { data } = await api.get('/models/next-serial');
           setSerial(data.next_serial);
@@ -95,7 +102,7 @@ export default function ModelForm() {
   }
 
   return (
-    <div className="p-4 lg:p-6 max-w-[900px] mx-auto">
+    <div className="p-4 lg:p-6 max-w-[1100px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -122,6 +129,9 @@ export default function ModelForm() {
         </div>
       </div>
 
+      {/* Main content with optional sticky cost panel */}
+      <div className={`${isEdit && costData ? 'lg:grid lg:grid-cols-[1fr_220px] lg:gap-6 lg:items-start' : ''}`}>
+      <div>
       {/* Form */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Image */}
@@ -219,6 +229,29 @@ export default function ModelForm() {
           </button>
         </div>
       )}
+      </div>{/* end main column */}
+
+      {/* Sticky Cost Summary Panel */}
+      {isEdit && costData && (
+        <div className="sticky top-4 self-start bg-white rounded-2xl shadow-sm p-4 border border-gray-100 hidden lg:block">
+          <h3 className="text-sm font-bold text-[#1a1a2e] mb-3 flex items-center gap-2"><DollarSign size={14} className="text-[#c9a84c]" /> ملخص التكاليف</h3>
+          <div className="space-y-2 text-[11px]">
+            <div className="flex justify-between"><span className="text-gray-500">أوامر العمل</span><span className="font-mono font-bold">{costData.wo_count || 0}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">مكتمل</span><span className="font-mono font-bold text-green-600">{costData.completed_count || 0}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">إجمالي القطع</span><span className="font-mono font-bold">{costData.total_pieces || 0}</span></div>
+            <hr className="border-gray-100" />
+            <div className="flex justify-between"><span className="text-gray-500">قماش رئيسي</span><span className="font-mono">{(costData.main_fabric_cost || 0).toLocaleString('ar-EG')} ج.م</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">بطانة</span><span className="font-mono">{(costData.lining_cost || 0).toLocaleString('ar-EG')} ج.م</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">إكسسوارات</span><span className="font-mono">{(costData.accessories_cost || 0).toLocaleString('ar-EG')} ج.م</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">مصنعية</span><span className="font-mono">{(costData.masnaiya || 0).toLocaleString('ar-EG')} ج.م</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">مصروفات</span><span className="font-mono">{(costData.masrouf || 0).toLocaleString('ar-EG')} ج.م</span></div>
+            <hr className="border-gray-100" />
+            <div className="flex justify-between font-bold"><span className="text-[#1a1a2e]">الإجمالي</span><span className="font-mono text-[#c9a84c]">{(costData.total_cost || 0).toLocaleString('ar-EG')} ج.م</span></div>
+            <div className="flex justify-between font-bold"><span className="text-[#1a1a2e]">تكلفة القطعة</span><span className="font-mono text-[#c9a84c]">{(costData.cost_per_piece || 0).toLocaleString('ar-EG')} ج.م</span></div>
+          </div>
+        </div>
+      )}
+      </div>{/* end grid wrapper */}
     </div>
   );
 }

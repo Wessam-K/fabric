@@ -226,4 +226,7 @@ if (fs.existsSync(frontendDist)) {
 
 app.listen(PORT, () => {
   console.log(`WK-Hub Factory API v9 running on http://localhost:${PORT}`);
+  // Run notification generation on startup and every 5 minutes
+  try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
+  setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);
 });

@@ -1,12 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import api from '../utils/api';
+
+const NAV_MAP = {
+  fabric: '/inventory',
+  accessory: '/accessories',
+  work_order: '/work-orders',
+  invoice: '/invoices',
+  purchase_order: '/purchase-orders',
+  customer: '/customers',
+};
 
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const navigate = useNavigate();
 
   const load = async () => {
     try {
@@ -42,6 +53,19 @@ export default function NotificationBell() {
     } catch {}
   };
 
+  const handleNotificationClick = (n) => {
+    if (!n.is_read) markRead(n.id);
+    const basePath = NAV_MAP[n.reference_type];
+    if (basePath && n.reference_id) {
+      if (n.reference_type === 'work_order') {
+        navigate(`${basePath}/${n.reference_id}`);
+      } else {
+        navigate(basePath);
+      }
+      setOpen(false);
+    }
+  };
+
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(!open)} className="relative p-2 text-gray-400 hover:text-[#c9a84c] transition-colors">
@@ -66,10 +90,10 @@ export default function NotificationBell() {
               <p className="text-center py-8 text-xs text-gray-400">لا توجد إشعارات</p>
             ) : (
               notifications.map(n => (
-                <div key={n.id} onClick={() => !n.is_read && markRead(n.id)}
+                <div key={n.id} onClick={() => handleNotificationClick(n)}
                   className={`px-3 py-2.5 border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-blue-50/50' : ''}`}>
                   <p className="text-xs font-bold text-[#1a1a2e]">{n.title}</p>
-                  <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{n.message}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{n.body || n.message}</p>
                   <p className="text-[9px] text-gray-300 mt-1">{n.created_at ? new Date(n.created_at).toLocaleString('ar-EG') : ''}</p>
                 </div>
               ))

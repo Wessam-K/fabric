@@ -172,6 +172,11 @@ async function run() {
   const afterMark = await api('GET', '/api/notifications');
   ok(afterMark.data.unread_count === 0, `Unread = 0 after mark all (got ${afterMark.data.unread_count})`);
 
+  // 4.4 Notification count endpoint
+  const countRes = await api('GET', '/api/notifications/count');
+  ok(countRes.status === 200, 'Count endpoint returns 200');
+  ok(countRes.data.unread_count !== undefined, `Count has unread_count (got ${countRes.data.unread_count})`);
+
   // ═══════ GROUP 5: Work Order Cancellation ═══════
   console.log('\n━━━ GROUP 5: Work Order Cancellation ━━━\n');
 
