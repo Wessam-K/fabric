@@ -1,6 +1,5 @@
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, Printer, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, Bell, UserCheck, Cog } from 'lucide-react';
-import Toast from './components/Toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -48,7 +47,7 @@ function ProtectedRoute({ children, roles, perm }) {
 }
 
 function AppLayout() {
-  const { user, logout, hasRole, can, ROLE_LABELS, ROLE_COLORS } = useAuth();
+  const { user, logout, can, ROLE_LABELS, ROLE_COLORS } = useAuth();
 
   const navGroups = [
     {
@@ -216,6 +215,7 @@ function AuthRouter() {
       <Route path="/setup" element={<Setup />} />
       <Route path="/models/:code/print" element={<PrintView />} />
       <Route path="/models/:code/invoice" element={<InvoicePrint />} />
+      {/* InvoiceView is intentionally outside AppLayout for standalone/print view (no sidebar) */}
       <Route path="/invoices/:id/view" element={<InvoiceView />} />
       <Route path="/*" element={user ? <AppLayout /> : <Navigate to="/login" replace />} />
     </Routes>
