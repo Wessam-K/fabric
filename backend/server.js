@@ -43,6 +43,7 @@ app.use((req, res, next) => {
 });
 
 // ═══ Simple rate limiter for auth endpoints ═══
+// Applied only to POST /api/auth/login since login only uses POST
 const loginAttempts = new Map();
 const RATE_WINDOW = 15 * 60 * 1000; // 15 min
 const MAX_ATTEMPTS = 20;
@@ -53,7 +54,7 @@ setInterval(() => {
   }
 }, 60000);
 
-app.use('/api/auth/login', (req, res, next) => {
+app.post('/api/auth/login', (req, res, next) => {
   const ip = req.ip || req.connection.remoteAddress;
   const now = Date.now();
   let entry = loginAttempts.get(ip);
@@ -225,7 +226,7 @@ if (fs.existsSync(frontendDist)) {
 }
 
 app.listen(PORT, () => {
-  console.log(`WK-Hub Factory API v9 running on http://localhost:${PORT}`);
+  console.log(`WK-Hub Factory API v10 running on http://localhost:${PORT}`);
   // Run notification generation on startup and every 5 minutes
   try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
   setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);
