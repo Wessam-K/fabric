@@ -41,7 +41,12 @@ function req(method, path, body) {
 
 // ─── Auth setup ─────────────────────────────────────
 before(async () => {
-  // Login with known admin credentials
+  // Step 1: attempt first-run admin creation (may 403 if already exists)
+  await request('POST', '/api/setup/create-admin', {
+    username: 'admin', full_name: 'Admin', password: '123456',
+  });
+
+  // Step 2: login
   const loginRes = await request('POST', '/api/auth/login', {
     username: 'admin',
     password: '123456',
@@ -51,6 +56,18 @@ before(async () => {
   } else {
     throw new Error(`Cannot get auth token. Login response: ${JSON.stringify(loginRes.body)}`);
   }
+
+  // Step 3: seed master data (409 = already exists, that's fine)
+  await req('POST', '/api/fabrics', { code: 'CTN-001', name: 'قطن أساسي', fabric_type: 'main', price_per_m: 50 });
+  await req('POST', '/api/accessories', { code: 'BTN-001', acc_type: 'button', name: 'زرار أساسي', unit_price: 0.5 });
+});
+
+after(async () => {
+  // Cleanup test-run-specific records
+  await req('DELETE', `/api/fabrics/TST-F${UID}`);
+  await req('DELETE', `/api/accessories/TST-A${UID}`);
+  await req('DELETE', `/api/models/TST-M${UID}`);
+  await req('DELETE', `/api/suppliers/SUP-${UID}`);
 });
 
 // ============ Health Check ============
@@ -321,11 +338,53 @@ describe('Dashboard API', () => {
   });
 });
 
+// ============ Purchase Orders API ============
+describe('Purchase Orders API', () => {
+  it('GET /api/purchase-orders returns orders and totals', async () => {
+    const res = await req('GET', '/api/purchase-orders');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.orders));
+    assert.ok(res.body.totals !== undefined);
+  });
+});
+
+// ============ Invoices API ============
+describe('Invoices API', () => {
+  it('GET /api/invoices returns invoices and totals', async () => {
+    const res = await req('GET', '/api/invoices');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.invoices));
+    assert.ok(res.body.totals !== undefined);
+  });
+});
+
 // ============ Machines API ============
 describe('Machines API', () => {
   it('GET /api/machines returns array', async () => {
     const res = await req('GET', '/api/machines');
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body));
+  });
+});
+
+// ============ Suppliers POST ============
+describe('Suppliers Create', () => {
+  it('POST /api/suppliers creates new supplier', async () => {
+    const res = await req('POST', '/api/suppliers', {
+      code: `SUP-${UID}`, name: 'مورد اختبار', supplier_type: 'fabric',
+    });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.code, `SUP-${UID}`);
+  });
+});
+
+// ============ Search API ============
+describe('Search API', () => {
+  it('GET /api/search?q=test returns result object', async () => {
+    const res = await req('GET', '/api/search?q=test');
+    assert.equal(res.status, 200);
+    assert.ok(res.body.models !== undefined);
+    assert.ok(res.body.fabrics !== undefined);
+    assert.ok(res.body.accessories !== undefined);
   });
 });

@@ -18,6 +18,12 @@ backend/uploads/*
 
 # Environment
 backend/.env
+.env.local
+.env.production
+!.env.example
+
+# Electron release
+release/
 
 # OS files
 .DS_Store
