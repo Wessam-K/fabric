@@ -146,7 +146,12 @@ function getFullWO(id) {
   `).all(id);
 
   wo.sizes = db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(id);
-  wo.stages = db.prepare('SELECT * FROM wo_stages WHERE wo_id=? ORDER BY sort_order').all(id);
+  wo.stages = db.prepare(`
+    SELECT ws.*, st.color as stage_color
+    FROM wo_stages ws
+    LEFT JOIN stage_templates st ON st.name = ws.stage_name
+    WHERE ws.wo_id=? ORDER BY ws.sort_order
+  `).all(id);
   wo.extra_expenses = db.prepare('SELECT * FROM wo_extra_expenses WHERE wo_id=? ORDER BY recorded_at').all(id);
   wo.partial_invoices = db.prepare('SELECT * FROM partial_invoices WHERE wo_id=? ORDER BY created_at').all(id);
   wo.cost_summary = calculateWOCost(id);
@@ -654,7 +659,9 @@ router.post('/:id/finalize', (req, res) => {
       // V8: Calculate real cost from consumption tables
       const fabricCost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_fabric_consumption WHERE work_order_id=?').get(woId).v;
       const accessoryCost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_accessory_consumption WHERE work_order_id=?').get(woId).v;
-      const wasteCost = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as v FROM wo_waste WHERE work_order_id=?').get(woId).v;
+      const wasteFromWoWaste = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as v FROM wo_waste WHERE work_order_id=?').get(woId).v;
+      const wasteFromBatches = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as v FROM wo_fabric_batches WHERE wo_id=? AND waste_cost > 0').get(woId).v;
+      const wasteCost = wasteFromWoWaste + wasteFromBatches;
 
       // Fall back to calculated cost if no consumption recorded
       const cost = calculateWOCost(woId);

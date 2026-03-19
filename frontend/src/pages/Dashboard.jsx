@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scissors, Gem, List, TrendingUp, Factory, Truck, ShoppingCart, DollarSign, Users, Clock, AlertTriangle, Shield } from 'lucide-react';
+import { Scissors, Gem, List, TrendingUp, Factory, Truck, ShoppingCart, DollarSign, Users, Clock, AlertTriangle, Shield, Settings, UserCheck, CheckCircle } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -43,6 +43,10 @@ export default function Dashboard() {
     { label: 'مكتمل هذا الشهر', value: data?.completed_this_month ?? 0, icon: ShoppingCart, color: 'bg-teal-50 text-teal-600', path: '/work-orders' },
     { label: 'الموردين', value: data?.total_suppliers ?? 0, icon: Truck, color: 'bg-indigo-50 text-indigo-600', path: '/suppliers' },
     { label: 'مستحقات الموردين', value: `${(data?.outstanding_payables || 0).toLocaleString('ar-EG')} ج`, icon: DollarSign, color: 'bg-red-50 text-red-600' },
+    { label: 'العملاء', value: data?.total_customers ?? 0, icon: UserCheck, color: 'bg-cyan-50 text-cyan-600', path: '/customers' },
+    { label: 'الماكينات', value: `${data?.machines_in_use ?? 0}/${data?.total_machines ?? 0}`, icon: Settings, color: 'bg-slate-50 text-slate-600', path: '/machines' },
+    { label: 'مستحقات العملاء', value: `${(data?.customer_outstanding || 0).toLocaleString('ar-EG')} ج`, icon: DollarSign, color: 'bg-pink-50 text-pink-600' },
+    { label: 'جودة الإنتاج', value: `${data?.quality_rate ?? 100}%`, icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
   ];
 
   return (

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon } from 'lucide-react';
+import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon, CheckCircle, Settings } from 'lucide-react';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
@@ -23,6 +23,8 @@ const TABS = [
   { key: 'supplier-consumption', label: 'استهلاك الموردين', icon: Warehouse },
   { key: 'hr', label: 'الموارد البشرية', icon: Users },
   { key: 'customer-summary', label: 'ملخص العملاء', icon: UserCheck },
+  { key: 'quality', label: 'تقرير الجودة', icon: CheckCircle },
+  { key: 'machines-report', label: 'تقرير الماكينات', icon: Settings },
   { key: 'inventory-status', label: 'حالة المخزون', icon: Warehouse },
   { key: 'pivot', label: 'جدول محوري', icon: Table2 },
 ];
@@ -70,6 +72,8 @@ export default function Reports() {
   const [supplierConsumptionData, setSupplierConsumptionData] = useState(null);
   const [hrData, setHrData] = useState(null);
   const [customerSummary, setCustomerSummary] = useState(null);
+  const [qualityData, setQualityData] = useState(null);
+  const [machinesReport, setMachinesReport] = useState(null);
   const [inventoryStatus, setInventoryStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -131,6 +135,12 @@ export default function Reports() {
         } else if (tab === 'customer-summary') {
           const { data } = await api.get('/reports/customer-summary');
           setCustomerSummary(data);
+        } else if (tab === 'quality') {
+          const { data } = await api.get('/reports/quality');
+          setQualityData(data);
+        } else if (tab === 'machines-report') {
+          const { data } = await api.get('/reports/machines');
+          setMachinesReport(data);
         } else if (tab === 'inventory-status') {
           const { data } = await api.get('/reports/inventory-status');
           setInventoryStatus(data);
@@ -736,6 +746,121 @@ export default function Reports() {
     );
   };
 
+  const renderQuality = () => {
+    if (!qualityData) return null;
+    const { stage_quality, recent_rejections, overall_pass_rate, total_passed, total_rejected } = qualityData;
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <KPICard label="نسبة النجاح الكلية" value={`${overall_pass_rate}%`} icon={CheckCircle} color="bg-green-50 text-green-600" />
+          <KPICard label="إجمالي القطع الناجحة" value={total_passed} icon={TrendingUp} color="bg-blue-50 text-blue-600" />
+          <KPICard label="إجمالي المرفوض" value={total_rejected} icon={AlertTriangle} color="bg-red-50 text-red-600" />
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <h3 className="text-sm font-bold text-[#1a1a2e] p-5 pb-3">الجودة حسب المرحلة</h3>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">المرحلة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">عدد الأوامر</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">ناجحة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">مرفوضة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">نسبة النجاح</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stage_quality.map(s => (
+                <tr key={s.stage_name} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-3 font-bold text-[#1a1a2e]">{s.stage_name}</td>
+                  <td className="px-4 py-3 text-center font-mono">{s.wo_count}</td>
+                  <td className="px-4 py-3 text-center font-mono text-green-600">{s.total_passed}</td>
+                  <td className="px-4 py-3 text-center font-mono text-red-500">{s.total_rejected}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`font-mono font-bold ${s.pass_rate >= 95 ? 'text-green-600' : s.pass_rate >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{s.pass_rate}%</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {recent_rejections.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <h3 className="text-sm font-bold text-[#1a1a2e] p-5 pb-3">آخر حالات الرفض</h3>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-right text-xs text-gray-500">أمر العمل</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">الكمية المرفوضة</th>
+                  <th className="px-4 py-3 text-right text-xs text-gray-500">السبب</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">التاريخ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent_rejections.slice(0, 20).map((r, i) => (
+                  <tr key={i} className="border-t border-gray-100">
+                    <td className="px-4 py-3 font-mono text-xs font-bold">{r.wo_number}</td>
+                    <td className="px-4 py-3 text-center font-mono text-red-500">{r.qty_rejected}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{r.rejection_reason || '—'}</td>
+                    <td className="px-4 py-3 text-center text-xs text-gray-400">{r.moved_at ? new Date(r.moved_at).toLocaleDateString('ar-EG') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderMachinesReport = () => {
+    if (!machinesReport) return null;
+    const { machines } = machinesReport;
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard label="إجمالي الماكينات" value={machines.length} icon={Settings} color="bg-blue-50 text-blue-600" />
+          <KPICard label="نشطة" value={machines.filter(m => m.status === 'active').length} icon={CheckCircle} color="bg-green-50 text-green-600" />
+          <KPICard label="إجمالي ساعات التشغيل" value={Math.round(machines.reduce((s, m) => s + (m.total_hours || 0), 0))} icon={Factory} color="bg-purple-50 text-purple-600" />
+          <KPICard label="قطع منتجة" value={machines.reduce((s, m) => s + (m.total_pieces || 0), 0)} icon={TrendingUp} color="bg-amber-50 text-amber-600" />
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الكود</th>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">الاسم</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">النوع</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">الحالة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">مراحل نشطة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">إجمالي مراحل</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">ساعات</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">قطع</th>
+              </tr>
+            </thead>
+            <tbody>
+              {machines.map(m => (
+                <tr key={m.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-3 font-mono text-xs font-bold">{m.code}</td>
+                  <td className="px-4 py-3 font-bold text-[#1a1a2e]">{m.name}</td>
+                  <td className="px-4 py-3 text-center text-xs text-gray-500">{m.machine_type || '—'}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${m.status === 'active' ? 'bg-green-100 text-green-700' : m.status === 'maintenance' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-200 text-gray-500'}`}>
+                      {m.status === 'active' ? 'نشطة' : m.status === 'maintenance' ? 'صيانة' : 'متوقفة'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center font-mono text-blue-600">{m.active_stages}</td>
+                  <td className="px-4 py-3 text-center font-mono">{m.total_stages}</td>
+                  <td className="px-4 py-3 text-center font-mono">{Math.round(m.total_hours || 0)}</td>
+                  <td className="px-4 py-3 text-center font-mono">{m.total_pieces}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   const renderInventoryStatus = () => {
     if (!inventoryStatus) return null;
     const { fabrics, accessories, low_stock_fabrics, low_stock_accessories } = inventoryStatus;
@@ -989,6 +1114,8 @@ export default function Reports() {
           {tab === 'supplier-consumption' && renderSupplierConsumption()}
           {tab === 'hr' && renderHR()}
           {tab === 'customer-summary' && renderCustomerSummary()}
+          {tab === 'quality' && renderQuality()}
+          {tab === 'machines-report' && renderMachinesReport()}
           {tab === 'inventory-status' && renderInventoryStatus()}
           {tab === 'pivot' && <PivotTable />}
         </>

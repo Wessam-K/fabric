@@ -272,7 +272,7 @@ export default function BomTemplates() {
         </div>
       )}
 
-      <div className="flex gap-6">
+      <div className="flex gap-6 items-start">
         <div className="flex-1 min-w-0 space-y-6">
           {/* Template basic info */}
           <div className="bg-white rounded-2xl shadow-sm p-5">
@@ -370,7 +370,7 @@ export default function BomTemplates() {
 
         {/* Right sidebar */}
         <div className="hidden lg:block w-[280px] shrink-0">
-          <div className="sticky top-6 space-y-4">
+          <div className="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto space-y-4">
             {/* Actions */}
             {activeId && (
               <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">

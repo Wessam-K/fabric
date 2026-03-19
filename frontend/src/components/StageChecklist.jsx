@@ -33,7 +33,7 @@ function StageAdvanceForm({ stage, onAdvance, onCancel }) {
     <div className="mt-3 p-3 bg-blue-50 rounded-xl border border-blue-200 space-y-3">
       <div className="flex items-center gap-2 text-xs font-bold text-blue-700">
         <ArrowLeft size={14} /> تمرير من: {stage.stage_name}
-        <span className="mr-auto font-mono text-blue-500">متاح: {available}</span>
+        <span className="mr-auto font-mono text-blue-500">الكمية المتاحة للنقل: {available} قطعة</span>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -129,6 +129,7 @@ export default function StageChecklist({ stages = [], editable = false, totalQty
               {STATUS_ICON[stage.status]}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
+                  {stage.stage_color && <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: stage.stage_color }} />}
                   <span className="text-sm font-bold text-[#1a1a2e]">{stage.stage_name}</span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${stage.status === 'completed' ? 'bg-green-100 text-green-700' : stage.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : stage.status === 'skipped' ? 'bg-gray-200 text-gray-500' : 'bg-gray-100 text-gray-600'}`}>
                     {STATUS_LABEL[stage.status]}
@@ -153,7 +154,7 @@ export default function StageChecklist({ stages = [], editable = false, totalQty
                 {canAdvance && (
                   <button onClick={e => { e.stopPropagation(); setAdvancingId(isAdvancing ? null : stage.id); }}
                     className="text-xs px-3 py-1 bg-[#c9a84c] text-white rounded-lg hover:bg-[#b8973f]">
-                    {isLast ? 'إنهاء' : 'تمرير'}
+                    {isLast ? 'إتمام التسليم النهائي' : 'تمرير'}
                   </button>
                 )}
                 {editable && stage.status === 'pending' && (

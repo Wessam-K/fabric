@@ -14,7 +14,7 @@ export default function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerInvoices, setCustomerInvoices] = useState([]);
 
-  const emptyForm = { name: '', phone: '', email: '', address: '', city: '', tax_number: '', credit_limit: '', notes: '' };
+  const emptyForm = { name: '', phone: '', email: '', address: '', city: '', tax_number: '', credit_limit: '', notes: '', customer_type: 'retail', contact_name: '', payment_terms: '' };
   const [form, setForm] = useState(emptyForm);
 
   const load = async () => {
@@ -39,7 +39,7 @@ export default function Customers() {
 
   const openEdit = (c) => {
     setEditId(c.id);
-    setForm({ name: c.name, phone: c.phone || '', email: c.email || '', address: c.address || '', city: c.city || '', tax_number: c.tax_number || '', credit_limit: c.credit_limit || '', notes: c.notes || '' });
+    setForm({ name: c.name, phone: c.phone || '', email: c.email || '', address: c.address || '', city: c.city || '', tax_number: c.tax_number || '', credit_limit: c.credit_limit || '', notes: c.notes || '', customer_type: c.customer_type || 'retail', contact_name: c.contact_name || '', payment_terms: c.payment_terms || '' });
     setShowModal(true);
   };
 
@@ -129,6 +129,7 @@ export default function Customers() {
                 <tr>
                   <th className="px-4 py-3 text-right text-xs text-gray-500">الكود</th>
                   <th className="px-4 py-3 text-right text-xs text-gray-500">الاسم</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">النوع</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">المدينة</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">الهاتف</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">الحد الائتماني</th>
@@ -142,7 +143,13 @@ export default function Customers() {
                     <td className="px-4 py-3 font-mono text-xs font-bold">{c.code}</td>
                     <td className="px-4 py-3">
                       <span className="font-bold text-[#1a1a2e]">{c.name}</span>
+                      {c.contact_name && <span className="text-xs text-gray-400 mr-2">• {c.contact_name}</span>}
                       {c.email && <span className="text-xs text-gray-400 mr-2">• {c.email}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${c.customer_type === 'wholesale' ? 'bg-blue-100 text-blue-700' : c.customer_type === 'corporate' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {c.customer_type === 'wholesale' ? 'جملة' : c.customer_type === 'corporate' ? 'شركات' : 'تجزئة'}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-gray-500">{c.city || '—'}</td>
                     <td className="px-4 py-3 text-center text-xs text-gray-500">{c.phone || '—'}</td>
@@ -176,6 +183,22 @@ export default function Customers() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <label className="block text-xs text-gray-500 mb-1">نوع العميل</label>
+                <select value={form.customer_type} onChange={e => setForm({...form, customer_type: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none">
+                  <option value="retail">تجزئة</option>
+                  <option value="wholesale">جملة</option>
+                  <option value="corporate">شركات</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">جهة الاتصال</label>
+                <input type="text" value={form.contact_name} onChange={e => setForm({...form, contact_name: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
                 <label className="block text-xs text-gray-500 mb-1">الهاتف</label>
                 <input type="text" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
@@ -203,10 +226,17 @@ export default function Customers() {
               <input type="text" value={form.address} onChange={e => setForm({...form, address: e.target.value})}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">الحد الائتماني (ج.م)</label>
-              <input type="number" min="0" step="100" value={form.credit_limit} onChange={e => setForm({...form, credit_limit: e.target.value})}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:border-[#c9a84c] outline-none" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">الحد الائتماني (ج.م)</label>
+                <input type="number" min="0" step="100" value={form.credit_limit} onChange={e => setForm({...form, credit_limit: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:border-[#c9a84c] outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">شروط الدفع</label>
+                <input type="text" value={form.payment_terms} onChange={e => setForm({...form, payment_terms: e.target.value})} placeholder="مثال: 30 يوم"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
+              </div>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">ملاحظات</label>

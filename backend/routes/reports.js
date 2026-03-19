@@ -560,4 +560,79 @@ router.get('/inventory-status', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/quality — quality & rejection report
+router.get('/quality', (req, res) => {
+  try {
+    // Per-stage rejection rates
+    const stageQuality = db.prepare(`
+      SELECT ws.stage_name,
+        COUNT(DISTINCT ws.wo_id) as wo_count,
+        SUM(ws.quantity_completed) as total_passed,
+        SUM(ws.quantity_rejected) as total_rejected,
+        CASE WHEN (SUM(ws.quantity_completed) + SUM(ws.quantity_rejected)) > 0
+          THEN ROUND(CAST(SUM(ws.quantity_completed) AS FLOAT) / (SUM(ws.quantity_completed) + SUM(ws.quantity_rejected)) * 100, 1)
+          ELSE 100 END as pass_rate
+      FROM wo_stages ws
+      GROUP BY ws.stage_name
+      ORDER BY total_rejected DESC
+    `).all();
+
+    // Recent rejections with reasons
+    const recentRejections = db.prepare(`
+      SELECT sml.*, wo.wo_number, m.model_name
+      FROM stage_movement_log sml
+      LEFT JOIN work_orders wo ON wo.id = sml.wo_id
+      LEFT JOIN models m ON m.id = wo.model_id
+      WHERE sml.qty_rejected > 0
+      ORDER BY sml.moved_at DESC LIMIT 50
+    `).all();
+
+    // Overall stats
+    const overall = db.prepare(`
+      SELECT COALESCE(SUM(quantity_completed),0) as total_passed,
+        COALESCE(SUM(quantity_rejected),0) as total_rejected
+      FROM wo_stages
+    `).get();
+
+    const overallRate = (overall.total_passed + overall.total_rejected) > 0
+      ? Math.round((overall.total_passed / (overall.total_passed + overall.total_rejected)) * 10000) / 100
+      : 100;
+
+    // QC checkpoints
+    const qcCheckpoints = db.prepare(`
+      SELECT qc.*, ws.stage_name, wo.wo_number
+      FROM wo_stage_qc qc
+      LEFT JOIN wo_stages ws ON ws.id = qc.stage_id
+      LEFT JOIN work_orders wo ON wo.id = qc.wo_id
+      ORDER BY qc.checked_at DESC LIMIT 50
+    `).all();
+
+    res.json({
+      stage_quality: stageQuality,
+      recent_rejections: recentRejections,
+      overall_pass_rate: overallRate,
+      total_passed: overall.total_passed,
+      total_rejected: overall.total_rejected,
+      qc_checkpoints: qcCheckpoints,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/machines — machine utilization report
+router.get('/machines', (req, res) => {
+  try {
+    const machines = db.prepare(`
+      SELECT m.*,
+        (SELECT COUNT(*) FROM wo_stages ws WHERE ws.machine_id = m.id) as total_stages,
+        (SELECT COUNT(*) FROM wo_stages ws WHERE ws.machine_id = m.id AND ws.status = 'in_progress') as active_stages,
+        (SELECT COALESCE(SUM(ws.actual_hours), 0) FROM wo_stages ws WHERE ws.machine_id = m.id) as total_hours,
+        (SELECT COALESCE(SUM(ws.quantity_completed), 0) FROM wo_stages ws WHERE ws.machine_id = m.id) as total_pieces
+      FROM machines m
+      ORDER BY total_hours DESC
+    `).all();
+
+    res.json({ machines });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

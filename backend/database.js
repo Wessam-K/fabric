@@ -1183,6 +1183,144 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (9)`);
   }
+
+  // ═══════════════════════════════════════════════
+  // V10 — Customers enhancement, QC, Machines, Accessory batches, Customer payments
+  // ═══════════════════════════════════════════════
+  if (currentVersion < 10) {
+    const addColumnSafe = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch {}
+    };
+
+    // 10.1 Enhance customers table with missing columns
+    addColumnSafe('customers', 'customer_type', "TEXT DEFAULT 'wholesale'");
+    addColumnSafe('customers', 'contact_name', 'TEXT');
+    addColumnSafe('customers', 'payment_terms', 'TEXT');
+
+    // 10.2 Quality control checkpoints per stage
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS wo_stage_qc (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        wo_id          INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+        stage_id       INTEGER NOT NULL REFERENCES wo_stages(id) ON DELETE CASCADE,
+        checked_by     INTEGER REFERENCES users(id),
+        checked_at     TEXT DEFAULT (datetime('now','localtime')),
+        items_checked  INTEGER NOT NULL DEFAULT 0,
+        items_passed   INTEGER NOT NULL DEFAULT 0,
+        items_failed   INTEGER NOT NULL DEFAULT 0,
+        defect_notes   TEXT,
+        qc_status      TEXT DEFAULT 'pending' CHECK(qc_status IN ('pending','passed','failed','partial'))
+      );
+    `);
+
+    // 10.3 Machines / work centers
+    // Drop old schema if it exists with restrictive CHECK constraint
+    try {
+      const info = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='machines'").get();
+      if (info && info.sql && info.sql.includes("CHECK(machine_type IN")) {
+        const count = db.prepare('SELECT COUNT(*) as c FROM machines').get().c;
+        if (count === 0) {
+          db.exec('DROP TABLE IF EXISTS machines');
+        }
+      }
+    } catch {}
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS machines (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        code            TEXT UNIQUE NOT NULL,
+        name            TEXT NOT NULL,
+        machine_type    TEXT DEFAULT 'other',
+        location        TEXT,
+        capacity_per_hour REAL,
+        cost_per_hour   REAL,
+        status          TEXT DEFAULT 'active' CHECK(status IN ('active','maintenance','inactive')),
+        notes           TEXT,
+        sort_order      INTEGER DEFAULT 0,
+        created_at      TEXT DEFAULT (datetime('now')),
+        updated_at      TEXT DEFAULT (datetime('now'))
+      );
+    `);
+    // Ensure columns exist for DBs created with older schema
+    addColumnSafe('machines', 'location', 'TEXT');
+    addColumnSafe('machines', 'capacity_per_hour', 'REAL');
+    addColumnSafe('machines', 'cost_per_hour', 'REAL');
+    addColumnSafe('machines', 'sort_order', 'INTEGER DEFAULT 0');
+    addColumnSafe('machines', 'updated_at', "TEXT DEFAULT (datetime('now'))");
+
+    // 10.4 Link wo_stages to machines + add efficiency tracking
+    addColumnSafe('wo_stages', 'machine_id', 'INTEGER REFERENCES machines(id)');
+    addColumnSafe('wo_stages', 'color_variant', 'TEXT');
+    addColumnSafe('wo_stages', 'planned_hours', 'REAL DEFAULT 0');
+    addColumnSafe('wo_stages', 'actual_hours', 'REAL DEFAULT 0');
+
+    // 10.5 Accessory inventory batches
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS accessory_inventory_batches (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_code       TEXT UNIQUE NOT NULL,
+        accessory_code   TEXT NOT NULL REFERENCES accessories(code),
+        po_id            INTEGER REFERENCES purchase_orders(id),
+        po_item_id       INTEGER REFERENCES purchase_order_items(id),
+        supplier_id      INTEGER REFERENCES suppliers(id),
+        ordered_qty      REAL NOT NULL DEFAULT 0,
+        received_qty     REAL NOT NULL DEFAULT 0,
+        used_qty         REAL NOT NULL DEFAULT 0,
+        price_per_unit   REAL NOT NULL DEFAULT 0,
+        unit             TEXT DEFAULT 'piece',
+        batch_status     TEXT DEFAULT 'available' CHECK(batch_status IN ('available','depleted','reserved')),
+        received_date    TEXT DEFAULT (datetime('now')),
+        notes            TEXT,
+        created_at       TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // 10.6 Customer payments / receivables
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS customer_payments (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id     INTEGER NOT NULL REFERENCES customers(id),
+        invoice_id      INTEGER REFERENCES invoices(id),
+        amount          REAL NOT NULL,
+        payment_date    TEXT DEFAULT (datetime('now')),
+        payment_method  TEXT DEFAULT 'cash' CHECK(payment_method IN ('cash','bank','check','other')),
+        reference       TEXT,
+        notes           TEXT,
+        created_by      INTEGER REFERENCES users(id),
+        created_at      TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (10)`);
+
+    // 10.7 Add new permission definitions for customers and machines
+    const insPD10 = db.prepare('INSERT OR IGNORE INTO permission_definitions (module, action, label_ar, description_ar, sort_order) VALUES (?,?,?,?,?)');
+    const newPerms = [
+      ['customers', 'view',   'عرض العملاء',   'عرض قائمة العملاء',    65],
+      ['customers', 'create', 'إضافة عميل',    'إضافة عملاء جدد',      66],
+      ['customers', 'edit',   'تعديل عميل',    'تعديل بيانات العملاء',  67],
+      ['customers', 'delete', 'حذف عميل',      'حذف وتعطيل العملاء',   68],
+      ['machines',  'view',   'عرض الآلات',    'عرض قائمة الآلات',      75],
+      ['machines',  'manage', 'إدارة الآلات',  'إضافة وتعديل الآلات',   76],
+    ];
+    for (const p of newPerms) { insPD10.run(...p); }
+
+    // Grant new permissions to relevant roles
+    const insRP10 = db.prepare('INSERT OR IGNORE INTO role_permissions (role, module, action, allowed) VALUES (?,?,?,?)');
+    const custRoles = ['superadmin','manager','accountant'];
+    for (const role of custRoles) {
+      insRP10.run(role, 'customers', 'view', 1);
+      insRP10.run(role, 'customers', 'create', 1);
+      insRP10.run(role, 'customers', 'edit', 1);
+      insRP10.run(role, 'customers', 'delete', 1);
+    }
+    insRP10.run('production', 'customers', 'view', 1);
+    insRP10.run('viewer', 'customers', 'view', 1);
+    const machRoles = ['superadmin','manager','production'];
+    for (const role of machRoles) {
+      insRP10.run(role, 'machines', 'view', 1);
+      insRP10.run(role, 'machines', 'manage', 1);
+    }
+  }
 }
 
 initializeDatabase();

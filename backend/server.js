@@ -24,6 +24,7 @@ const inventoryRouter = require('./routes/inventory');
 const permissionsRouter = require('./routes/permissions');
 const customersRouter = require('./routes/customers');
 const notificationsRouter = require('./routes/notifications');
+const machinesRouter = require('./routes/machines');
 
 const app = express();
 const PORT = process.env.PORT || 9002;
@@ -31,6 +32,41 @@ const PORT = process.env.PORT || 9002;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ═══ Security headers ═══
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// ═══ Simple rate limiter for auth endpoints ═══
+const loginAttempts = new Map();
+const RATE_WINDOW = 15 * 60 * 1000; // 15 min
+const MAX_ATTEMPTS = 20;
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, data] of loginAttempts) {
+    if (now - data.start > RATE_WINDOW) loginAttempts.delete(ip);
+  }
+}, 60000);
+
+app.use('/api/auth/login', (req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  let entry = loginAttempts.get(ip);
+  if (!entry || (now - entry.start > RATE_WINDOW)) {
+    entry = { count: 0, start: now };
+    loginAttempts.set(ip, entry);
+  }
+  entry.count++;
+  if (entry.count > MAX_ATTEMPTS) {
+    return res.status(429).json({ error: 'عدد المحاولات تجاوز الحد المسموح. حاول مرة أخرى بعد 15 دقيقة' });
+  }
+  next();
+});
 
 // ═══ Public routes (no auth) ═══
 app.use('/api/auth', authRouter);
@@ -75,6 +111,7 @@ app.use('/api/inventory', requireAuth, inventoryRouter);
 app.use('/api/permissions', requireAuth, permissionsRouter);
 app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/notifications', requireAuth, notificationsRouter);
+app.use('/api/machines', requireAuth, machinesRouter);
 
 // Dashboard
 app.get('/api/dashboard', requireAuth, (req, res) => {
@@ -122,6 +159,19 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     const monthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status='paid' AND created_at >= date('now','start of month')`).get().r;
     const monthlyCost = db.prepare(`SELECT COALESCE(SUM(total_production_cost),0) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month')`).get().c;
 
+    // V10 — machines utilization
+    const totalMachines = db.prepare("SELECT COUNT(*) as c FROM machines WHERE status='active'").get().c;
+    const machinesInUse = db.prepare(`SELECT COUNT(DISTINCT machine_id) as c FROM wo_stages WHERE status='in_progress' AND machine_id IS NOT NULL`).get().c;
+
+    // V10 — customer outstanding
+    const totalCustomers = db.prepare("SELECT COUNT(*) as c FROM customers WHERE status='active'").get().c;
+    const customerOutstanding = db.prepare(`SELECT COALESCE(SUM(total),0) - COALESCE(SUM(CASE WHEN status='paid' THEN total ELSE 0 END),0) as v FROM invoices WHERE customer_id IS NOT NULL`).get().v;
+
+    // V10 — overall quality (rejection rate)
+    const totalPassed = db.prepare(`SELECT COALESCE(SUM(quantity_completed),0) as v FROM wo_stages`).get().v;
+    const totalRejected = db.prepare(`SELECT COALESCE(SUM(quantity_rejected),0) as v FROM wo_stages`).get().v;
+    const qualityRate = (totalPassed + totalRejected) > 0 ? Math.round((totalPassed / (totalPassed + totalRejected)) * 10000) / 100 : 100;
+
     res.json({
       total_models: totalModels, total_fabrics: totalFabrics, total_accessories: totalAccessories,
       total_invoices: totalInvoices, active_work_orders: activeWorkOrders,
@@ -135,6 +185,11 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       overdue_work_orders: overdueWorkOrders,
       monthly_revenue: Math.round(monthlyRevenue * 100) / 100,
       monthly_cost: Math.round(monthlyCost * 100) / 100,
+      total_machines: totalMachines,
+      machines_in_use: machinesInUse,
+      total_customers: totalCustomers,
+      customer_outstanding: Math.round(customerOutstanding * 100) / 100,
+      quality_rate: qualityRate,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

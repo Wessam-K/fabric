@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, Printer, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, Bell, UserCheck } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, Printer, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, Bell, UserCheck, Cog } from 'lucide-react';
 import Toast from './components/Toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
@@ -19,6 +19,7 @@ import WorkOrderForm from './pages/WorkOrderForm';
 import WorkOrderDetail from './pages/WorkOrderDetail';
 import Suppliers from './pages/Suppliers';
 import Customers from './pages/Customers';
+import Machines from './pages/Machines';
 import PurchaseOrders from './pages/PurchaseOrders';
 import FabricInventory from './pages/FabricInventory';
 import Login from './pages/Login';
@@ -62,6 +63,7 @@ function AppLayout() {
         { path: '/work-orders', label: 'أوامر الإنتاج', icon: Factory, hide: () => !can('work_orders', 'view') },
         { path: '/work-orders/new', label: '+ أمر إنتاج جديد', icon: PlusCircle, hide: () => !can('work_orders', 'create') },
         { path: '/models', label: 'الموديلات', icon: List, hide: () => !can('models', 'view') },
+        { path: '/machines', label: 'الماكينات', icon: Cog, hide: () => !can('machines', 'view') },
       ],
     },
     {
@@ -113,7 +115,7 @@ function AppLayout() {
       <aside className="w-60 bg-[#1a1a2e] flex flex-col shrink-0 no-print">
         <div className="p-5 border-b border-white/10">
           <h1 className="text-xl font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</h1>
-          <p className="text-[10px] text-gray-400 mt-0.5">نظام إدارة المصنع — v6</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">نظام إدارة المصنع — v10</p>
         </div>
         <div className="px-3 pt-2 flex items-center gap-2">
           <div className="flex-1"><GlobalSearch /></div>
@@ -181,6 +183,7 @@ function AppLayout() {
           <Route path="/work-orders/:id" element={<ProtectedRoute perm={['work_orders','view']}><WorkOrderDetail /></ProtectedRoute>} />
           <Route path="/suppliers" element={<ProtectedRoute perm={['suppliers','view']}><Suppliers /></ProtectedRoute>} />
           <Route path="/customers" element={<ProtectedRoute perm={['invoices','view']}><Customers /></ProtectedRoute>} />
+          <Route path="/machines" element={<ProtectedRoute perm={['machines','view']}><Machines /></ProtectedRoute>} />
           <Route path="/purchase-orders" element={<ProtectedRoute perm={['purchase_orders','view']}><PurchaseOrders /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute perm={['reports','view']}><Reports /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute perm={['invoices','view']}><Invoices /></ProtectedRoute>} />

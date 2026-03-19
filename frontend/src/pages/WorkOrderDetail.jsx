@@ -299,7 +299,7 @@ export default function WorkOrderDetail() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left: tabs + main content */}
         <div className="lg:col-span-2 space-y-4">
           {/* Info card */}
@@ -680,7 +680,7 @@ export default function WorkOrderDetail() {
         </div>
 
         {/* Right sidebar */}
-        <div className="space-y-4">
+        <div className="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto space-y-4">
           {/* Progress */}
           <div className="bg-gradient-to-br from-[#1a1a2e] to-[#2a2a4e] rounded-2xl p-5 text-white">
             <h4 className="text-xs text-gray-300 mb-3">التقدم</h4>
