@@ -30,6 +30,7 @@ const machinesRouter = require('./routes/machines');
 const accountingRouter = require('./routes/accounting');
 const expensesRouter = require('./routes/expenses');
 const maintenanceRouter = require('./routes/maintenance');
+const barcodeRouter = require('./routes/barcode');
 
 const app = express();
 const PORT = process.env.PORT || 9002;
@@ -110,7 +111,7 @@ app.get('/api/health', (req, res) => {
     userCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE status='active'").get().c;
   } catch (e) { dbStatus = 'error: ' + e.message; }
   res.json({
-    status: 'ok', app: 'WK-Hub', version: 'v16-enterprise',
+    status: 'ok', app: 'WK-Hub', version: 'v17-enterprise',
     timestamp: new Date().toISOString(),
     uptime_seconds: Math.floor(process.uptime()),
     database: { status: dbStatus, schema_version: dbVersion, active_users: userCount },
@@ -166,6 +167,7 @@ app.use('/api/machines', requireAuth, machinesRouter);
 app.use('/api/accounting', requireAuth, accountingRouter);
 app.use('/api/expenses', requireAuth, expensesRouter);
 app.use('/api/maintenance', requireAuth, maintenanceRouter);
+app.use('/api/barcode', requireAuth, barcodeRouter);
 
 // Dashboard
 app.get('/api/dashboard', requireAuth, (req, res) => {
@@ -312,7 +314,7 @@ app.use((err, req, res, _next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`WK-Hub Factory API v16-enterprise running on http://localhost:${PORT}`);
+  console.log(`WK-Hub Factory API v17-enterprise running on http://localhost:${PORT}`);
   // Run notification generation on startup and every 5 minutes
   try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
   setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);

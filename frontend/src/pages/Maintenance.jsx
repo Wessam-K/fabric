@@ -11,9 +11,9 @@ import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 
 const PRIORITY_COLORS = { critical: 'bg-red-100 text-red-700', high: 'bg-orange-100 text-orange-700', medium: 'bg-yellow-100 text-yellow-700', low: 'bg-green-100 text-green-700' };
 const PRIORITY_LABELS = { critical: 'حرج', high: 'عالي', medium: 'متوسط', low: 'منخفض' };
-const STATUS_COLORS = { open: 'bg-blue-100 text-blue-700', in_progress: 'bg-yellow-100 text-yellow-700', completed: 'bg-green-100 text-green-700', cancelled: 'bg-gray-100 text-gray-500' };
-const STATUS_LABELS = { open: 'مفتوح', in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
-const TYPES = { preventive: 'وقائية', corrective: 'تصحيحية', emergency: 'طارئة', inspection: 'فحص' };
+const STATUS_COLORS = { pending: 'bg-blue-100 text-blue-700', in_progress: 'bg-yellow-100 text-yellow-700', completed: 'bg-green-100 text-green-700', cancelled: 'bg-gray-100 text-gray-500' };
+const STATUS_LABELS = { pending: 'معلّق', in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
+const TYPES = { preventive: 'وقائية', corrective: 'تصحيحية', emergency: 'طارئة', routine: 'روتينية' };
 
 export default function Maintenance() {
   const toast = useToast();
@@ -32,7 +32,7 @@ export default function Maintenance() {
   const [editId, setEditId] = useState(null);
   const [barcodeSearch, setBarcodeSearch] = useState('');
 
-  const emptyForm = { machine_id: '', title: '', description: '', order_type: 'corrective', priority: 'medium', estimated_cost: '', assigned_to: '' };
+  const emptyForm = { machine_id: '', title: '', description: '', maintenance_type: 'corrective', priority: 'medium', cost: '', performed_by: '' };
   const [form, setForm] = useState(emptyForm);
 
   const load = async () => {
@@ -110,7 +110,7 @@ export default function Maintenance() {
 
   const openEdit = (o) => {
     setEditId(o.id);
-    setForm({ machine_id: o.machine_id, title: o.title || '', description: o.description || '', order_type: o.order_type || 'corrective', priority: o.priority || 'medium', estimated_cost: o.estimated_cost || '', assigned_to: o.assigned_to || '', status: o.status });
+    setForm({ machine_id: o.machine_id, title: o.title || '', description: o.description || '', maintenance_type: o.maintenance_type || 'corrective', priority: o.priority || 'medium', cost: o.cost || '', performed_by: o.performed_by || '', status: o.status });
     setShowModal(true);
   };
 
@@ -137,8 +137,8 @@ export default function Maintenance() {
         </div>
         <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-yellow-50 text-yellow-600 mb-2"><Clock size={18} /></div>
-          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{stats.open_count || 0}</p>
-          <p className="text-xs text-gray-400">مفتوحة</p>
+          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{stats.pending_count || 0}</p>
+          <p className="text-xs text-gray-400">معلقة</p>
         </div>
         <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-50 text-red-600 mb-2"><AlertTriangle size={18} /></div>
@@ -147,7 +147,7 @@ export default function Maintenance() {
         </div>
         <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-green-50 text-green-600 mb-2"><CheckCircle size={18} /></div>
-          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{fmt(stats.total_cost)} ج</p>
+          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{fmt(stats.total_cost_this_month)} ج</p>
           <p className="text-xs text-gray-400">إجمالي التكلفة</p>
         </div>
       </div>
@@ -203,7 +203,7 @@ export default function Maintenance() {
                 <td className="py-3 px-3 font-mono text-xs text-gray-500">{o.barcode || '—'}</td>
                 <td className="py-3 px-3 font-medium">{o.title}</td>
                 <td className="py-3 px-3 text-gray-500">{o.machine_name || `#${o.machine_id}`}</td>
-                <td className="py-3 px-3 text-gray-500">{TYPES[o.order_type] || o.order_type}</td>
+                <td className="py-3 px-3 text-gray-500">{TYPES[o.maintenance_type] || o.maintenance_type}</td>
                 <td className="py-3 px-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${PRIORITY_COLORS[o.priority] || 'bg-gray-100'}`}>
                     {PRIORITY_LABELS[o.priority] || o.priority}
@@ -214,7 +214,7 @@ export default function Maintenance() {
                     {STATUS_LABELS[o.status] || o.status}
                   </span>
                 </td>
-                <td className="py-3 px-3 font-mono">{o.estimated_cost ? `${fmt(o.estimated_cost)} ج` : '—'}</td>
+                <td className="py-3 px-3 font-mono">{o.cost ? `${fmt(o.cost)} ج` : '—'}</td>
                 <td className="py-3 px-3">
                   <div className="flex items-center gap-1">
                     {can('maintenance', 'update') && o.status !== 'completed' && o.status !== 'cancelled' && (
@@ -258,7 +258,7 @@ export default function Maintenance() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">النوع</label>
-                  <select value={form.order_type} onChange={e => setForm({ ...form, order_type: e.target.value })}
+                  <select value={form.maintenance_type} onChange={e => setForm({ ...form, maintenance_type: e.target.value })}
                     className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none">
                     {Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
@@ -271,8 +271,8 @@ export default function Maintenance() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">التكلفة المتوقعة</label>
-                  <input type="number" step="0.01" min="0" value={form.estimated_cost} onChange={e => setForm({ ...form, estimated_cost: e.target.value })}
+                  <label className="text-xs text-gray-500 mb-1 block">التكلفة</label>
+                  <input type="number" step="0.01" min="0" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })}
                     className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
                 </div>
               </div>
@@ -291,8 +291,8 @@ export default function Maintenance() {
                   className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none resize-none" />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">مسند إلى</label>
-                <input value={form.assigned_to} onChange={e => setForm({ ...form, assigned_to: e.target.value })}
+                <label className="text-xs text-gray-500 mb-1 block">الفني المنفذ</label>
+                <input value={form.performed_by} onChange={e => setForm({ ...form, performed_by: e.target.value })}
                   className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
               </div>
             </div>

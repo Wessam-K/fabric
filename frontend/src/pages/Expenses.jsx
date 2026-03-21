@@ -9,7 +9,7 @@ import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
 import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 
-const TYPES = { maintenance: 'صيانة', utilities: 'مرافق', salary: 'رواتب', materials: 'مواد', transport: 'نقل', rent: 'إيجار', other: 'أخرى' };
+const TYPES = { machine: 'ماكينات', maintenance: 'صيانة', salary: 'رواتب', utilities: 'مرافق', raw_material: 'خامات', production: 'إنتاج', transport: 'نقل', other: 'أخرى' };
 const STATUS_COLORS = { pending: 'bg-yellow-100 text-yellow-700', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' };
 const STATUS_LABELS = { pending: 'قيد الانتظار', approved: 'معتمد', rejected: 'مرفوض' };
 
@@ -30,7 +30,7 @@ export default function Expenses() {
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  const emptyForm = { title: '', expense_type: 'other', amount: '', expense_date: new Date().toISOString().slice(0, 10), description: '', reference_number: '' };
+  const emptyForm = { description: '', expense_type: 'other', amount: '', expense_date: new Date().toISOString().slice(0, 10), notes: '', reference_type: '', reference_id: '' };
   const [form, setForm] = useState(emptyForm);
 
   const load = async () => {
@@ -58,7 +58,7 @@ export default function Expenses() {
   useEffect(() => { loadSummary(); }, []);
 
   const handleSave = async () => {
-    if (!form.title || !form.amount) { toast.error('العنوان والمبلغ مطلوبان'); return; }
+    if (!form.description || !form.amount) { toast.error('الوصف والمبلغ مطلوبان'); return; }
     try {
       if (editId) {
         await api.put(`/expenses/${editId}`, form);
@@ -115,7 +115,7 @@ export default function Expenses() {
 
   const openEdit = (e) => {
     setEditId(e.id);
-    setForm({ title: e.title, expense_type: e.expense_type, amount: e.amount, expense_date: e.expense_date || '', description: e.description || '', reference_number: e.reference_number || '' });
+    setForm({ description: e.description || '', expense_type: e.expense_type, amount: e.amount, expense_date: e.expense_date || '', notes: e.notes || '', reference_type: e.reference_type || '', reference_id: e.reference_id || '' });
     setShowModal(true);
   };
 
@@ -137,13 +137,13 @@ export default function Expenses() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50 text-blue-600 mb-2"><DollarSign size={18} /></div>
-          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{fmt(summary.total_amount)} ج</p>
-          <p className="text-xs text-gray-400">إجمالي المصروفات</p>
+          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{fmt(summary.total_this_year)} ج</p>
+          <p className="text-xs text-gray-400">إجمالي السنة</p>
         </div>
         <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-green-50 text-green-600 mb-2"><CheckCircle size={18} /></div>
-          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{fmt(summary.approved_amount)} ج</p>
-          <p className="text-xs text-gray-400">معتمد</p>
+          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{fmt(summary.pending_total)} ج</p>
+          <p className="text-xs text-gray-400">معلق للاعتماد</p>
         </div>
         <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-yellow-50 text-yellow-600 mb-2"><Clock size={18} /></div>
@@ -152,7 +152,7 @@ export default function Expenses() {
         </div>
         <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-purple-50 text-purple-600 mb-2"><FileText size={18} /></div>
-          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{fmt(summary.this_month_amount)} ج</p>
+          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--color-navy)' }}>{fmt(summary.total_this_month)} ج</p>
           <p className="text-xs text-gray-400">هذا الشهر</p>
         </div>
       </div>
@@ -181,7 +181,7 @@ export default function Expenses() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-gray-500 text-xs">
-              <th className="text-right py-3 px-3 font-medium">العنوان</th>
+              <th className="text-right py-3 px-3 font-medium">الوصف</th>
               <th className="text-right py-3 px-3 font-medium">النوع</th>
               <th className="text-right py-3 px-3 font-medium">المبلغ</th>
               <th className="text-right py-3 px-3 font-medium">التاريخ</th>
@@ -196,7 +196,7 @@ export default function Expenses() {
               <tr><td colSpan="6" className="text-center py-8 text-gray-400">لا توجد مصروفات</td></tr>
             ) : expenses.map(e => (
               <tr key={e.id} className="border-b hover:bg-gray-50 transition-colors">
-                <td className="py-3 px-3 font-medium">{e.title}</td>
+                <td className="py-3 px-3 font-medium">{e.description}</td>
                 <td className="py-3 px-3 text-gray-500">{TYPES[e.expense_type] || e.expense_type}</td>
                 <td className="py-3 px-3 font-mono font-bold">{fmt(e.amount)} ج</td>
                 <td className="py-3 px-3 text-gray-500">{e.expense_date || '—'}</td>
@@ -239,8 +239,8 @@ export default function Expenses() {
             </div>
             <div className="p-4 space-y-3">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">العنوان *</label>
-                <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+                <label className="text-xs text-gray-500 mb-1 block">الوصف *</label>
+                <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
                   className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -264,14 +264,24 @@ export default function Expenses() {
                     className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
                 </div>
                 <div>
+                  <label className="text-xs text-gray-500 mb-1 block">نوع المرجع</label>
+                  <select value={form.reference_type} onChange={e => setForm({ ...form, reference_type: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none">
+                    <option value="">بدون</option>
+                    <option value="machine">ماكينة</option>
+                    <option value="work_order">أمر تشغيل</option>
+                    <option value="maintenance">صيانة</option>
+                  </select>
+                </div>
+                <div>
                   <label className="text-xs text-gray-500 mb-1 block">رقم المرجع</label>
-                  <input value={form.reference_number} onChange={e => setForm({ ...form, reference_number: e.target.value })}
+                  <input value={form.reference_id} onChange={e => setForm({ ...form, reference_id: e.target.value })}
                     className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">الوصف</label>
-                <textarea rows={3} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                <label className="text-xs text-gray-500 mb-1 block">ملاحظات</label>
+                <textarea rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
                   className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none resize-none" />
               </div>
             </div>
