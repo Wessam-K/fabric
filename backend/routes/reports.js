@@ -817,4 +817,137 @@ router.get('/expense-analysis', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/financial/pl — Profit & Loss report
+router.get('/financial/pl', (req, res) => {
+  try {
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const yearStr = String(year);
+    const months = [];
+
+    for (let m = 1; m <= 12; m++) {
+      const mm = String(m).padStart(2, '0');
+      const monthStart = `${yearStr}-${mm}-01`;
+      const monthEnd = m < 12 ? `${yearStr}-${String(m + 1).padStart(2, '0')}-01` : `${year + 1}-01-01`;
+
+      // Revenue: paid invoices
+      const revenue = db.prepare(
+        `SELECT COALESCE(SUM(total), 0) as total FROM invoices
+         WHERE status = 'paid' AND created_at >= ? AND created_at < ?`
+      ).get(monthStart, monthEnd).total;
+
+      // Cost of goods: PO amounts received
+      const materialCost = db.prepare(
+        `SELECT COALESCE(SUM(total_amount), 0) as total FROM purchase_orders
+         WHERE status NOT IN ('cancelled','draft') AND order_date >= ? AND order_date < ?`
+      ).get(monthStart, monthEnd).total;
+
+      // Operating expenses
+      const opex = db.prepare(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM expenses
+         WHERE is_deleted = 0 AND status != 'rejected' AND expense_date >= ? AND expense_date < ?`
+      ).get(monthStart, monthEnd).total;
+
+      // Maintenance costs
+      const maintenance = db.prepare(
+        `SELECT COALESCE(SUM(cost), 0) as total FROM maintenance_orders
+         WHERE status = 'completed' AND completed_date >= ? AND completed_date < ?`
+      ).get(monthStart, monthEnd).total;
+
+      const totalCost = materialCost + opex + maintenance;
+      const profit = revenue - totalCost;
+
+      months.push({
+        month: m,
+        label: `${yearStr}-${mm}`,
+        revenue: Math.round(revenue * 100) / 100,
+        material_cost: Math.round(materialCost * 100) / 100,
+        operating_expenses: Math.round(opex * 100) / 100,
+        maintenance_cost: Math.round(maintenance * 100) / 100,
+        total_cost: Math.round(totalCost * 100) / 100,
+        profit: Math.round(profit * 100) / 100,
+        margin_pct: revenue > 0 ? Math.round((profit / revenue) * 10000) / 100 : 0,
+      });
+    }
+
+    const totals = months.reduce((acc, m) => ({
+      revenue: acc.revenue + m.revenue,
+      material_cost: acc.material_cost + m.material_cost,
+      operating_expenses: acc.operating_expenses + m.operating_expenses,
+      maintenance_cost: acc.maintenance_cost + m.maintenance_cost,
+      total_cost: acc.total_cost + m.total_cost,
+      profit: acc.profit + m.profit,
+    }), { revenue: 0, material_cost: 0, operating_expenses: 0, maintenance_cost: 0, total_cost: 0, profit: 0 });
+    totals.margin_pct = totals.revenue > 0 ? Math.round((totals.profit / totals.revenue) * 10000) / 100 : 0;
+
+    res.json({ year, months, totals });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/production/efficiency — Production efficiency metrics
+router.get('/production/efficiency', (req, res) => {
+  try {
+    const { date_from, date_to } = req.query;
+    let dateFilter = '';
+    const p = [];
+    if (date_from) { dateFilter += ' AND wo.start_date >= ?'; p.push(date_from); }
+    if (date_to) { dateFilter += ' AND wo.start_date <= ?'; p.push(date_to); }
+
+    // Per-WO efficiency
+    const wos = db.prepare(`
+      SELECT wo.id, wo.wo_number, wo.status, wo.start_date, wo.completed_date,
+        m.model_code, m.model_name,
+        (SELECT COALESCE(SUM(qty_s+qty_m+qty_l+qty_xl+qty_2xl+qty_3xl),0) FROM wo_sizes WHERE wo_id=wo.id) as total_pieces,
+        (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id) as total_stages,
+        (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id AND status='completed') as completed_stages,
+        (SELECT COALESCE(SUM(quantity_done),0) FROM wo_stages WHERE wo_id=wo.id AND status='completed') as pieces_completed
+      FROM work_orders wo
+      LEFT JOIN models m ON m.id = wo.model_id
+      WHERE wo.status IN ('in_progress','completed') ${dateFilter}
+      ORDER BY wo.start_date DESC
+    `).all(...p);
+
+    const efficiency = wos.map(wo => {
+      const stagePct = wo.total_stages > 0 ? Math.round((wo.completed_stages / wo.total_stages) * 100) : 0;
+      let daysElapsed = null;
+      if (wo.start_date) {
+        const end = wo.completed_date || new Date().toISOString().slice(0, 10);
+        daysElapsed = Math.max(1, Math.ceil((new Date(end) - new Date(wo.start_date)) / 86400000));
+      }
+      const piecesPerDay = daysElapsed && wo.pieces_completed > 0 ? Math.round((wo.pieces_completed / daysElapsed) * 10) / 10 : 0;
+      return {
+        wo_number: wo.wo_number,
+        model_code: wo.model_code,
+        model_name: wo.model_name,
+        status: wo.status,
+        total_pieces: wo.total_pieces,
+        pieces_completed: wo.pieces_completed,
+        completion_pct: wo.total_pieces > 0 ? Math.round((wo.pieces_completed / wo.total_pieces) * 100) : 0,
+        stage_progress_pct: stagePct,
+        days_elapsed: daysElapsed,
+        pieces_per_day: piecesPerDay,
+      };
+    });
+
+    // Aggregate stats
+    const totalPieces = efficiency.reduce((s, e) => s + e.total_pieces, 0);
+    const totalCompleted = efficiency.reduce((s, e) => s + e.pieces_completed, 0);
+    const avgPiecesPerDay = efficiency.filter(e => e.pieces_per_day > 0).length > 0
+      ? Math.round(efficiency.filter(e => e.pieces_per_day > 0).reduce((s, e) => s + e.pieces_per_day, 0) / efficiency.filter(e => e.pieces_per_day > 0).length * 10) / 10
+      : 0;
+    const completedWos = efficiency.filter(e => e.status === 'completed').length;
+
+    res.json({
+      work_orders: efficiency,
+      summary: {
+        total_work_orders: efficiency.length,
+        completed_work_orders: completedWos,
+        total_pieces_planned: totalPieces,
+        total_pieces_completed: totalCompleted,
+        overall_completion_pct: totalPieces > 0 ? Math.round((totalCompleted / totalPieces) * 100) : 0,
+        avg_pieces_per_day: avgPiecesPerDay,
+      }
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

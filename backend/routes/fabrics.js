@@ -107,7 +107,7 @@ router.put('/:code', upload.single('image'), requirePermission('fabrics', 'edit'
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/:code/image', upload.single('image'), (req, res) => {
+router.post('/:code/image', requirePermission('fabrics', 'edit'), upload.single('image'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'لا توجد صورة' });
     const image_path = `/uploads/fabrics/${req.file.filename}`;

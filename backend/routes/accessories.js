@@ -118,7 +118,7 @@ router.delete('/:code', requirePermission('accessories', 'delete'), (req, res) =
 });
 
 // Upload / replace accessory image
-router.post('/:code/image', upload.single('image'), (req, res) => {
+router.post('/:code/image', requirePermission('accessories', 'edit'), upload.single('image'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'الاكسسوار غير موجود' });

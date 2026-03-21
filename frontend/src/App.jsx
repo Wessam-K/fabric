@@ -48,6 +48,7 @@ import GlobalSearch from './components/GlobalSearch';
 import Breadcrumbs from './components/Breadcrumbs';
 import NotificationBell from './components/NotificationBell';
 import NotificationsPage from './pages/Notifications';
+import QuickActions from './components/QuickActions';
 import { ToastProvider } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -345,6 +346,7 @@ function AppLayout() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
+      <QuickActions />
     </div>
   );
 }
