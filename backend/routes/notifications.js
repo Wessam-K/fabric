@@ -111,6 +111,18 @@ function generateNotifications() {
         }
       }
     }
+
+    // Overdue purchase orders (expected_date passed, still pending/partial)
+    const overduePOs = db.prepare(`SELECT id, po_number, expected_date FROM purchase_orders
+      WHERE status IN ('draft','sent','partial') AND expected_date IS NOT NULL AND expected_date < date('now')`).all();
+    for (const po of overduePOs) {
+      for (const u of adminUsers) {
+        const exists = db.prepare(`SELECT id FROM notifications WHERE user_id=? AND reference_type='purchase_order' AND reference_id=? AND is_read=0 AND type='overdue'`).get(u.id, String(po.id));
+        if (!exists) {
+          createNotification(u.id, 'overdue', `أمر شراء متأخر: ${po.po_number}`, `تاريخ التوريد المتوقع ${po.expected_date} قد فات`, 'purchase_order', String(po.id));
+        }
+      }
+    }
   } catch (err) { console.error('generateNotifications error:', err.message); }
 }
 

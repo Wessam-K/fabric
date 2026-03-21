@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key, BookOpen, Scale } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key, BookOpen, Scale, Bell } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -38,6 +38,7 @@ import Profile from './pages/Profile';
 import ChangePassword from './pages/ChangePassword';
 import GlobalSearch from './components/GlobalSearch';
 import NotificationBell from './components/NotificationBell';
+import NotificationsPage from './pages/Notifications';
 import { ToastProvider } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -129,6 +130,7 @@ function AppLayout() {
       items: [
         { path: '/users', label: 'المستخدمين', icon: Shield, hide: () => !can('users', 'manage') },
         { path: '/audit-log', label: 'سجل المراجعة', icon: ClipboardList, hide: () => !can('audit', 'view') },
+        { path: '/notifications', label: 'الإشعارات', icon: Bell, hide: () => false },
         { path: '/settings', label: 'الإعدادات', icon: Settings, hide: () => !can('settings', 'view') },
       ],
     },
@@ -293,6 +295,7 @@ function AppLayout() {
           <Route path="/settings" element={<ProtectedRoute perm={['settings','view']}><SettingsPage /></ProtectedRoute>} />
           <Route path="/users" element={<ProtectedRoute perm={['users','manage']}><UsersPage /></ProtectedRoute>} />
           <Route path="/audit-log" element={<ProtectedRoute perm={['audit','view']}><AuditLog /></ProtectedRoute>} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/hr/employees" element={<ProtectedRoute perm={['hr','view']}><Employees /></ProtectedRoute>} />
           <Route path="/hr/attendance" element={<ProtectedRoute perm={['hr','view']}><Attendance /></ProtectedRoute>} />
           <Route path="/hr/payroll" element={<ProtectedRoute perm={['payroll','view']}><Payroll /></ProtectedRoute>} />
