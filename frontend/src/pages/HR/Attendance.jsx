@@ -3,6 +3,7 @@ import { Clock, Upload, Plus, Download, Search } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
 import api from '../../utils/api';
 import { exportToExcel } from '../../utils/exportExcel';
+import HelpButton from '../../components/HelpButton';
 
 const STATUS_COLORS = {
   present: 'bg-green-200 text-green-800',
@@ -84,6 +85,7 @@ export default function Attendance() {
     <div className="page">
       <PageHeader title="الحضور والانصراف" subtitle="إدارة سجلات الحضور"
         action={<div className="flex gap-2">
+          <HelpButton pageKey="attendance" />
           <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="form-input" />
           <button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير</button>
           <label className="btn btn-gold cursor-pointer">

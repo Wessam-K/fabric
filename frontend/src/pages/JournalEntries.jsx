@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Eye, CheckCircle, XCircle, Search, Calendar, FileText } from 'lucide-react';
 import api from '../utils/api';
 import { PageHeader, LoadingState } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import { useToast } from '../components/Toast';
 
 const STATUS_MAP = { draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-600' }, posted: { label: 'مرحّل', color: 'bg-green-100 text-green-600' }, void: { label: 'ملغى', color: 'bg-red-100 text-red-600' } };
@@ -85,7 +86,7 @@ export default function JournalEntries() {
   return (
     <div className="page">
       <PageHeader title="القيود اليومية" subtitle={`${entries.length} قيد`}
-        actions={<button onClick={openNew} className="btn btn-primary"><Plus size={14} /> قيد جديد</button>}
+        actions={<div className="flex items-center gap-2"><HelpButton pageKey="journalentries" /><button onClick={openNew} className="btn btn-primary"><Plus size={14} /> قيد جديد</button></div>}
       />
 
       {/* Entry detail view */}

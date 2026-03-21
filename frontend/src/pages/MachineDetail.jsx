@@ -4,6 +4,8 @@ import { ArrowRight, Settings, Activity, Clock, MapPin, Wrench, Factory } from '
 import { PageHeader, LoadingState, Tabs } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import HelpButton from '../components/HelpButton';
+import BarcodePrint from '../components/BarcodePrint';
 
 const STATUS_MAP = { active: 'نشطة', maintenance: 'صيانة', inactive: 'متوقفة' };
 const STATUS_COLORS = { active: 'bg-green-100 text-green-700', maintenance: 'bg-yellow-100 text-yellow-700', inactive: 'bg-gray-200 text-gray-500' };
@@ -40,7 +42,7 @@ export default function MachineDetail() {
   return (
     <div className="page">
       <PageHeader title={machine.name} subtitle={`كود: ${machine.code} — ${machine.machine_type || 'بدون نوع'}`}
-        action={<button onClick={() => navigate('/machines')} className="btn btn-outline btn-sm"><ArrowRight size={14} /> الماكينات</button>} />
+        action={<div className="flex items-center gap-2"><HelpButton pageKey="machinedetail" /><button onClick={() => navigate('/machines')} className="btn btn-outline btn-sm"><ArrowRight size={14} /> الماكينات</button></div>} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -85,6 +87,12 @@ export default function MachineDetail() {
               <div>
                 <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">ملاحظات</h4>
                 <p className="text-sm text-gray-600">{machine.notes}</p>
+              </div>
+            )}
+            {machine.barcode && (
+              <div>
+                <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">الباركود</h4>
+                <BarcodePrint barcode={machine.barcode} title={machine.name} subtitle={machine.code} size="small" />
               </div>
             )}
           </div>

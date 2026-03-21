@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, Download, RefreshCw } from 'lucide-react';
 import api from '../utils/api';
 import { PageHeader, LoadingState } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import { useToast } from '../components/Toast';
 
 const TYPE_LABELS = { asset: 'أصول', liability: 'خصوم', equity: 'حقوق ملكية', revenue: 'إيرادات', expense: 'مصروفات' };
@@ -44,7 +45,7 @@ export default function TrialBalance() {
 
   return (
     <div className="page">
-      <PageHeader title="ميزان المراجعة والضريبة" subtitle="التقارير المالية" />
+      <PageHeader title="ميزان المراجعة والضريبة" subtitle="التقارير المالية" action={<HelpButton pageKey="trialbalance" />} />
 
       <div className="flex gap-3 flex-wrap items-center mb-6">
         <button onClick={() => setActiveView('trial')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeView === 'trial' ? 'bg-[#1a1a2e] text-white' : 'bg-gray-100 text-gray-600'}`}>

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, LoadingState } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 
 const ACTION_LABELS = {
   LOGIN: 'تسجيل دخول',
@@ -29,7 +30,7 @@ export default function Profile() {
   return (
     <div className="page max-w-3xl mx-auto">
       <PageHeader title="الملف الشخصي" subtitle="معلوماتك وآخر نشاطاتك"
-        actions={<button onClick={() => navigate('/change-password')} className="btn btn-gold"><Key size={14} /> تغيير كلمة المرور</button>}
+        actions={<div className="flex items-center gap-2"><HelpButton pageKey="profile" /><button onClick={() => navigate('/change-password')} className="btn btn-gold"><Key size={14} /> تغيير كلمة المرور</button></div>}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

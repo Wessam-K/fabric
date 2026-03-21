@@ -251,6 +251,33 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       machineStatusBoard = db.prepare(`SELECT id, code, name, status, location, machine_type FROM machines ORDER BY sort_order, name LIMIT 30`).all();
     } catch {}
 
+    // V18 — Today's summary
+    const today = new Date().toISOString().slice(0, 10);
+    let todaySummary = {};
+    try {
+      const todayAttendance = db.prepare("SELECT COUNT(*) as c FROM attendance WHERE date=? AND check_in IS NOT NULL").get(today)?.c || 0;
+      const todayDeliveries = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND completed_date=?").get(today)?.c || 0;
+      const dueTodayWO = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE due_date=? AND status NOT IN ('completed','cancelled','delivered')").get(today)?.c || 0;
+      const todayExpenses = db.prepare("SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND expense_date=?").get(today)?.v || 0;
+      const todayInvoices = db.prepare("SELECT COUNT(*) as c FROM invoices WHERE DATE(created_at)=?").get(today)?.c || 0;
+      todaySummary = { attendance: todayAttendance, deliveries: todayDeliveries, due_today: dueTodayWO, expenses: Math.round(todayExpenses * 100) / 100, invoices: todayInvoices };
+    } catch { todaySummary = { attendance: 0, deliveries: 0, due_today: 0, expenses: 0, invoices: 0 }; }
+
+    // V18 — Overdue invoices
+    let overdueInvoicesList = [];
+    try {
+      overdueInvoicesList = db.prepare(`SELECT id, invoice_number, customer_name, total, due_date FROM invoices WHERE status='overdue' ORDER BY due_date ASC LIMIT 5`).all();
+    } catch {}
+
+    // V18 — Overdue work orders list (detailed)
+    let overdueWOList = [];
+    try {
+      overdueWOList = db.prepare(`SELECT wo.id, wo.wo_number, wo.due_date, wo.status, m.model_code, m.model_name
+        FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id
+        WHERE wo.due_date < date('now') AND wo.status NOT IN ('completed','cancelled','delivered')
+        ORDER BY wo.due_date ASC LIMIT 5`).all();
+    } catch {}
+
     res.json({
       total_models: totalModels, total_fabrics: totalFabrics, total_accessories: totalAccessories,
       total_invoices: totalInvoices, active_work_orders: activeWorkOrders,
@@ -275,6 +302,9 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       pending_maintenance_count: (() => { try { return db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND status='pending'").get().c; } catch { return 0; } })(),
       critical_maintenance_count: (() => { try { return db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND priority='critical' AND status NOT IN ('completed','cancelled')").get().c; } catch { return 0; } })(),
       machine_status_board: machineStatusBoard,
+      today_summary: todaySummary,
+      overdue_invoices: overdueInvoicesList,
+      overdue_work_orders: overdueWOList,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -321,7 +351,7 @@ app.use((err, req, res, _next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`WK-Hub Factory API v17-enterprise running on http://localhost:${PORT}`);
+  console.log(`WK-Hub Factory API v18-enterprise running on http://localhost:${PORT}`);
   // Run notification generation on startup and every 5 minutes
   try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
   setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);

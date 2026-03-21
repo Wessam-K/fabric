@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { requirePermission } = require('../middleware/auth');
 
 // ═══════════════════════════════════════════════
 // GET /api/customers — list with search & filter
@@ -44,7 +45,7 @@ router.get('/export', (req, res) => {
 });
 
 // POST /api/customers/import — bulk import
-router.post('/import', (req, res) => {
+router.post('/import', requirePermission('customers', 'create'), (req, res) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
@@ -153,7 +154,7 @@ router.get('/:id/balance', (req, res) => {
 // ═══════════════════════════════════════════════
 // POST /api/customers — create
 // ═══════════════════════════════════════════════
-router.post('/', (req, res) => {
+router.post('/', requirePermission('customers', 'create'), (req, res) => {
   try {
     const { code, name, phone, email, address, city, tax_number, credit_limit, notes, customer_type, contact_name, payment_terms } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'اسم العميل مطلوب' });
@@ -191,7 +192,7 @@ router.post('/', (req, res) => {
 // ═══════════════════════════════════════════════
 // PATCH /api/customers/:id — update
 // ═══════════════════════════════════════════════
-router.patch('/:id', (req, res) => {
+router.patch('/:id', requirePermission('customers', 'edit'), (req, res) => {
   try {
     const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
     if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
@@ -236,7 +237,7 @@ router.patch('/:id', (req, res) => {
 // ═══════════════════════════════════════════════
 // DELETE /api/customers/:id — soft delete
 // ═══════════════════════════════════════════════
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('customers', 'delete'), (req, res) => {
   try {
     const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
     if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
@@ -279,7 +280,7 @@ router.get('/:id/payments', (req, res) => {
 // ═══════════════════════════════════════════════
 // POST /api/customers/:id/payments — record payment
 // ═══════════════════════════════════════════════
-router.post('/:id/payments', (req, res) => {
+router.post('/:id/payments', requirePermission('customers', 'edit'), (req, res) => {
   try {
     const customer = db.prepare('SELECT id FROM customers WHERE id = ?').get(req.params.id);
     if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });

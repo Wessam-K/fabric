@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { logAudit } = require('../middleware/auth');
+const { logAudit, requirePermission } = require('../middleware/auth');
 const path = require('path');
 const db = require('../database');
 
@@ -49,7 +49,7 @@ router.get('/next-serial', (req, res) => {
 });
 
 // POST /api/models — create (SIMPLIFIED: no fabrics/accessories/sizes)
-router.post('/', (req, res) => {
+router.post('/', requirePermission('models', 'create'), (req, res) => {
   try {
     const { serial_number, model_code, model_name, category, gender, notes } = req.body;
     if (!model_code) return res.status(400).json({ error: 'كود الموديل مطلوب' });
@@ -75,7 +75,7 @@ router.get('/:code', (req, res) => {
 });
 
 // PUT /api/models/:code — update basic info
-router.put('/:code', (req, res) => {
+router.put('/:code', requirePermission('models', 'edit'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
@@ -89,7 +89,7 @@ router.put('/:code', (req, res) => {
 });
 
 // DELETE /api/models/:code — soft delete
-router.delete('/:code', (req, res) => {
+router.delete('/:code', requirePermission('models', 'delete'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
@@ -100,7 +100,7 @@ router.delete('/:code', (req, res) => {
 });
 
 // POST /api/models/:code/image — upload model image
-router.post('/:code/image', upload.single('image'), (req, res) => {
+router.post('/:code/image', requirePermission('models', 'edit'), upload.single('image'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'لا توجد صورة' });
     const image_path = `/uploads/models/${req.file.filename}`;
@@ -206,7 +206,7 @@ router.get('/:code/bom-templates', (req, res) => {
 });
 
 // POST /api/models/:code/bom-templates — create new BOM template
-router.post('/:code/bom-templates', (req, res) => {
+router.post('/:code/bom-templates', requirePermission('models', 'edit'), (req, res) => {
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
@@ -248,7 +248,7 @@ router.get('/:code/bom-templates/:templateId', (req, res) => {
 });
 
 // PUT /api/models/:code/bom-templates/:templateId — update template
-router.put('/:code/bom-templates/:templateId', (req, res) => {
+router.put('/:code/bom-templates/:templateId', requirePermission('models', 'edit'), (req, res) => {
   try {
     const tid = parseInt(req.params.templateId);
     const tmpl = db.prepare('SELECT * FROM bom_templates WHERE id=?').get(tid);
@@ -283,7 +283,7 @@ router.put('/:code/bom-templates/:templateId', (req, res) => {
 });
 
 // DELETE /api/models/:code/bom-templates/:templateId — delete
-router.delete('/:code/bom-templates/:templateId', (req, res) => {
+router.delete('/:code/bom-templates/:templateId', requirePermission('models', 'delete'), (req, res) => {
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
@@ -295,7 +295,7 @@ router.delete('/:code/bom-templates/:templateId', (req, res) => {
 });
 
 // POST /api/models/:code/bom-templates/:templateId/set-default
-router.post('/:code/bom-templates/:templateId/set-default', (req, res) => {
+router.post('/:code/bom-templates/:templateId/set-default', requirePermission('models', 'edit'), (req, res) => {
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });

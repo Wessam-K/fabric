@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Save, ArrowRight, Plus, Scissors, Package, Layers, DollarSign, Factory, Download, X } from 'lucide-react';
 import api from '../utils/api';
+import HelpButton from '../components/HelpButton';
 import FabricBlock from '../components/FabricBlock';
 import SizeGrid from '../components/SizeGrid';
 import AccessoryTable from '../components/AccessoryTable';
@@ -283,6 +284,7 @@ export default function WorkOrderForm() {
       <PageHeader title={isEdit ? 'تعديل أمر الإنتاج' : 'أمر إنتاج جديد'} subtitle="الشاشة الرئيسية لقرارات التصنيع"
         actions={
           <div className="flex items-center gap-2">
+            <HelpButton pageKey="workorderform" />
             <button onClick={() => navigate('/work-orders')} className="btn btn-ghost"><ArrowRight size={16} /> رجوع</button>
             <button onClick={handleSave} disabled={saving} className="btn btn-gold">
               <Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ'}

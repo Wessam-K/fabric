@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { requirePermission } = require('../middleware/auth');
 
 // GET /api/stage-templates
 router.get('/', (req, res) => {
@@ -10,7 +11,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/stage-templates
-router.post('/', (req, res) => {
+router.post('/', requirePermission('settings', 'edit'), (req, res) => {
   try {
     const { name, color, sort_order } = req.body;
     if (!name) return res.status(400).json({ error: 'الاسم مطلوب' });
@@ -22,7 +23,7 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/stage-templates/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', requirePermission('settings', 'edit'), (req, res) => {
   try {
     const { name, color, sort_order, is_default } = req.body;
     db.prepare('UPDATE stage_templates SET name=COALESCE(?,name), color=COALESCE(?,color), sort_order=COALESCE(?,sort_order), is_default=COALESCE(?,is_default) WHERE id=?')
@@ -32,7 +33,7 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE /api/stage-templates/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('settings', 'delete'), (req, res) => {
   try {
     db.prepare('DELETE FROM stage_templates WHERE id=?').run(parseInt(req.params.id));
     res.json({ success: true });
@@ -40,7 +41,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // PUT /api/stage-templates/reorder — bulk update sort_order
-router.put('/reorder', (req, res) => {
+router.put('/reorder', requirePermission('settings', 'edit'), (req, res) => {
   try {
     const { order } = req.body; // [{id, sort_order}]
     const upd = db.prepare('UPDATE stage_templates SET sort_order=? WHERE id=?');

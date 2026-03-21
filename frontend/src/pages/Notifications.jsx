@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Bell, Check, CheckCheck, Trash2, Search, Filter } from 'lucide-react';
 import api from '../utils/api';
 import { PageHeader, LoadingState } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import { useNavigate } from 'react-router-dom';
 
 const TYPE_LABELS = { low_stock: 'مخزون منخفض', overdue: 'متأخر', info: 'معلومات', warning: 'تنبيه', system: 'نظام' };
@@ -62,9 +63,12 @@ export default function Notifications() {
     <div className="page">
       <PageHeader title="الإشعارات" subtitle={`${items.length} إشعار · ${unreadCount} غير مقروء`}
         actions={
-          <button onClick={markAllRead} disabled={!unreadCount} className="btn btn-ghost text-xs disabled:opacity-40">
-            <CheckCheck size={14} /> تعليم الكل كمقروء
-          </button>
+          <div className="flex items-center gap-2">
+            <HelpButton pageKey="notifications" />
+            <button onClick={markAllRead} disabled={!unreadCount} className="btn btn-ghost text-xs disabled:opacity-40">
+              <CheckCheck size={14} /> تعليم الكل كمقروء
+            </button>
+          </div>
         }
       />
 

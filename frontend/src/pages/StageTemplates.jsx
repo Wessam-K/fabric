@@ -4,6 +4,7 @@ import { PageHeader } from '../components/ui';
 import { ConfirmDialog } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import HelpButton from '../components/HelpButton';
 
 export default function StageTemplates() {
   const toast = useToast();
@@ -67,7 +68,7 @@ export default function StageTemplates() {
   return (
     <div className="page">
       <PageHeader title="قوالب المراحل" subtitle="إدارة مراحل الإنتاج الافتراضية"
-        action={<button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مرحلة جديدة</button>} />
+        action={<div className="flex items-center gap-2"><HelpButton pageKey="stagetemplates" /><button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مرحلة جديدة</button></div>} />
 
       <div className="card">
         <div className="card-body">

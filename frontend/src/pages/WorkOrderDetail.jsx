@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker, Printer, XCircle } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import HelpButton from '../components/HelpButton';
 import StageChecklist from '../components/StageChecklist';
 import CostPanel from '../components/CostPanel';
 import { StatusBadge, LoadingState, Modal } from '../components/ui';
@@ -276,6 +277,7 @@ export default function WorkOrderDetail() {
           </div>
         </div>
         <div className="flex gap-2">
+          <HelpButton pageKey="workorderdetail" />
           {wo.status === 'draft' && <button onClick={() => handleStatusChange('in_progress')} className="btn btn-primary"><Play size={14} /> بدء التنفيذ</button>}
           {wo.status === 'in_progress' && <button onClick={handleFinalize} className="btn" style={{background:'var(--color-success)',color:'white'}}><CheckCircle size={14} /> إنهاء الإنتاج</button>}
           {!['completed', 'cancelled', 'delivered'].includes(wo.status) && (

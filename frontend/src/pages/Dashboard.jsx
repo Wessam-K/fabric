@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scissors, Gem, List, TrendingUp, Factory, Truck, DollarSign, Users, Clock, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
+import { Scissors, Gem, List, TrendingUp, Factory, Truck, DollarSign, Users, Clock, AlertTriangle, CheckCircle, Activity, CalendarDays, FileText, Receipt } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, KPIStrip, StatusBadge, MoneyDisplay, LoadingState, EmptyState, Skeleton } from '../components/ui';
@@ -48,6 +48,66 @@ export default function Dashboard() {
         { icon: TrendingUp, label: 'صافي الربح', value: <MoneyDisplay amount={net} />, color: net >= 0 ? 'success' : 'danger' },
         { icon: AlertTriangle, label: 'تنبيهات مخزون', value: lowStockCount, color: lowStockCount > 0 ? 'warning' : 'success' },
       ]} />
+
+      {/* Today's Summary */}
+      {data?.today_summary && (
+        <div className="card" style={{ borderRight: '3px solid var(--color-gold)' }}>
+          <div className="card-header"><h3 className="section-title flex items-center gap-2"><CalendarDays size={14} className="text-[var(--color-gold)]" /> ملخص اليوم</h3></div>
+          <div className="card-body">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <p className="text-lg font-bold font-mono text-blue-700">{data.today_summary.attendance}</p>
+                <p className="text-[10px] text-gray-500">حضور اليوم</p>
+              </div>
+              <div className="p-2 bg-green-50 rounded-lg">
+                <p className="text-lg font-bold font-mono text-green-700">{data.today_summary.deliveries}</p>
+                <p className="text-[10px] text-gray-500">تسليمات</p>
+              </div>
+              <div className="p-2 bg-amber-50 rounded-lg">
+                <p className="text-lg font-bold font-mono text-amber-700">{data.today_summary.due_today}</p>
+                <p className="text-[10px] text-gray-500">مستحقة اليوم</p>
+              </div>
+              <div className="p-2 bg-purple-50 rounded-lg">
+                <p className="text-lg font-bold font-mono text-purple-700">{data.today_summary.invoices}</p>
+                <p className="text-[10px] text-gray-500">فواتير اليوم</p>
+              </div>
+              <div className="p-2 bg-red-50 rounded-lg">
+                <p className="text-lg font-bold font-mono text-red-600"><MoneyDisplay amount={data.today_summary.expenses} /></p>
+                <p className="text-[10px] text-gray-500">مصاريف اليوم</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Urgent Alerts */}
+      {((data?.overdue_invoices?.length || 0) > 0 || (data?.overdue_work_orders?.length || 0) > 0) && (
+        <div className="card" style={{ borderRight: '3px solid var(--color-danger)' }}>
+          <div className="card-header"><h3 className="section-title flex items-center gap-2"><AlertTriangle size={14} className="text-red-500" /> التنبيهات العاجلة</h3></div>
+          <div className="card-body space-y-3">
+            {data.overdue_work_orders?.map(wo => (
+              <div key={wo.id} onClick={() => navigate(`/work-orders/${wo.id}`)}
+                className="flex items-center justify-between p-2 bg-red-50 rounded-lg cursor-pointer hover:bg-red-100 transition-colors">
+                <div>
+                  <span className="font-mono text-xs text-red-700 font-bold">{wo.wo_number}</span>
+                  <span className="text-xs text-gray-600 mr-2">{wo.model_code}</span>
+                </div>
+                <span className="text-[10px] text-red-500">موعد: {wo.due_date ? new Date(wo.due_date).toLocaleDateString('ar-EG') : '—'}</span>
+              </div>
+            ))}
+            {data.overdue_invoices?.map(inv => (
+              <div key={inv.id} onClick={() => navigate(`/invoices/${inv.id}`)}
+                className="flex items-center justify-between p-2 bg-orange-50 rounded-lg cursor-pointer hover:bg-orange-100 transition-colors">
+                <div>
+                  <span className="font-mono text-xs text-orange-700 font-bold">{inv.invoice_number}</span>
+                  <span className="text-xs text-gray-600 mr-2">{inv.customer_name}</span>
+                </div>
+                <span className="text-[10px] text-orange-500"><MoneyDisplay amount={inv.total} /></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Secondary stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

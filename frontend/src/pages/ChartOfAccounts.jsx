@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Edit2, Save, X, BookOpen } from 'lucide-react';
 import api from '../utils/api';
 import { PageHeader, LoadingState } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import { useToast } from '../components/Toast';
 
 const TYPE_LABELS = { asset: 'أصول', liability: 'خصوم', equity: 'حقوق ملكية', revenue: 'إيرادات', expense: 'مصروفات' };
@@ -52,7 +53,7 @@ export default function ChartOfAccounts() {
   return (
     <div className="page">
       <PageHeader title="دليل الحسابات" subtitle={`${accounts.length} حساب`}
-        actions={<button onClick={() => { setShowNew(true); setEditing(null); setForm({ code: '', name_ar: '', type: 'asset', parent_id: '' }); }} className="btn btn-primary"><Plus size={14} /> حساب جديد</button>}
+        actions={<div className="flex items-center gap-2"><HelpButton pageKey="chartofaccounts" /><button onClick={() => { setShowNew(true); setEditing(null); setForm({ code: '', name_ar: '', type: 'asset', parent_id: '' }); }} className="btn btn-primary"><Plus size={14} /> حساب جديد</button></div>}
       />
 
       {(showNew || editing) && (

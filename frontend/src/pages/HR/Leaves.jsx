@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Wrench, X, Calendar } from 'lucide-react';
 import api from '../../utils/api';
 import { useToast } from '../../components/Toast';
+import HelpButton from '../../components/HelpButton';
 import { PageHeader, LoadingState, Tabs, Modal, EmptyState } from '../../components/ui';
 
 export default function Leaves() {
@@ -59,7 +60,7 @@ export default function Leaves() {
   return (
     <div className="page">
       <PageHeader title="الإجازات" subtitle="إدارة طلبات الإجازات"
-        action={<button onClick={() => setShowForm(true)} className="btn btn-gold"><Plus size={16} /> طلب إجازة</button>} />
+        action={<div className="flex items-center gap-2"><HelpButton pageKey="leaves" /><button onClick={() => setShowForm(true)} className="btn btn-gold"><Plus size={16} /> طلب إجازة</button></div>} />
 
       <Tabs tabs={[
         { value: 'all', label: 'الكل', count: leaves.length },

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { logAudit } = require('../middleware/auth');
+const { logAudit, requirePermission } = require('../middleware/auth');
 
 // GET /api/suppliers — list
 router.get('/', (req, res) => {
@@ -63,7 +63,7 @@ router.get('/export', (req, res) => {
 });
 
 // POST /api/suppliers/import — bulk import
-router.post('/import', (req, res) => {
+router.post('/import', requirePermission('suppliers', 'create'), (req, res) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
@@ -103,7 +103,7 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/suppliers
-router.post('/', (req, res) => {
+router.post('/', requirePermission('suppliers', 'create'), (req, res) => {
   try {
     const { code, name, supplier_type, phone, email, address, contact_name, payment_terms, rating, notes } = req.body;
     if (!code || !name) return res.status(400).json({ error: 'الكود والاسم مطلوبين' });
@@ -119,7 +119,7 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/suppliers/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', requirePermission('suppliers', 'edit'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM suppliers WHERE id=?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
@@ -133,7 +133,7 @@ router.put('/:id', (req, res) => {
 });
 
 // POST /api/suppliers/:id/payments
-router.post('/:id/payments', (req, res) => {
+router.post('/:id/payments', requirePermission('suppliers', 'edit'), (req, res) => {
   try {
     const { po_id, amount, payment_method, payment_type, reference, notes } = req.body;
     if (!amount || amount <= 0) return res.status(400).json({ error: 'المبلغ المطلوب غير صالح' });
@@ -193,7 +193,7 @@ router.get('/:id/ledger', (req, res) => {
 });
 
 // DELETE /api/suppliers/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('suppliers', 'delete'), (req, res) => {
   try {
     db.prepare("UPDATE suppliers SET status='inactive' WHERE id=?").run(parseInt(req.params.id));
     logAudit(req, 'DELETE', 'supplier', req.params.id, `supplier#${req.params.id}`);

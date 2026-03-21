@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Save, Printer, Camera, Layers, FileText, ClipboardList, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import { PageHeader } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import ImageUpload from '../components/ImageUpload';
 import { useToast } from '../components/Toast';
@@ -160,6 +161,7 @@ export default function ModelForm() {
       {/* Header */}
       <PageHeader title={isEdit ? 'تعديل الموديل' : 'موديل جديد'} subtitle={isEdit ? `كود: ${code}` : 'إضافة موديل جديد للكتالوج'}
         action={<div className="flex gap-2">
+          <HelpButton pageKey="modelform" />
           {isEdit && (
             <>
               <button onClick={() => navigate(`/models/${code}/bom`)}

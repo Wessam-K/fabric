@@ -4,6 +4,7 @@ import { ArrowRight, Phone, Mail, MapPin, DollarSign, ShoppingCart, Star, Truck,
 import { PageHeader, LoadingState, Tabs } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import HelpButton from '../components/HelpButton';
 
 export default function SupplierDetail() {
   const { id } = useParams();
@@ -47,7 +48,7 @@ export default function SupplierDetail() {
   return (
     <div className="page">
       <PageHeader title={supplier.name} subtitle={`كود: ${supplier.code} — ${TYPE_MAP[supplier.supplier_type] || supplier.supplier_type}`}
-        action={<button onClick={() => navigate('/suppliers')} className="btn btn-outline btn-sm"><ArrowRight size={14} /> الموردين</button>} />
+        action={<div className="flex items-center gap-2"><HelpButton pageKey="supplierdetail" /><button onClick={() => navigate('/suppliers')} className="btn btn-outline btn-sm"><ArrowRight size={14} /> الموردين</button></div>} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

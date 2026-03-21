@@ -4,6 +4,7 @@ import { PageHeader } from '../../components/ui';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import { exportPayrollToExcel } from '../../utils/exportExcel';
+import HelpButton from '../../components/HelpButton';
 import { useConfirm } from '../../components/ConfirmDialog';
 
 const PERIOD_STATUS = {
@@ -106,7 +107,7 @@ export default function Payroll() {
     <div className="page">
       {ConfirmDialog}
       <PageHeader title="المرتبات" subtitle="إدارة فترات الرواتب"
-        action={<button onClick={() => setShowCreate(true)} className="btn btn-gold"><Calculator size={16} /> فترة جديدة</button>} />
+        action={<div className="flex items-center gap-2"><HelpButton pageKey="payroll" /><button onClick={() => setShowCreate(true)} className="btn btn-gold"><Calculator size={16} /> فترة جديدة</button></div>} />
 
       {/* Create Period Modal */}
       {showCreate && (

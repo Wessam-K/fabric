@@ -1681,6 +1681,21 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (17)`);
   }
+
+  // ──── V18 — Enterprise polish: permissions, reports, help ────
+  const v18 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 18').get();
+  if (!v18) {
+    // Ensure due_date index on invoices for overdue queries
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date)"); } catch(e) {}
+    // Ensure index on work_orders.due_date
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_wo_due_date ON work_orders(due_date)"); } catch(e) {}
+    // Index on attendance.date for dashboard today queries
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date)"); } catch(e) {}
+    // Index on expenses.expense_date
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date)"); } catch(e) {}
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (18)`);
+  }
 }
 
 initializeDatabase();

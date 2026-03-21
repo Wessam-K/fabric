@@ -950,4 +950,102 @@ router.get('/production/efficiency', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/cash-flow — monthly inflows vs outflows
+router.get('/cash-flow', (req, res) => {
+  try {
+    const months = parseInt(req.query.months) || 12;
+    const data = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const start = `date('now','start of month','-${i} months')`;
+      const end = `date('now','start of month','-${i - 1} months')`;
+
+      const inflows = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM customer_payments WHERE payment_date >= ${start} AND payment_date < ${end}`).get().v;
+      const poPayments = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE payment_date >= ${start} AND payment_date < ${end}`).get().v;
+      const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status!='rejected' AND expense_date >= ${start} AND expense_date < ${end}`).get().v;
+      const payroll = db.prepare(`SELECT COALESCE(SUM(net_salary),0) as v FROM payroll WHERE pay_date >= ${start} AND pay_date < ${end}`).get().v;
+
+      const label = db.prepare(`SELECT strftime('%Y-%m', ${start}) as m`).get().m;
+      data.push({
+        month: label,
+        inflows: Math.round(inflows * 100) / 100,
+        outflows: Math.round((poPayments + expenses + payroll) * 100) / 100,
+        net: Math.round((inflows - poPayments - expenses - payroll) * 100) / 100,
+      });
+    }
+    res.json({ months: data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/tax-summary — VAT collected vs paid
+router.get('/tax-summary', (req, res) => {
+  try {
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const months = [];
+    for (let m = 1; m <= 12; m++) {
+      const mm = String(m).padStart(2, '0');
+      const ms = `${year}-${mm}-01`;
+      const me = m < 12 ? `${year}-${String(m + 1).padStart(2, '0')}-01` : `${year + 1}-01-01`;
+      const collected = db.prepare(`SELECT COALESCE(SUM(total - subtotal),0) as v FROM invoices WHERE status IN ('paid','partial','sent') AND created_at >= ? AND created_at < ?`).get(ms, me).v;
+      const paid = db.prepare(`SELECT COALESCE(SUM(total_amount * 0.15),0) as v FROM purchase_orders WHERE status NOT IN ('cancelled','draft') AND order_date >= ? AND order_date < ?`).get(ms, me).v;
+      months.push({ month: `${year}-${mm}`, vat_collected: Math.round(collected * 100) / 100, vat_paid: Math.round(paid * 100) / 100, net_vat: Math.round((collected - paid) * 100) / 100 });
+    }
+    const totals = months.reduce((a, m) => ({ vat_collected: a.vat_collected + m.vat_collected, vat_paid: a.vat_paid + m.vat_paid, net_vat: a.net_vat + m.net_vat }), { vat_collected: 0, vat_paid: 0, net_vat: 0 });
+    res.json({ year, months, totals });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/ap-aging — accounts payable aging by supplier
+router.get('/ap-aging', (req, res) => {
+  try {
+    const pos = db.prepare(`SELECT po.*, s.name as supplier_name, s.code as supplier_code
+      FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id
+      WHERE po.status NOT IN ('cancelled','draft','received') AND po.total_amount > po.paid_amount`).all();
+    const today = new Date();
+    const buckets = pos.map(po => {
+      const due = po.expected_date ? new Date(po.expected_date) : new Date(po.order_date);
+      const days = Math.floor((today - due) / 86400000);
+      const outstanding = (po.total_amount || 0) - (po.paid_amount || 0);
+      return { po_number: po.po_number, supplier_name: po.supplier_name, supplier_code: po.supplier_code, total: po.total_amount, paid: po.paid_amount, outstanding, expected_date: po.expected_date, days_overdue: Math.max(0, days), bucket: days <= 0 ? 'current' : days <= 30 ? '1-30' : days <= 60 ? '31-60' : days <= 90 ? '61-90' : '90+' };
+    });
+    const summary = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
+    buckets.forEach(b => { summary[b.bucket] += b.outstanding; });
+    res.json({ items: buckets, summary, total_outstanding: buckets.reduce((s, b) => s + b.outstanding, 0) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/employee-productivity — per-employee metrics
+router.get('/employee-productivity', (req, res) => {
+  try {
+    const { date_from, date_to } = req.query;
+    let dateFilter = '';
+    const p = [];
+    if (date_from) { dateFilter += ' AND a.date >= ?'; p.push(date_from); }
+    if (date_to) { dateFilter += ' AND a.date <= ?'; p.push(date_to); }
+
+    const employees = db.prepare(`SELECT e.id, e.name, e.employee_code, e.department, e.position,
+      (SELECT COUNT(*) FROM attendance a WHERE a.employee_id=e.id AND a.status='present' ${dateFilter}) as days_present,
+      (SELECT COUNT(*) FROM attendance a WHERE a.employee_id=e.id ${dateFilter}) as total_days,
+      (SELECT COALESCE(SUM(a.overtime_hours),0) FROM attendance a WHERE a.employee_id=e.id ${dateFilter}) as overtime_hours,
+      (SELECT COALESCE(SUM(p2.net_salary),0) FROM payroll p2 WHERE p2.employee_id=e.id) as total_salary
+      FROM employees e WHERE e.status='active'`).all(...p, ...p, ...p);
+
+    const result = employees.map(emp => ({
+      ...emp,
+      attendance_rate: emp.total_days > 0 ? Math.round((emp.days_present / emp.total_days) * 100) : 0,
+    }));
+    res.json({ employees: result });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/barcode-activity — recent barcode scan activity (from audit_log)
+router.get('/barcode-activity', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const scans = db.prepare(`SELECT al.*, u.full_name as user_name FROM audit_log al LEFT JOIN users u ON u.id=al.user_id
+      WHERE al.action LIKE '%barcode%' OR al.action LIKE '%scan%' OR al.entity_type='barcode'
+      ORDER BY al.created_at DESC LIMIT ?`).all(limit);
+    res.json({ scans, total: scans.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

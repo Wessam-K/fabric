@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { logAudit } = require('../middleware/auth');
+const { logAudit, requirePermission } = require('../middleware/auth');
 
 // GET /api/purchase-orders — list
 router.get('/', (req, res) => {
@@ -55,7 +55,7 @@ router.get('/export', (req, res) => {
 });
 
 // POST /api/purchase-orders/import — bulk import
-router.post('/import', (req, res) => {
+router.post('/import', requirePermission('purchaseorders', 'create'), (req, res) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
@@ -94,7 +94,7 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/purchase-orders
-router.post('/', (req, res) => {
+router.post('/', requirePermission('purchaseorders', 'create'), (req, res) => {
   try {
     const { po_number, supplier_id, po_type, expected_date, items, notes } = req.body;
     if (!po_number || !supplier_id) return res.status(400).json({ error: 'رقم أمر الشراء ومعرف المورد مطلوبان' });
@@ -126,7 +126,7 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/purchase-orders/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', requirePermission('purchaseorders', 'edit'), (req, res) => {
   try {
     const poId = parseInt(req.params.id);
     const existing = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
@@ -155,7 +155,7 @@ router.put('/:id', (req, res) => {
 });
 
 // PATCH /api/purchase-orders/:id/status
-router.patch('/:id/status', (req, res) => {
+router.patch('/:id/status', requirePermission('purchaseorders', 'edit'), (req, res) => {
   try {
     const { status } = req.body;
     const sets = ['status=?'];
@@ -167,7 +167,7 @@ router.patch('/:id/status', (req, res) => {
 });
 
 // POST /api/purchase-orders/:id/payments
-router.post('/:id/payments', (req, res) => {
+router.post('/:id/payments', requirePermission('purchaseorders', 'edit'), (req, res) => {
   try {
     const poId = parseInt(req.params.id);
     const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
@@ -188,7 +188,7 @@ router.post('/:id/payments', (req, res) => {
 });
 
 // PATCH /api/purchase-orders/:id/receive — receive items and create fabric batches
-router.patch('/:id/receive', (req, res) => {
+router.patch('/:id/receive', requirePermission('purchaseorders', 'edit'), (req, res) => {
   try {
     const poId = parseInt(req.params.id);
     const po = db.prepare(`SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.id=?`).get(poId);
@@ -269,7 +269,7 @@ router.patch('/:id/receive', (req, res) => {
 });
 
 // DELETE /api/purchase-orders/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('purchaseorders', 'delete'), (req, res) => {
   try {
     db.prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?").run(parseInt(req.params.id));
     res.json({ success: true });

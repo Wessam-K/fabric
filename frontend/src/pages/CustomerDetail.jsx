@@ -4,6 +4,7 @@ import { ArrowRight, Phone, Mail, MapPin, DollarSign, FileText, CreditCard, Cloc
 import { PageHeader, LoadingState, Tabs } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import HelpButton from '../components/HelpButton';
 
 export default function CustomerDetail() {
   const { id } = useParams();
@@ -52,7 +53,7 @@ export default function CustomerDetail() {
   return (
     <div className="page">
       <PageHeader title={customer.name} subtitle={`كود: ${customer.code || '—'} — ${customer.city || 'بدون مدينة'}`}
-        action={<button onClick={() => navigate('/customers')} className="btn btn-outline btn-sm"><ArrowRight size={14} /> العملاء</button>} />
+        action={<div className="flex items-center gap-2"><HelpButton pageKey="customerdetail" /><button onClick={() => navigate('/customers')} className="btn btn-outline btn-sm"><ArrowRight size={14} /> العملاء</button></div>} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

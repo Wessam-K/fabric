@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Printer, Copy, Check } from 'lucide-react';
 import api from '../utils/api';
+import HelpButton from '../components/HelpButton';
 
 const SIZES = ['qty_s', 'qty_m', 'qty_l', 'qty_xl', 'qty_2xl', 'qty_3xl'];
 const SIZE_LABELS = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
@@ -62,6 +63,7 @@ export default function InvoicePrint() {
 
       {/* Action Bar (hidden in print) */}
       <div className="no-print fixed top-4 left-4 z-50 flex gap-2">
+        <HelpButton pageKey="invoiceview" />
         <button onClick={handlePrint}
           className="flex items-center gap-1.5 px-4 py-2 bg-[#c9a84c] text-white rounded-lg text-sm font-bold shadow-lg hover:bg-[#b8973f] transition-colors">
           <Printer size={16} /> طباعة / PDF

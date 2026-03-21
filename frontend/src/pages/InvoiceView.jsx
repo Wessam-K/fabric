@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Printer, ArrowRight, Send, CheckCircle, Download, Share2, Copy, Check } from 'lucide-react';
 import api from '../utils/api';
+import HelpButton from '../components/HelpButton';
 
 const STATUS_MAP = {
   draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-600' },
@@ -68,6 +69,7 @@ export default function InvoiceView() {
 
       {/* Action Bar */}
       <div className="no-print fixed top-4 left-4 z-50 flex gap-2">
+        <HelpButton pageKey="invoiceview" />
         <button onClick={() => navigate('/invoices')}
           className="flex items-center gap-1.5 px-4 py-2 bg-white text-gray-700 rounded-lg text-sm shadow-lg hover:bg-gray-50 border border-gray-200">
           <ArrowRight size={16} /> الفواتير

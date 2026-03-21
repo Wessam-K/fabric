@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { logAudit } = require('../middleware/auth');
+const { logAudit, requirePermission } = require('../middleware/auth');
 
 // GET /api/settings — return all settings as object
 router.get('/', (req, res) => {
@@ -14,7 +14,7 @@ router.get('/', (req, res) => {
 });
 
 // PUT /api/settings — update settings
-router.put('/', (req, res) => {
+router.put('/', requirePermission('settings', 'edit'), (req, res) => {
   try {
     const ALLOWED_PREFIXES = [
       'masnaiya_', 'masrouf_', 'waste_', 'margin_', 'default_',
@@ -49,7 +49,7 @@ router.get('/stages', (req, res) => {
 });
 
 // POST /api/settings/stages
-router.post('/stages', (req, res) => {
+router.post('/stages', requirePermission('settings', 'edit'), (req, res) => {
   try {
     const { name, color, sort_order } = req.body;
     if (!name) return res.status(400).json({ error: 'الاسم مطلوب' });
@@ -61,7 +61,7 @@ router.post('/stages', (req, res) => {
 });
 
 // PUT /api/settings/stages/:id
-router.put('/stages/:id', (req, res) => {
+router.put('/stages/:id', requirePermission('settings', 'edit'), (req, res) => {
   try {
     const { name, color, sort_order, is_default } = req.body;
     db.prepare('UPDATE stage_templates SET name=COALESCE(?,name), color=COALESCE(?,color), sort_order=COALESCE(?,sort_order), is_default=COALESCE(?,is_default) WHERE id=?')
@@ -71,7 +71,7 @@ router.put('/stages/:id', (req, res) => {
 });
 
 // DELETE /api/settings/stages/:id
-router.delete('/stages/:id', (req, res) => {
+router.delete('/stages/:id', requirePermission('settings', 'delete'), (req, res) => {
   try {
     db.prepare('DELETE FROM stage_templates WHERE id=?').run(parseInt(req.params.id));
     res.json({ success: true });
@@ -79,7 +79,7 @@ router.delete('/stages/:id', (req, res) => {
 });
 
 // PUT /api/settings/stages/reorder — bulk update sort_order
-router.put('/stages/reorder', (req, res) => {
+router.put('/stages/reorder', requirePermission('settings', 'edit'), (req, res) => {
   try {
     const { order } = req.body; // [{id, sort_order}]
     const upd = db.prepare('UPDATE stage_templates SET sort_order=? WHERE id=?');

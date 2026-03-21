@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Package, AlertTriangle, Search, RefreshCw, Edit3 } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import HelpButton from '../components/HelpButton';
 import { PageHeader, LoadingState } from '../components/ui';
 import ExportButton from '../components/ExportButton';
 
@@ -53,6 +54,7 @@ export default function AccessoryInventory() {
     <div className="page">
       <PageHeader title="مخزون الاكسسوارات" subtitle={`${items.length} صنف · ${lowCount} منخفض المخزون`}
         actions={<div className="flex items-center gap-2">
+          <HelpButton pageKey="accessoryinventory" />
           <ExportButton data={items} filename="accessory-inventory" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'acc_type',label:'النوع'},{key:'quantity_on_hand',label:'الكمية'},{key:'low_stock_threshold',label:'الحد الأدنى'},{key:'unit_price',label:'سعر الوحدة'}]} />
           <button onClick={fetchData} className="btn btn-ghost"><RefreshCw size={14} /> تحديث</button>
         </div>}
