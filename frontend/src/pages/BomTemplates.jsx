@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Plus, Save, Trash2, Star, Scissors, Package, Layers, DollarSign, BarChart3 } from 'lucide-react';
 import { PageHeader } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import FabricBlock from '../components/FabricBlock';
 import SizeGrid from '../components/SizeGrid';
@@ -242,6 +243,7 @@ export default function BomTemplates() {
         title="قوائم المواد (BOM)"
         subtitle={<><span className="font-mono" style={{color:'var(--color-gold)'}}>{code}</span> — {model?.model_name || model?.serial_number}</>}
         action={<div className="flex gap-2">
+          <HelpButton pageKey="bomtemplates" />
           <button onClick={() => navigate(`/models/${code}/edit`)} className="btn btn-ghost"><ArrowRight size={16} /> رجوع</button>
           {templates.length > 1 && (
             <button onClick={() => setShowMatrix(!showMatrix)}

@@ -16,10 +16,16 @@ router.get('/', (req, res) => {
 // PUT /api/settings — update settings
 router.put('/', (req, res) => {
   try {
+    const ALLOWED_PREFIXES = [
+      'masnaiya_', 'masrouf_', 'waste_', 'margin_', 'default_',
+      'factory_', 'currency', 'tax_', 'low_stock_', 'working_',
+      'maintenance_', 'expense_', 'invoice_', 'po_', 'wo_', 'mo_',
+      'backup_', 'session_', 'date_',
+    ];
     const upsert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
     const transaction = db.transaction(() => {
       for (const [key, value] of Object.entries(req.body)) {
-        if (typeof key === 'string' && (key.endsWith('_default') || key.startsWith('default_'))) {
+        if (typeof key === 'string' && ALLOWED_PREFIXES.some(p => key.startsWith(p))) {
           upsert.run(key, String(value));
         }
       }

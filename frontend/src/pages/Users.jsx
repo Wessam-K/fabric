@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Shield, Plus, Search, Edit2, Key, X, UserX, ChevronDown, ChevronUp, Check, Lock, Unlock, Eye } from 'lucide-react';
 import { PageHeader } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 
 const ROLES = [
@@ -193,7 +194,7 @@ export default function UsersPage() {
     <div className="page">
       {/* Header */}
       <PageHeader title="إدارة المستخدمين والصلاحيات" subtitle="إدارة الحسابات، الأدوار، ومصفوفة الصلاحيات"
-        action={<button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مستخدم جديد</button>} />
+        action={<div className="flex gap-2"><HelpButton pageKey="users" /><button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مستخدم جديد</button></div>} />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">

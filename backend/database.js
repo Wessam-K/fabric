@@ -1644,6 +1644,43 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (16)`);
   }
+
+  // ──── V17 — Maintenance parts, machine enhancements ────
+  const v17 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 17').get();
+  if (!v17) {
+    // 17.1 — maintenance_parts table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS maintenance_parts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mo_id INTEGER NOT NULL REFERENCES maintenance_orders(id) ON DELETE CASCADE,
+        part_name TEXT NOT NULL,
+        part_number TEXT,
+        quantity REAL DEFAULT 1,
+        unit_cost REAL DEFAULT 0,
+        supplier TEXT,
+        notes TEXT
+      )
+    `);
+
+    // 17.2 — Machine extra columns
+    try { db.exec("ALTER TABLE machines ADD COLUMN brand TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN model_number TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN serial_number TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN purchase_price REAL DEFAULT 0"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN warranty_expires TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN total_downtime_hours REAL DEFAULT 0"); } catch(e) {}
+
+    // 17.3 — Expense extra columns
+    try { db.exec("ALTER TABLE expenses ADD COLUMN barcode TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE expenses ADD COLUMN payment_method TEXT DEFAULT 'cash'"); } catch(e) {}
+    try { db.exec("ALTER TABLE expenses ADD COLUMN vendor_name TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE expenses ADD COLUMN currency TEXT DEFAULT 'EGP'"); } catch(e) {}
+
+    // Auto-generate expense barcodes
+    try { db.exec(`UPDATE expenses SET barcode = 'EXP-' || strftime('%Y%m%d', expense_date) || '-' || printf('%04d', id) WHERE barcode IS NULL OR barcode = ''`); } catch(e) {}
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (17)`);
+  }
 }
 
 initializeDatabase();

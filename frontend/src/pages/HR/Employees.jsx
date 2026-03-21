@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Users, Plus, Search, Edit2, X, Trash2, Download } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
+import HelpButton from '../../components/HelpButton';
 import api from '../../utils/api';
 import { exportToExcel } from '../../utils/exportExcel';
 
@@ -89,6 +90,7 @@ export default function Employees() {
     <div className="page">
       <PageHeader title="الموظفون" subtitle="إدارة بيانات الموظفين"
         action={<div className="flex gap-2">
+          <HelpButton pageKey="hr" />
           <button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير</button>
           <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> موظف جديد</button>
         </div>} />

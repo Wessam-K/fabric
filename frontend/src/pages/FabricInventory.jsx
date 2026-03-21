@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Warehouse, Package, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { PageHeader, LoadingState, EmptyState } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
@@ -45,7 +46,7 @@ export default function FabricInventory() {
 
   return (
     <div className="page">
-      <PageHeader title="مخزون الأقمشة" subtitle="تتبع الدفعات والأمتار المتاحة من كل قماش" />
+      <PageHeader title="مخزون الأقمشة" subtitle="تتبع الدفعات والأمتار المتاحة من كل قماش" action={<HelpButton pageKey="inventory" />} />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">

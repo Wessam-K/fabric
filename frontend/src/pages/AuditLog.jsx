@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ClipboardList, Search, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
 
@@ -47,7 +48,7 @@ export default function AuditLog() {
   return (
     <div className="page">
       <PageHeader title="سجل المراجعة" subtitle="تتبع جميع العمليات والتغييرات في النظام"
-        action={<button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير Excel</button>} />
+        action={<div className="flex gap-2"><HelpButton pageKey="auditlog" /><button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير Excel</button></div>} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

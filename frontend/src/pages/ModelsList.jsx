@@ -4,6 +4,7 @@ import { Plus, Edit2, Trash2, FileText, Printer, List } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader, LoadingState, EmptyState } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 
 const CATEGORY_MAP = { men: 'رجالي', women: 'حريمي', kids: 'أطفال', unisex: 'يونيسكس' };
 
@@ -39,7 +40,7 @@ export default function ModelsList() {
   return (
     <div className="page">
       <PageHeader title="قائمة الموديلات" subtitle="إدارة موديلات المصنع"
-        actions={<button onClick={() => navigate('/models/new')} className="btn btn-gold"><Plus size={16} /> موديل جديد</button>}
+        actions={<div className="flex gap-2"><HelpButton pageKey="models" /><button onClick={() => navigate('/models/new')} className="btn btn-gold"><Plus size={16} /> موديل جديد</button></div>}
       />
 
       <input type="text" value={search} onChange={e => setSearch(e.target.value)}
