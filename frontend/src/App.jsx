@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key, BookOpen, Scale } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -14,6 +14,9 @@ import InvoicePrint from './pages/InvoicePrint';
 import Reports from './pages/Reports';
 import Invoices from './pages/Invoices';
 import InvoiceView from './pages/InvoiceView';
+import ChartOfAccounts from './pages/ChartOfAccounts';
+import JournalEntries from './pages/JournalEntries';
+import TrialBalance from './pages/TrialBalance';
 import WorkOrdersList from './pages/WorkOrdersList';
 import WorkOrderForm from './pages/WorkOrderForm';
 import WorkOrderDetail from './pages/WorkOrderDetail';
@@ -91,12 +94,15 @@ function AppLayout() {
       id: 'finance',
       label: 'المالية',
       icon: FileText,
-      show: () => can('invoices', 'view') || can('suppliers', 'view'),
+      show: () => can('invoices', 'view') || can('suppliers', 'view') || can('accounting', 'view'),
       items: [
         { path: '/customers', label: 'العملاء', icon: UserCheck, hide: () => !can('invoices', 'view') },
         { path: '/invoices', label: 'الفواتير', icon: FileText, hide: () => !can('invoices', 'view') },
         { path: '/purchase-orders', label: 'أوامر الشراء', icon: ShoppingCart, hide: () => !can('purchase_orders', 'view') },
         { path: '/suppliers', label: 'الموردين', icon: Truck, hide: () => !can('suppliers', 'view') },
+        { path: '/accounting/coa', label: 'دليل الحسابات', icon: BookOpen, hide: () => !can('accounting', 'view') },
+        { path: '/accounting/journal', label: 'القيود اليومية', icon: Scale, hide: () => !can('accounting', 'view') },
+        { path: '/accounting/trial-balance', label: 'ميزان المراجعة', icon: BarChart2, hide: () => !can('accounting', 'view') },
       ],
     },
     {
@@ -281,6 +287,9 @@ function AppLayout() {
           <Route path="/purchase-orders" element={<ProtectedRoute perm={['purchase_orders','view']}><PurchaseOrders /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute perm={['reports','view']}><Reports /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute perm={['invoices','view']}><Invoices /></ProtectedRoute>} />
+          <Route path="/accounting/coa" element={<ProtectedRoute perm={['accounting','view']}><ChartOfAccounts /></ProtectedRoute>} />
+          <Route path="/accounting/journal" element={<ProtectedRoute perm={['accounting','view']}><JournalEntries /></ProtectedRoute>} />
+          <Route path="/accounting/trial-balance" element={<ProtectedRoute perm={['accounting','view']}><TrialBalance /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute perm={['settings','view']}><SettingsPage /></ProtectedRoute>} />
           <Route path="/users" element={<ProtectedRoute perm={['users','manage']}><UsersPage /></ProtectedRoute>} />
           <Route path="/audit-log" element={<ProtectedRoute perm={['audit','view']}><AuditLog /></ProtectedRoute>} />

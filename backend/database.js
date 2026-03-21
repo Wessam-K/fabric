@@ -1420,6 +1420,83 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (13)`);
   }
+
+  // ─── V14: Financial Accounting ────────────────────────
+  if (currentVersion < 14) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS chart_of_accounts (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        code        TEXT NOT NULL UNIQUE,
+        name_ar     TEXT NOT NULL,
+        type        TEXT NOT NULL CHECK(type IN ('asset','liability','equity','revenue','expense')),
+        parent_id   INTEGER REFERENCES chart_of_accounts(id),
+        is_active   INTEGER DEFAULT 1,
+        created_at  TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS journal_entries (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_number  TEXT NOT NULL UNIQUE,
+        entry_date    TEXT NOT NULL,
+        description   TEXT,
+        reference     TEXT,
+        status        TEXT DEFAULT 'draft' CHECK(status IN ('draft','posted','void')),
+        created_by    INTEGER REFERENCES users(id),
+        created_at    TEXT DEFAULT (datetime('now')),
+        posted_at     TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS journal_entry_lines (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_id    INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+        account_id  INTEGER NOT NULL REFERENCES chart_of_accounts(id),
+        debit       REAL DEFAULT 0,
+        credit      REAL DEFAULT 0,
+        description TEXT
+      );
+    `);
+
+    // Seed default chart of accounts
+    const coaInsert = db.prepare('INSERT OR IGNORE INTO chart_of_accounts (code, name_ar, type) VALUES (?,?,?)');
+    const defaultCOA = [
+      ['1000', 'النقدية', 'asset'],
+      ['1100', 'البنك', 'asset'],
+      ['1200', 'العملاء (ذمم مدينة)', 'asset'],
+      ['1300', 'المخزون — أقمشة', 'asset'],
+      ['1310', 'المخزون — اكسسوارات', 'asset'],
+      ['2000', 'الموردين (ذمم دائنة)', 'liability'],
+      ['2100', 'ضريبة القيمة المضافة', 'liability'],
+      ['3000', 'رأس المال', 'equity'],
+      ['3100', 'الأرباح المحتجزة', 'equity'],
+      ['4000', 'إيرادات المبيعات', 'revenue'],
+      ['4100', 'إيرادات أخرى', 'revenue'],
+      ['5000', 'تكلفة البضاعة المباعة', 'expense'],
+      ['5100', 'الرواتب والأجور', 'expense'],
+      ['5200', 'مصاريف تشغيلية', 'expense'],
+      ['5300', 'مصاريف إدارية', 'expense'],
+    ];
+    for (const [code, name, type] of defaultCOA) coaInsert.run(code, name, type);
+
+    // Add accounting permissions
+    const insAccPerm = db.prepare('INSERT OR IGNORE INTO permission_definitions (module, action, label_ar, description_ar, sort_order) VALUES (?,?,?,?,?)');
+    const accPerms = [
+      ['accounting', 'view',   'عرض المحاسبة',     'عرض دليل الحسابات والقيود',  120],
+      ['accounting', 'create', 'إنشاء قيود',       'إنشاء قيود يومية جديدة',      121],
+      ['accounting', 'edit',   'تعديل قيود',       'تعديل قيود يومية',            122],
+      ['accounting', 'post',   'ترحيل قيود',       'ترحيل القيود اليومية',         123],
+    ];
+    for (const p of accPerms) insAccPerm.run(...p);
+
+    // Grant accounting permissions to admin role
+    const adminRole = db.prepare("SELECT id FROM roles WHERE name = 'admin'").get();
+    if (adminRole) {
+      const accPermDefs = db.prepare("SELECT id FROM permission_definitions WHERE module = 'accounting'").all();
+      const insRP = db.prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?,?)');
+      for (const pd of accPermDefs) insRP.run(adminRole.id, pd.id);
+    }
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (14)`);
+  }
 }
 
 initializeDatabase();

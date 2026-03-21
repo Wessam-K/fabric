@@ -27,6 +27,7 @@ const permissionsRouter = require('./routes/permissions');
 const customersRouter = require('./routes/customers');
 const notificationsRouter = require('./routes/notifications');
 const machinesRouter = require('./routes/machines');
+const accountingRouter = require('./routes/accounting');
 
 const app = express();
 const PORT = process.env.PORT || 9002;
@@ -146,6 +147,7 @@ app.use('/api/permissions', requireAuth, permissionsRouter);
 app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/notifications', requireAuth, notificationsRouter);
 app.use('/api/machines', requireAuth, machinesRouter);
+app.use('/api/accounting', requireAuth, accountingRouter);
 
 // Dashboard
 app.get('/api/dashboard', requireAuth, (req, res) => {
