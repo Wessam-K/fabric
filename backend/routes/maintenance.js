@@ -18,7 +18,7 @@ function toCSV(rows, columns) {
 // ═══════════════════════════════════════════════
 // GET /api/maintenance/stats
 // ═══════════════════════════════════════════════
-router.get('/stats', (req, res) => {
+router.get('/stats', requirePermission('maintenance', 'view'), (req, res) => {
   try {
     const pending_count = db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND status='pending'").get().c;
     const in_progress_count = db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND status='in_progress'").get().c;
@@ -34,7 +34,7 @@ router.get('/stats', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/maintenance/export
 // ═══════════════════════════════════════════════
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('maintenance', 'export'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT mo.*, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 ORDER BY mo.created_at DESC`).all();
     const columns = ['barcode','title','maintenance_type','priority','status','machine_name','scheduled_date','completed_date','performed_by','cost','description','notes'];
@@ -48,7 +48,7 @@ router.get('/export', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/maintenance/barcode/:barcode
 // ═══════════════════════════════════════════════
-router.get('/barcode/:barcode', (req, res) => {
+router.get('/barcode/:barcode', requirePermission('maintenance', 'view'), (req, res) => {
   try {
     const order = db.prepare(`SELECT mo.*, m.name as machine_name, m.barcode as machine_barcode
       FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id
@@ -61,7 +61,7 @@ router.get('/barcode/:barcode', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/maintenance — list with filters
 // ═══════════════════════════════════════════════
-router.get('/', (req, res) => {
+router.get('/', requirePermission('maintenance', 'view'), (req, res) => {
   try {
     const { machine_id, status, priority, maintenance_type, date_from, date_to, search, page = 1, limit = 50 } = req.query;
     let where = 'WHERE mo.is_deleted = 0';
@@ -90,7 +90,7 @@ router.get('/', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/maintenance/:id
 // ═══════════════════════════════════════════════
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('maintenance', 'view'), (req, res) => {
   try {
     const order = db.prepare(`SELECT mo.*, m.name as machine_name, m.barcode as machine_barcode, m.code as machine_code, m.location as machine_location
       FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id
@@ -103,7 +103,7 @@ router.get('/:id', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/maintenance/:id/history
 // ═══════════════════════════════════════════════
-router.get('/:id/history', (req, res) => {
+router.get('/:id/history', requirePermission('maintenance', 'view'), (req, res) => {
   try {
     const rows = db.prepare("SELECT * FROM audit_log WHERE entity_type='maintenance_orders' AND entity_id=? ORDER BY created_at DESC").all(String(req.params.id));
     res.json(rows);

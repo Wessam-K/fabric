@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, Wrench, X, Calendar } from 'lucide-react';
+import { Plus, Wrench, X, Calendar, Download } from 'lucide-react';
 import api from '../../utils/api';
 import { useToast } from '../../components/Toast';
 import HelpButton from '../../components/HelpButton';
 import { PageHeader, LoadingState, Tabs, Modal, EmptyState } from '../../components/ui';
+import { exportToExcel } from '../../utils/exportExcel';
 
 export default function Leaves() {
   const toast = useToast();
@@ -55,12 +56,24 @@ export default function Leaves() {
 
   const filtered = tab === 'all' ? leaves : leaves.filter(l => l.status === tab);
 
+  function handleExport() {
+    exportToExcel(leaves, [
+      { key: 'employee_name', label: 'الموظف' },
+      { key: 'leave_type', label: 'النوع', fmt: v => TYPES[v] || v },
+      { key: 'start_date', label: 'من', fmt: fmtDate },
+      { key: 'end_date', label: 'إلى', fmt: fmtDate },
+      { key: 'days', label: 'الأيام' },
+      { key: 'status', label: 'الحالة', fmt: v => STATUS[v] || v },
+      { key: 'reason', label: 'السبب' },
+    ], 'الإجازات');
+  }
+
   if (loading) return <LoadingState />;
 
   return (
     <div className="page">
       <PageHeader title="الإجازات" subtitle="إدارة طلبات الإجازات"
-        action={<div className="flex items-center gap-2"><HelpButton pageKey="leaves" /><button onClick={() => setShowForm(true)} className="btn btn-gold"><Plus size={16} /> طلب إجازة</button></div>} />
+        action={<div className="flex items-center gap-2"><HelpButton pageKey="leaves" /><button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير</button><button onClick={() => setShowForm(true)} className="btn btn-gold"><Plus size={16} /> طلب إجازة</button></div>} />
 
       <Tabs tabs={[
         { value: 'all', label: 'الكل', count: leaves.length },

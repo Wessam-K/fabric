@@ -18,7 +18,7 @@ function toCSV(rows, columns) {
 // ═══════════════════════════════════════════════
 // GET /api/expenses/summary
 // ═══════════════════════════════════════════════
-router.get('/summary', (req, res) => {
+router.get('/summary', requirePermission('expenses', 'view'), (req, res) => {
   try {
     const total_this_month = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= date('now','start of month')`).get().v;
     const total_this_year = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= date('now','start of year')`).get().v;
@@ -33,7 +33,7 @@ router.get('/summary', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/expenses/export
 // ═══════════════════════════════════════════════
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('expenses', 'export'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT e.*, u.full_name as created_by_name FROM expenses e LEFT JOIN users u ON u.id=e.created_by WHERE e.is_deleted=0 ORDER BY e.expense_date DESC`).all();
     const columns = ['id','expense_type','description','amount','expense_date','status','reference_type','reference_id','notes','created_by_name'];
@@ -47,7 +47,7 @@ router.get('/export', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/expenses — list with filters
 // ═══════════════════════════════════════════════
-router.get('/', (req, res) => {
+router.get('/', requirePermission('expenses', 'view'), (req, res) => {
   try {
     const { type, status, date_from, date_to, search, page = 1, limit = 50 } = req.query;
     let where = 'WHERE e.is_deleted = 0';
@@ -75,7 +75,7 @@ router.get('/', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/expenses/:id
 // ═══════════════════════════════════════════════
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('expenses', 'view'), (req, res) => {
   try {
     const expense = db.prepare(`SELECT e.*, u1.full_name as created_by_name, u2.full_name as approved_by_name
       FROM expenses e LEFT JOIN users u1 ON u1.id=e.created_by LEFT JOIN users u2 ON u2.id=e.approved_by

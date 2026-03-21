@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { requirePermission } = require('../middleware/auth');
 
 // GET /api/reports/summary — KPI overview
-router.get('/summary', (req, res) => {
+router.get('/summary', requirePermission('reports', 'view'), (req, res) => {
   try {
     const totalModels = db.prepare("SELECT COUNT(*) as c FROM models WHERE status='active'").get().c;
     const totalFabrics = db.prepare("SELECT COUNT(*) as c FROM fabrics WHERE status='active'").get().c;
@@ -42,7 +43,7 @@ router.get('/summary', (req, res) => {
 });
 
 // GET /api/reports/work-orders — WO-based production report
-router.get('/work-orders', (req, res) => {
+router.get('/work-orders', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { status, date_from, date_to, search } = req.query;
     let q = `SELECT wo.*, m.model_code, m.model_name, m.category, m.gender,
@@ -61,7 +62,7 @@ router.get('/work-orders', (req, res) => {
 });
 
 // GET /api/reports/by-fabric — fabric usage from work orders
-router.get('/by-fabric', (req, res) => {
+router.get('/by-fabric', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { search, date_from, date_to } = req.query;
     let where = '1=1';
@@ -88,7 +89,7 @@ router.get('/by-fabric', (req, res) => {
 });
 
 // GET /api/reports/by-accessory — accessory usage from work orders
-router.get('/by-accessory', (req, res) => {
+router.get('/by-accessory', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { search, date_from, date_to } = req.query;
     let where = '1=1';
@@ -114,7 +115,7 @@ router.get('/by-accessory', (req, res) => {
 });
 
 // GET /api/reports/suppliers — supplier spending report
-router.get('/suppliers', (req, res) => {
+router.get('/suppliers', requirePermission('reports', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT s.id, s.code, s.name, s.supplier_type,
@@ -133,7 +134,7 @@ router.get('/suppliers', (req, res) => {
 });
 
 // GET /api/reports/by-model — per-model WO cost breakdown
-router.get('/by-model', (req, res) => {
+router.get('/by-model', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { search, date_from, date_to } = req.query;
     let where = "m.status='active'";
@@ -166,7 +167,7 @@ router.get('/by-model', (req, res) => {
 });
 
 // GET /api/reports/model-detail/:code — full model breakdown
-router.get('/model-detail/:code', (req, res) => {
+router.get('/model-detail/:code', requirePermission('reports', 'view'), (req, res) => {
   try {
     const model = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
@@ -203,7 +204,7 @@ router.get('/model-detail/:code', (req, res) => {
 });
 
 // GET /api/reports — cost snapshots (paginated)
-router.get('/', (req, res) => {
+router.get('/', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { page = 1, limit = 20, date_from, date_to, wo_id } = req.query;
     let q = `SELECT cs.*, m.model_code, m.model_name, wo.wo_number
@@ -224,7 +225,7 @@ router.get('/', (req, res) => {
 });
 
 // GET /api/reports/production-by-stage — WIP pipeline
-router.get('/production-by-stage', (req, res) => {
+router.get('/production-by-stage', requirePermission('reports', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT ws.stage_name,
@@ -244,7 +245,7 @@ router.get('/production-by-stage', (req, res) => {
 });
 
 // GET /api/reports/fabric-consumption — fabric usage from batches
-router.get('/fabric-consumption', (req, res) => {
+router.get('/fabric-consumption', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { date_from, date_to } = req.query;
     let where = "wo.status != 'cancelled'";
@@ -273,7 +274,7 @@ router.get('/fabric-consumption', (req, res) => {
 });
 
 // GET /api/reports/supplier-fabric — fabric purchased by supplier
-router.get('/supplier-fabric', (req, res) => {
+router.get('/supplier-fabric', requirePermission('reports', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT s.id, s.name as supplier_name, s.code as supplier_code,
@@ -296,7 +297,7 @@ router.get('/supplier-fabric', (req, res) => {
 });
 
 // GET /api/reports/waste-analysis — waste tracking
-router.get('/waste-analysis', (req, res) => {
+router.get('/waste-analysis', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { date_from, date_to } = req.query;
     let where = "wo.status != 'cancelled'";
@@ -324,7 +325,7 @@ router.get('/waste-analysis', (req, res) => {
 });
 
 // GET /api/reports/cost-variance — planned vs actual
-router.get('/cost-variance', (req, res) => {
+router.get('/cost-variance', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { date_from, date_to } = req.query;
     let where = "wo.status NOT IN ('cancelled','draft')";
@@ -356,7 +357,7 @@ router.get('/cost-variance', (req, res) => {
 });
 
 // GET /api/reports/pivot — Dynamic pivot table data
-router.get('/pivot', (req, res) => {
+router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { source } = req.query; // production, financial, hr, inventory
     let rows = [];
@@ -423,7 +424,7 @@ router.get('/pivot', (req, res) => {
 });
 
 // GET /api/reports/hr-summary — HR KPI overview
-router.get('/hr-summary', (req, res) => {
+router.get('/hr-summary', requirePermission('reports', 'view'), (req, res) => {
   try {
     const totalEmployees = db.prepare("SELECT COUNT(*) as c FROM employees WHERE status='active'").get().c;
     const totalPayroll = db.prepare(`
@@ -456,7 +457,7 @@ router.get('/hr-summary', (req, res) => {
 // ═══════════════════════════════════════════════
 // V8 — Enhanced production-by-stage with WO details
 // ═══════════════════════════════════════════════
-router.get('/production-by-stage-detail', (req, res) => {
+router.get('/production-by-stage-detail', requirePermission('reports', 'view'), (req, res) => {
   try {
     const stages = db.prepare(`
       SELECT ws.stage_name, st.color,
@@ -488,7 +489,7 @@ router.get('/production-by-stage-detail', (req, res) => {
 });
 
 // V8 — Production by model
-router.get('/production-by-model', (req, res) => {
+router.get('/production-by-model', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { search } = req.query;
     let where = "wo.status != 'cancelled'";
@@ -531,7 +532,7 @@ router.get('/production-by-model', (req, res) => {
 });
 
 // V8 — Fabric consumption by supplier (aggregated)
-router.get('/fabric-consumption-by-supplier', (req, res) => {
+router.get('/fabric-consumption-by-supplier', requirePermission('reports', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT s.id as supplier_id, s.name as supplier_name,
@@ -551,7 +552,7 @@ router.get('/fabric-consumption-by-supplier', (req, res) => {
 });
 
 // GET /api/reports/customer-summary — revenue + balance per customer
-router.get('/customer-summary', (req, res) => {
+router.get('/customer-summary', requirePermission('reports', 'view'), (req, res) => {
   try {
     const customers = db.prepare(`
       SELECT c.id, c.code, c.name, c.phone, c.city, c.credit_limit, c.balance, c.status,
@@ -572,7 +573,7 @@ router.get('/customer-summary', (req, res) => {
 });
 
 // GET /api/reports/inventory-status — fabric + accessory stock overview
-router.get('/inventory-status', (req, res) => {
+router.get('/inventory-status', requirePermission('reports', 'view'), (req, res) => {
   try {
     const fabrics = db.prepare(`
       SELECT f.id, f.code, f.name, f.color, f.available_meters, f.low_stock_threshold,
@@ -598,7 +599,7 @@ router.get('/inventory-status', (req, res) => {
 });
 
 // GET /api/reports/quality — quality & rejection report
-router.get('/quality', (req, res) => {
+router.get('/quality', requirePermission('reports', 'view'), (req, res) => {
   try {
     // Per-stage rejection rates
     const stageQuality = db.prepare(`
@@ -656,7 +657,7 @@ router.get('/quality', (req, res) => {
 });
 
 // GET /api/reports/machines — machine utilization report
-router.get('/machines', (req, res) => {
+router.get('/machines', requirePermission('reports', 'view'), (req, res) => {
   try {
     const machines = db.prepare(`
       SELECT m.*,
@@ -673,7 +674,7 @@ router.get('/machines', (req, res) => {
 });
 
 // GET /api/reports/ar-aging — accounts receivable aging
-router.get('/ar-aging', (req, res) => {
+router.get('/ar-aging', requirePermission('reports', 'view'), (req, res) => {
   try {
     const invoices = db.prepare(`
       SELECT i.id, i.invoice_number, i.customer_name, i.total, i.status, i.due_date, i.created_at,
@@ -707,7 +708,7 @@ router.get('/ar-aging', (req, res) => {
 });
 
 // GET /api/reports/inventory-valuation — fabric + accessory stock with monetary values
-router.get('/inventory-valuation', (req, res) => {
+router.get('/inventory-valuation', requirePermission('reports', 'view'), (req, res) => {
   try {
     const fabrics = db.prepare(`
       SELECT f.code, f.name, f.color, f.unit_price,
@@ -736,7 +737,7 @@ router.get('/inventory-valuation', (req, res) => {
 });
 
 // GET /api/reports/machine-utilization — machine usage statistics
-router.get('/machine-utilization', (req, res) => {
+router.get('/machine-utilization', requirePermission('reports', 'view'), (req, res) => {
   try {
     const machines = db.prepare(`SELECT m.*, 
       (SELECT COUNT(*) FROM machine_maintenance mm WHERE mm.machine_id=m.id) as total_maintenance,
@@ -752,7 +753,7 @@ router.get('/machine-utilization', (req, res) => {
 });
 
 // GET /api/reports/maintenance-cost — maintenance cost analysis
-router.get('/maintenance-cost', (req, res) => {
+router.get('/maintenance-cost', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { date_from, date_to } = req.query;
     let q = `SELECT mo.*, m.name as machine_name, m.machine_type, u.full_name as created_by_name
@@ -782,7 +783,7 @@ router.get('/maintenance-cost', (req, res) => {
 });
 
 // GET /api/reports/expense-analysis — expense breakdown
-router.get('/expense-analysis', (req, res) => {
+router.get('/expense-analysis', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { date_from, date_to } = req.query;
     let q = `SELECT e.*, u.full_name as created_by_name FROM expenses e LEFT JOIN users u ON u.id=e.created_by WHERE e.is_deleted=0`;
@@ -818,7 +819,7 @@ router.get('/expense-analysis', (req, res) => {
 });
 
 // GET /api/reports/financial/pl — Profit & Loss report
-router.get('/financial/pl', (req, res) => {
+router.get('/financial/pl', requirePermission('reports', 'view'), (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
     const yearStr = String(year);
@@ -884,7 +885,7 @@ router.get('/financial/pl', (req, res) => {
 });
 
 // GET /api/reports/production/efficiency — Production efficiency metrics
-router.get('/production/efficiency', (req, res) => {
+router.get('/production/efficiency', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { date_from, date_to } = req.query;
     let dateFilter = '';
@@ -951,7 +952,7 @@ router.get('/production/efficiency', (req, res) => {
 });
 
 // GET /api/reports/cash-flow — monthly inflows vs outflows
-router.get('/cash-flow', (req, res) => {
+router.get('/cash-flow', requirePermission('reports', 'view'), (req, res) => {
   try {
     const months = parseInt(req.query.months) || 12;
     const data = [];
@@ -977,7 +978,7 @@ router.get('/cash-flow', (req, res) => {
 });
 
 // GET /api/reports/tax-summary — VAT collected vs paid
-router.get('/tax-summary', (req, res) => {
+router.get('/tax-summary', requirePermission('reports', 'view'), (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
     const months = [];
@@ -995,7 +996,7 @@ router.get('/tax-summary', (req, res) => {
 });
 
 // GET /api/reports/ap-aging — accounts payable aging by supplier
-router.get('/ap-aging', (req, res) => {
+router.get('/ap-aging', requirePermission('reports', 'view'), (req, res) => {
   try {
     const pos = db.prepare(`SELECT po.*, s.name as supplier_name, s.code as supplier_code
       FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id
@@ -1014,7 +1015,7 @@ router.get('/ap-aging', (req, res) => {
 });
 
 // GET /api/reports/employee-productivity — per-employee metrics
-router.get('/employee-productivity', (req, res) => {
+router.get('/employee-productivity', requirePermission('reports', 'view'), (req, res) => {
   try {
     const { date_from, date_to } = req.query;
     let dateFilter = '';
@@ -1038,13 +1039,112 @@ router.get('/employee-productivity', (req, res) => {
 });
 
 // GET /api/reports/barcode-activity — recent barcode scan activity (from audit_log)
-router.get('/barcode-activity', (req, res) => {
+router.get('/barcode-activity', requirePermission('reports', 'view'), (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
     const scans = db.prepare(`SELECT al.*, u.full_name as user_name FROM audit_log al LEFT JOIN users u ON u.id=al.user_id
       WHERE al.action LIKE '%barcode%' OR al.action LIKE '%scan%' OR al.entity_type='barcode'
       ORDER BY al.created_at DESC LIMIT ?`).all(limit);
     res.json({ scans, total: scans.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/pl-monthly — monthly P&L (last 12 months)
+router.get('/pl-monthly', requirePermission('reports', 'view'), (req, res) => {
+  try {
+    const months = parseInt(req.query.months) || 12;
+    const data = [];
+    for (let i = 0; i < months; i++) {
+      const monthStart = `date('now','start of month','-${i} months')`;
+      const monthEnd = `date('now','start of month','-${i - 1} months')`;
+      const monthLabel = db.prepare(`SELECT strftime('%Y-%m', ${monthStart}) as label`).get()?.label || '';
+      
+      const revenue = db.prepare(`SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='paid' AND created_at >= ${monthStart} AND created_at < ${monthEnd}`).get()?.v || 0;
+      const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= ${monthStart} AND expense_date < ${monthEnd}`).get()?.v || 0;
+      const maintenance = db.prepare(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_orders WHERE is_deleted=0 AND status='completed' AND completed_date >= ${monthStart} AND completed_date < ${monthEnd}`).get()?.v || 0;
+      let payroll = 0;
+      try { payroll = db.prepare(`SELECT COALESCE(SUM(net_salary),0) as v FROM payroll WHERE period_start >= ${monthStart} AND period_start < ${monthEnd}`).get()?.v || 0; } catch {}
+      
+      const totalCost = expenses + maintenance + payroll;
+      data.push({ month: monthLabel, revenue, expenses, maintenance, payroll, total_cost: totalCost, net_profit: revenue - totalCost });
+    }
+    res.json({ months: data.reverse() });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/pl-detail — detailed P&L with category breakdown
+router.get('/pl-detail', requirePermission('reports', 'view'), (req, res) => {
+  try {
+    const { date_from, date_to } = req.query;
+    const from = date_from || `${new Date().getFullYear()}-01-01`;
+    const to = date_to || new Date().toISOString().slice(0, 10);
+    
+    // Revenue breakdown by customer
+    const revenueByCustomer = db.prepare(`SELECT customer_name, COALESCE(SUM(total),0) as total FROM invoices WHERE status='paid' AND created_at >= ? AND created_at <= ? GROUP BY customer_name ORDER BY total DESC LIMIT 10`).all(from, to);
+    const totalRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='paid' AND created_at >= ? AND created_at <= ?`).get(from, to)?.v || 0;
+    
+    // Expenses by category
+    const expensesByCategory = db.prepare(`SELECT expense_type, COALESCE(SUM(amount),0) as total FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= ? AND expense_date <= ? GROUP BY expense_type ORDER BY total DESC`).all(from, to);
+    const totalExpenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= ? AND expense_date <= ?`).get(from, to)?.v || 0;
+    
+    // Maintenance costs
+    const maintenanceCost = db.prepare(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_orders WHERE is_deleted=0 AND status='completed' AND completed_date >= ? AND completed_date <= ?`).get(from, to)?.v || 0;
+    
+    // Payroll cost
+    let payrollCost = 0;
+    try { payrollCost = db.prepare(`SELECT COALESCE(SUM(net_salary),0) as v FROM payroll WHERE period_start >= ? AND period_start <= ?`).get(from, to)?.v || 0; } catch {}
+    
+    const totalCost = totalExpenses + maintenanceCost + payrollCost;
+    
+    res.json({
+      date_range: { from, to },
+      revenue: { total: totalRevenue, by_customer: revenueByCustomer },
+      expenses: { total: totalExpenses, by_category: expensesByCategory },
+      maintenance_cost: maintenanceCost,
+      payroll_cost: payrollCost,
+      total_cost: totalCost,
+      net_profit: totalRevenue - totalCost,
+      profit_margin: totalRevenue > 0 ? Math.round((totalRevenue - totalCost) / totalRevenue * 10000) / 100 : 0
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/quality-by-model — rejection/rework rate per model
+router.get('/quality-by-model', requirePermission('reports', 'view'), (req, res) => {
+  try {
+    const models = db.prepare(`
+      SELECT m.model_code, m.model_name, m.category,
+        COUNT(DISTINCT wo.id) as total_wo,
+        COALESCE(SUM(ws.quantity_completed),0) as qty_completed,
+        COALESCE(SUM(ws.quantity_rejected),0) as qty_rejected,
+        CASE WHEN COALESCE(SUM(ws.quantity_completed),0) + COALESCE(SUM(ws.quantity_rejected),0) > 0
+          THEN ROUND(CAST(COALESCE(SUM(ws.quantity_rejected),0) AS REAL) / (COALESCE(SUM(ws.quantity_completed),0) + COALESCE(SUM(ws.quantity_rejected),0)) * 100, 2)
+          ELSE 0 END as rejection_rate,
+        CASE WHEN COALESCE(SUM(ws.quantity_completed),0) + COALESCE(SUM(ws.quantity_rejected),0) > 0
+          THEN ROUND(CAST(COALESCE(SUM(ws.quantity_completed),0) AS REAL) / (COALESCE(SUM(ws.quantity_completed),0) + COALESCE(SUM(ws.quantity_rejected),0)) * 100, 2)
+          ELSE 100 END as quality_score
+      FROM models m
+      LEFT JOIN work_orders wo ON wo.model_id = m.id
+      LEFT JOIN wo_stages ws ON ws.wo_id = wo.id
+      WHERE m.status = 'active'
+      GROUP BY m.id
+      ORDER BY rejection_rate DESC
+    `).all();
+    
+    // By stage breakdown
+    const byStage = db.prepare(`
+      SELECT ws.stage_name,
+        COALESCE(SUM(ws.quantity_completed),0) as qty_completed,
+        COALESCE(SUM(ws.quantity_rejected),0) as qty_rejected,
+        CASE WHEN COALESCE(SUM(ws.quantity_completed),0) + COALESCE(SUM(ws.quantity_rejected),0) > 0
+          THEN ROUND(CAST(COALESCE(SUM(ws.quantity_rejected),0) AS REAL) / (COALESCE(SUM(ws.quantity_completed),0) + COALESCE(SUM(ws.quantity_rejected),0)) * 100, 2)
+          ELSE 0 END as rejection_rate
+      FROM wo_stages ws
+      GROUP BY ws.stage_name
+      ORDER BY rejection_rate DESC
+    `).all();
+    
+    res.json({ by_model: models, by_stage: byStage });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

@@ -1,15 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, X, Layers, Scissors, Package, FileText, ArrowLeft, Factory, ShoppingCart } from 'lucide-react';
+import { Search, X, Layers, Scissors, Package, FileText, ArrowLeft, Factory, ShoppingCart, Users, Truck, Settings, DollarSign, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 
 const CATEGORY_META = {
-  models:         { label: 'الموديلات',     icon: Layers,       color: 'text-blue-500 bg-blue-50',    path: (r) => `/models/${r.code}/edit` },
-  fabrics:        { label: 'الأقمشة',       icon: Scissors,     color: 'text-green-500 bg-green-50',  path: () => '/fabrics' },
-  accessories:    { label: 'الاكسسوارات',  icon: Package,      color: 'text-purple-500 bg-purple-50', path: () => '/accessories' },
-  invoices:       { label: 'الفواتير',      icon: FileText,     color: 'text-amber-600 bg-amber-50',  path: (r) => `/invoices/${r.id}/view` },
-  workOrders:     { label: 'أوامر الإنتاج', icon: Factory,      color: 'text-orange-500 bg-orange-50', path: (r) => `/work-orders/${r.id}` },
-  purchaseOrders: { label: 'أوامر الشراء',  icon: ShoppingCart,  color: 'text-teal-500 bg-teal-50',   path: (r) => `/purchase-orders` },
+  models:            { label: 'الموديلات',     icon: Layers,       color: 'text-blue-500 bg-blue-50',    path: (r) => `/models/${r.model_code}/edit` },
+  fabrics:           { label: 'الأقمشة',       icon: Scissors,     color: 'text-green-500 bg-green-50',  path: () => '/fabrics' },
+  accessories:       { label: 'الاكسسوارات',  icon: Package,      color: 'text-purple-500 bg-purple-50', path: () => '/accessories' },
+  invoices:          { label: 'الفواتير',      icon: FileText,     color: 'text-amber-600 bg-amber-50',  path: (r) => `/invoices/${r.id}/view` },
+  workOrders:        { label: 'أوامر الإنتاج', icon: Factory,      color: 'text-orange-500 bg-orange-50', path: (r) => `/work-orders/${r.id}` },
+  purchaseOrders:    { label: 'أوامر الشراء',  icon: ShoppingCart,  color: 'text-teal-500 bg-teal-50',   path: () => `/purchase-orders` },
+  customers:         { label: 'العملاء',       icon: Users,        color: 'text-indigo-500 bg-indigo-50', path: (r) => `/customers/${r.id}` },
+  suppliers:         { label: 'الموردين',      icon: Truck,        color: 'text-cyan-500 bg-cyan-50',    path: (r) => `/suppliers/${r.id}` },
+  machines:          { label: 'الماكينات',     icon: Settings,     color: 'text-gray-500 bg-gray-50',    path: (r) => `/machines/${r.id}` },
+  expenses:          { label: 'المصاريف',      icon: DollarSign,   color: 'text-red-500 bg-red-50',      path: () => `/expenses` },
+  maintenanceOrders: { label: 'الصيانة',       icon: Wrench,       color: 'text-yellow-600 bg-yellow-50', path: () => `/maintenance` },
 };
 
 export default function GlobalSearch() {
@@ -70,7 +75,7 @@ export default function GlobalSearch() {
         <div className="flex items-center gap-3 px-4 border-b border-gray-200">
           <Search size={18} className="text-gray-400 shrink-0" />
           <input ref={inputRef} type="text" value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="ابحث في الموديلات، الأقمشة، الاكسسوارات، الفواتير..."
+            placeholder="ابحث في النظام (الموديلات، العملاء، الموردين، الفواتير، الماكينات...)"
             className="flex-1 py-3.5 text-sm bg-transparent outline-none placeholder:text-gray-400" dir="rtl" />
           {query && <button onClick={() => setQuery('')}><X size={16} className="text-gray-400 hover:text-gray-600" /></button>}
           <button onClick={() => setOpen(false)} className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 font-mono">ESC</button>
@@ -113,7 +118,7 @@ export default function GlobalSearch() {
             <div className="text-center py-10 text-gray-400 text-xs space-y-1">
               <Search size={24} className="mx-auto mb-2 opacity-30" />
               <p>ابدأ بالكتابة للبحث</p>
-              <p className="text-[10px]">الموديلات • الأقمشة • الاكسسوارات • الفواتير</p>
+              <p className="text-[10px]">الموديلات • الأقمشة • العملاء • الموردين • الماكينات • الصيانة • المصاريف</p>
             </div>
           )}
         </div>
