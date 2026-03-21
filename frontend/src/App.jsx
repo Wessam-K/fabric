@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key, BookOpen, Scale, Bell } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key, BookOpen, Scale, Bell, Menu, X } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -37,6 +37,7 @@ import PaySlip from './pages/HR/PaySlip';
 import Profile from './pages/Profile';
 import ChangePassword from './pages/ChangePassword';
 import GlobalSearch from './components/GlobalSearch';
+import Breadcrumbs from './components/Breadcrumbs';
 import NotificationBell from './components/NotificationBell';
 import NotificationsPage from './pages/Notifications';
 import { ToastProvider } from './components/Toast';
@@ -58,6 +59,7 @@ function ProtectedRoute({ children, roles, perm }) {
 function AppLayout() {
   const { user, logout, can, ROLE_LABELS, ROLE_COLORS } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState(null);
   const location = useLocation();
 
@@ -148,8 +150,11 @@ function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-[#f8f9fb]">
+      {/* Mobile overlay */}
+      {mobileOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />}
+
       {/* Sidebar */}
-      <aside className={`${collapsed ? 'w-16' : 'w-56'} bg-[#1a1a2e] flex flex-col shrink-0 no-print transition-all duration-200`}>
+      <aside className={`${collapsed ? 'w-16' : 'w-56'} bg-[#1a1a2e] flex flex-col shrink-0 no-print transition-all duration-200 fixed lg:static inset-y-0 right-0 z-50 ${mobileOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
         {/* Header */}
         <div className={`flex items-center ${collapsed ? 'justify-center px-2' : 'px-4'} h-14 border-b border-white/8`}>
           {!collapsed && (
@@ -181,6 +186,7 @@ function AppLayout() {
             if (!group.id) {
               return visibleItems.map(item => (
                 <NavLink key={item.path} to={item.path} end={item.path === '/dashboard'}
+                  onClick={() => setMobileOpen(false)}
                   className={({ isActive }) =>
                     `flex items-center gap-2.5 ${collapsed ? 'justify-center px-2' : 'px-3'} py-2 rounded-lg text-[13px] transition-colors ${
                       isActive ? 'bg-[#c9a84c]/15 text-[#c9a84c]' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
@@ -213,6 +219,7 @@ function AppLayout() {
                   <div className="mr-4 mt-0.5 space-y-0.5 border-r border-white/8 pr-0">
                     {visibleItems.map(item => (
                       <NavLink key={item.path} to={item.path} end={item.path === '/models' || item.path === '/work-orders'}
+                        onClick={() => setMobileOpen(false)}
                         className={({ isActive }) =>
                           `flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] transition-colors ${
                             isActive ? 'text-[#c9a84c] bg-[#c9a84c]/10' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
@@ -268,6 +275,16 @@ function AppLayout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
+        {/* Mobile header */}
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 sticky top-0 z-30">
+          <button onClick={() => setMobileOpen(true)} className="text-[#1a1a2e]">
+            <Menu size={20} />
+          </button>
+          <span className="text-sm font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</span>
+        </div>
+        <div className="p-4 lg:p-0">
+          <Breadcrumbs />
+        </div>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />

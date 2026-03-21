@@ -17,6 +17,28 @@ export function LoadingState() {
   );
 }
 
+export function Skeleton({ className = '', count = 1 }) {
+  return Array.from({ length: count }, (_, i) => (
+    <div key={i} className={`animate-pulse bg-gray-200 rounded-xl ${className}`} />
+  ));
+}
+
+export function TableSkeleton({ rows = 5, cols = 4 }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="p-4 space-y-3">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex gap-4">
+            {Array.from({ length: cols }, (_, j) => (
+              <div key={j} className="animate-pulse bg-gray-200 rounded h-4 flex-1" />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function Tabs({ tabs, active, onChange }) {
   return (
     <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
