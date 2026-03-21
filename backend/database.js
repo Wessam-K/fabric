@@ -1499,6 +1499,40 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (14)`);
   }
+
+  // ──── V15 — Leave requests + Machine maintenance ────
+  const v15 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 15').get();
+  if (!v15) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS leave_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL REFERENCES employees(id),
+        leave_type TEXT NOT NULL DEFAULT 'annual',
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        reason TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by INTEGER,
+        reviewed_at TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS machine_maintenance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        machine_id INTEGER NOT NULL REFERENCES machines(id),
+        maintenance_type TEXT NOT NULL DEFAULT 'routine',
+        description TEXT,
+        cost REAL DEFAULT 0,
+        performed_by TEXT,
+        performed_at TEXT DEFAULT (datetime('now')),
+        next_due TEXT,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (15)`);
+  }
 }
 
 initializeDatabase();

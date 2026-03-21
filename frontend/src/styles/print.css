@@ -1,0 +1,96 @@
+@media print {
+  /* Hide non-printable elements */
+  aside, nav, .no-print,
+  button:not(.print-include),
+  .notification-bell,
+  .global-search,
+  .breadcrumbs,
+  .mobile-header,
+  [data-no-print] {
+    display: none !important;
+  }
+
+  /* Reset layout */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .page {
+    padding: 10mm !important;
+    gap: 4mm !important;
+  }
+
+  /* Cards & tables */
+  .card, .stat-card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    break-inside: avoid;
+  }
+
+  .data-table {
+    font-size: 9pt;
+  }
+
+  .data-table th {
+    background: #f0f0f0 !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Force colors on status badges */
+  .bg-green-100, .bg-blue-100, .bg-yellow-100, .bg-red-100, .bg-gray-100 {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Page breaks */
+  h2, h3, .section-title {
+    break-after: avoid;
+  }
+
+  table {
+    break-inside: auto;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  /* Print header */
+  @page {
+    margin: 15mm;
+    @top-center {
+      content: "WK-Hub — نظام إدارة المصنع";
+      font-size: 8pt;
+      color: #666;
+    }
+    @bottom-right {
+      content: counter(page) " / " counter(pages);
+      font-size: 8pt;
+      color: #666;
+    }
+  }
+
+  /* Force white backgrounds */
+  [class*="bg-"] {
+    background: white !important;
+  }
+
+  /* Ensure charts are printed */
+  .recharts-wrapper {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

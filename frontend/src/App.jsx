@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key, BookOpen, Scale, Bell, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -34,8 +34,14 @@ import Employees from './pages/HR/Employees';
 import Attendance from './pages/HR/Attendance';
 import Payroll from './pages/HR/Payroll';
 import PaySlip from './pages/HR/PaySlip';
+import Leaves from './pages/HR/Leaves';
 import Profile from './pages/Profile';
 import ChangePassword from './pages/ChangePassword';
+import StageTemplates from './pages/StageTemplates';
+import CustomerDetail from './pages/CustomerDetail';
+import SupplierDetail from './pages/SupplierDetail';
+import MachineDetail from './pages/MachineDetail';
+import NotFound from './pages/NotFound';
 import GlobalSearch from './components/GlobalSearch';
 import Breadcrumbs from './components/Breadcrumbs';
 import NotificationBell from './components/NotificationBell';
@@ -79,6 +85,7 @@ function AppLayout() {
         { path: '/work-orders/new', label: 'أمر جديد', icon: PlusCircle, hide: () => !can('work_orders', 'create') },
         { path: '/models', label: 'الموديلات', icon: List, hide: () => !can('models', 'view') },
         { path: '/machines', label: 'الماكينات', icon: Cog, hide: () => !can('machines', 'view') },
+        { path: '/stage-templates', label: 'قوالب المراحل', icon: Layers, hide: () => !can('settings', 'view') },
       ],
     },
     {
@@ -117,6 +124,7 @@ function AppLayout() {
         { path: '/hr/employees', label: 'الموظفون', icon: Users, hide: () => !can('hr', 'view') },
         { path: '/hr/attendance', label: 'الحضور', icon: Clock, hide: () => !can('hr', 'view') },
         { path: '/hr/payroll', label: 'الرواتب', icon: Banknote, hide: () => !can('payroll', 'view') },
+        { path: '/hr/leaves', label: 'الإجازات', icon: Calendar, hide: () => !can('hr', 'view') },
       ],
     },
     {
@@ -317,12 +325,18 @@ function AppLayout() {
           <Route path="/hr/attendance" element={<ProtectedRoute perm={['hr','view']}><Attendance /></ProtectedRoute>} />
           <Route path="/hr/payroll" element={<ProtectedRoute perm={['payroll','view']}><Payroll /></ProtectedRoute>} />
           <Route path="/hr/payroll/:periodId/slip/:employeeId" element={<ProtectedRoute perm={['payroll','view']}><PaySlip /></ProtectedRoute>} />
+          <Route path="/hr/leaves" element={<ProtectedRoute perm={['hr','view']}><Leaves /></ProtectedRoute>} />
+          <Route path="/stage-templates" element={<ProtectedRoute perm={['settings','view']}><StageTemplates /></ProtectedRoute>} />
+          <Route path="/customers/:id" element={<ProtectedRoute perm={['invoices','view']}><CustomerDetail /></ProtectedRoute>} />
+          <Route path="/suppliers/:id" element={<ProtectedRoute perm={['suppliers','view']}><SupplierDetail /></ProtectedRoute>} />
+          <Route path="/machines/:id" element={<ProtectedRoute perm={['machines','view']}><MachineDetail /></ProtectedRoute>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/change-password" element={<ChangePassword />} />
           {/* Legacy redirects */}
           <Route path="/workorders" element={<Navigate to="/work-orders" replace />} />
           <Route path="/workorders/:id" element={<Navigate to="/work-orders/:id" replace />} />
           <Route path="/purchaseorders" element={<Navigate to="/purchase-orders" replace />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
     </div>

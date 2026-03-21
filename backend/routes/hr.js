@@ -658,4 +658,58 @@ router.get('/adjustments/:employeeId', requireRole('superadmin', 'hr', 'manager'
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ═══════════════════════════════════════════════
+// LEAVE REQUESTS
+// ═══════════════════════════════════════════════
+
+// GET /api/hr/leaves
+router.get('/leaves', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+  try {
+    const leaves = db.prepare(`
+      SELECT lr.*, e.name as employee_name, e.code as employee_code
+      FROM leave_requests lr
+      LEFT JOIN employees e ON e.id = lr.employee_id
+      ORDER BY lr.created_at DESC
+    `).all();
+    res.json(leaves);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/hr/leaves
+router.post('/leaves', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+  try {
+    const { employee_id, leave_type, start_date, end_date, reason } = req.body;
+    if (!employee_id || !start_date || !end_date) return res.status(400).json({ error: 'الموظف وتواريخ الإجازة مطلوبة' });
+    const validTypes = ['annual', 'sick', 'unpaid', 'emergency'];
+    if (leave_type && !validTypes.includes(leave_type)) return res.status(400).json({ error: 'نوع الإجازة غير صالح' });
+
+    const result = db.prepare(`
+      INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, reason)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(employee_id, leave_type || 'annual', start_date, end_date, reason || null);
+
+    const leave = db.prepare(`
+      SELECT lr.*, e.name as employee_name FROM leave_requests lr
+      LEFT JOIN employees e ON e.id = lr.employee_id WHERE lr.id = ?
+    `).get(result.lastInsertRowid);
+    res.status(201).json(leave);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /api/hr/leaves/:id — approve/reject
+router.patch('/leaves/:id', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'الحالة غير صالحة' });
+    const leave = db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(req.params.id);
+    if (!leave) return res.status(404).json({ error: 'الطلب غير موجود' });
+    if (leave.status !== 'pending') return res.status(400).json({ error: 'لا يمكن تعديل طلب تمت مراجعته' });
+
+    db.prepare(`UPDATE leave_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?`)
+      .run(status, req.user?.id || null, req.params.id);
+
+    res.json({ message: status === 'approved' ? 'تم قبول الطلب' : 'تم رفض الطلب' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Search, Settings, Clock, Wrench, X, MapPin, Activity } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
@@ -123,7 +124,7 @@ export default function Machines() {
             <div key={m.id} className="bg-white rounded-2xl shadow-sm p-4 space-y-3 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="font-bold text-[#1a1a2e]">{m.name}</h3>
+                  <Link to={`/machines/${m.id}`} className="font-bold text-[#1a1a2e] hover:text-[#c9a84c] transition-colors block">{m.name}</Link>
                   <p className="text-xs text-gray-400 font-mono">{m.code}</p>
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${STATUS_COLOR[m.status] || STATUS_COLOR.inactive}`}>{STATUS_MAP[m.status] || m.status}</span>

@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Scissors, Gem, List, TrendingUp, Factory, Truck, DollarSign, Users, Clock, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
-import { PageHeader, KPIStrip, StatusBadge, MoneyDisplay, LoadingState, EmptyState } from '../components/ui';
+import { PageHeader, KPIStrip, StatusBadge, MoneyDisplay, LoadingState, EmptyState, Skeleton } from '../components/ui';
+
+const LazyCharts = lazy(() => import('../components/DashboardCharts'));
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -245,6 +247,13 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Charts Section */}
+      {data && (
+        <Suspense fallback={<Skeleton className="h-64 w-full" count={1} />}>
+          <LazyCharts data={data} />
+        </Suspense>
+      )}
 
       {/* Top Models & Stage Bottlenecks */}
       {(data?.top_models?.length > 0 || data?.stage_bottlenecks?.length > 0) && (

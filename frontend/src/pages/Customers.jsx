@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Search, Phone, Mail, MapPin, DollarSign, X, FileText, Users } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
@@ -138,7 +139,7 @@ export default function Customers() {
                   <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50/50">
                     <td className="px-4 py-3 font-mono text-xs font-bold">{c.code}</td>
                     <td className="px-4 py-3">
-                      <span className="font-bold text-[#1a1a2e]">{c.name}</span>
+                      <Link to={`/customers/${c.id}`} className="font-bold text-[#1a1a2e] hover:text-[#c9a84c] transition-colors">{c.name}</Link>
                       {c.contact_name && <span className="text-xs text-gray-400 mr-2">• {c.contact_name}</span>}
                       {c.email && <span className="text-xs text-gray-400 mr-2">• {c.email}</span>}
                     </td>

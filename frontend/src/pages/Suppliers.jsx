@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Search, Star, Phone, Mail, Building2, DollarSign, X } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
@@ -134,7 +135,7 @@ export default function Suppliers() {
                   <tr key={s.id} className="border-t border-gray-100 hover:bg-gray-50/50">
                     <td className="px-4 py-3 font-mono text-xs font-bold">{s.code}</td>
                     <td className="px-4 py-3">
-                      <span className="font-bold text-[#1a1a2e]">{s.name}</span>
+                      <Link to={`/suppliers/${s.id}`} className="font-bold text-[#1a1a2e] hover:text-[#c9a84c] transition-colors">{s.name}</Link>
                       {s.contact_name && <span className="text-xs text-gray-400 mr-2">• {s.contact_name}</span>}
                     </td>
                     <td className="px-4 py-3 text-center"><span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded">{TYPE_MAP[s.supplier_type]}</span></td>

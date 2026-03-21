@@ -156,4 +156,38 @@ router.delete('/:id', (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════
+// MAINTENANCE LOG
+// ═══════════════════════════════════════════════
+
+// GET /api/machines/:id/maintenance
+router.get('/:id/maintenance', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM machine_maintenance WHERE machine_id = ? ORDER BY performed_at DESC').all(req.params.id);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/machines/:id/maintenance
+router.post('/:id/maintenance', (req, res) => {
+  try {
+    const machine = db.prepare('SELECT id FROM machines WHERE id = ?').get(req.params.id);
+    if (!machine) return res.status(404).json({ error: 'الماكينة غير موجودة' });
+
+    const { maintenance_type, description, cost, performed_by, performed_at, next_due, notes } = req.body;
+    if (!maintenance_type) return res.status(400).json({ error: 'نوع الصيانة مطلوب' });
+
+    const validTypes = ['routine', 'repair', 'emergency', 'calibration'];
+    if (!validTypes.includes(maintenance_type)) return res.status(400).json({ error: 'نوع الصيانة غير صالح' });
+
+    const result = db.prepare(`
+      INSERT INTO machine_maintenance (machine_id, maintenance_type, description, cost, performed_by, performed_at, next_due, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(req.params.id, maintenance_type, description || null, cost || 0, performed_by || null,
+      performed_at || new Date().toISOString(), next_due || null, notes || null);
+
+    res.status(201).json(db.prepare('SELECT * FROM machine_maintenance WHERE id = ?').get(result.lastInsertRowid));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
