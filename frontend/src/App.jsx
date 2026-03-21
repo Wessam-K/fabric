@@ -22,6 +22,7 @@ import Customers from './pages/Customers';
 import Machines from './pages/Machines';
 import PurchaseOrders from './pages/PurchaseOrders';
 import FabricInventory from './pages/FabricInventory';
+import AccessoryInventory from './pages/AccessoryInventory';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import UsersPage from './pages/Users';
@@ -83,6 +84,7 @@ function AppLayout() {
         { path: '/fabrics', label: 'الأقمشة', icon: Scissors, hide: () => !can('fabrics', 'view') },
         { path: '/accessories', label: 'الاكسسوارات', icon: Gem, hide: () => !can('accessories', 'view') },
         { path: '/inventory/fabrics', label: 'مخزون الأقمشة', icon: Warehouse, hide: () => !can('inventory', 'view') },
+        { path: '/inventory/accessories', label: 'مخزون الاكسسوارات', icon: Package, hide: () => !can('inventory', 'view') },
       ],
     },
     {
@@ -268,6 +270,7 @@ function AppLayout() {
           <Route path="/fabrics" element={<ProtectedRoute perm={['fabrics','view']}><Fabrics /></ProtectedRoute>} />
           <Route path="/accessories" element={<ProtectedRoute perm={['accessories','view']}><Accessories /></ProtectedRoute>} />
           <Route path="/inventory/fabrics" element={<ProtectedRoute perm={['inventory','view']}><FabricInventory /></ProtectedRoute>} />
+          <Route path="/inventory/accessories" element={<ProtectedRoute perm={['inventory','view']}><AccessoryInventory /></ProtectedRoute>} />
           <Route path="/work-orders" element={<ProtectedRoute perm={['work_orders','view']}><WorkOrdersList /></ProtectedRoute>} />
           <Route path="/work-orders/new" element={<ProtectedRoute perm={['work_orders','create']}><WorkOrderForm /></ProtectedRoute>} />
           <Route path="/work-orders/:id/edit" element={<ProtectedRoute perm={['work_orders','edit']}><WorkOrderForm /></ProtectedRoute>} />

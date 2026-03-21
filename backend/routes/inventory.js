@@ -51,4 +51,22 @@ router.get('/batches', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/inventory/accessory-stock — aggregated accessory inventory
+router.get('/accessory-stock', (req, res) => {
+  try {
+    const { search, type, low_stock_only } = req.query;
+    let q = `SELECT a.code, a.name, a.acc_type, a.unit, a.unit_price, a.image_path,
+      a.quantity_on_hand, a.low_stock_threshold, a.reorder_qty,
+      (a.quantity_on_hand <= a.low_stock_threshold) as is_low_stock,
+      (SELECT COUNT(*) FROM accessory_stock_movements asm WHERE asm.accessory_code=a.code) as movement_count
+      FROM accessories a WHERE a.status='active'`;
+    const p = [];
+    if (type) { q += ' AND a.acc_type=?'; p.push(type); }
+    if (search) { q += ' AND (a.code LIKE ? OR a.name LIKE ?)'; p.push(`%${search}%`, `%${search}%`); }
+    if (low_stock_only === '1') q += ' AND a.quantity_on_hand <= a.low_stock_threshold';
+    q += ' ORDER BY a.quantity_on_hand ASC';
+    res.json(db.prepare(q).all(...p));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

@@ -672,4 +672,38 @@ router.get('/machines', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/ar-aging — accounts receivable aging
+router.get('/ar-aging', (req, res) => {
+  try {
+    const invoices = db.prepare(`
+      SELECT i.id, i.invoice_number, i.customer_name, i.total, i.status, i.due_date, i.created_at,
+        COALESCE(cp.total_paid, 0) as paid_amount,
+        (i.total - COALESCE(cp.total_paid, 0)) as outstanding
+      FROM invoices i
+      LEFT JOIN (SELECT invoice_id, SUM(amount) as total_paid FROM customer_payments GROUP BY invoice_id) cp ON cp.invoice_id=i.id
+      WHERE i.status NOT IN ('cancelled','paid') AND (i.total - COALESCE(cp.total_paid, 0)) > 0
+      ORDER BY i.due_date ASC
+    `).all();
+
+    const now = new Date();
+    const buckets = { current: [], days_30: [], days_60: [], days_90: [], over_90: [] };
+    let totals = { current: 0, days_30: 0, days_60: 0, days_90: 0, over_90: 0, grand_total: 0 };
+
+    for (const inv of invoices) {
+      const due = inv.due_date ? new Date(inv.due_date) : new Date(inv.created_at);
+      const daysOverdue = Math.max(0, Math.floor((now - due) / 86400000));
+      inv.days_overdue = daysOverdue;
+
+      if (daysOverdue <= 0) { buckets.current.push(inv); totals.current += inv.outstanding; }
+      else if (daysOverdue <= 30) { buckets.days_30.push(inv); totals.days_30 += inv.outstanding; }
+      else if (daysOverdue <= 60) { buckets.days_60.push(inv); totals.days_60 += inv.outstanding; }
+      else if (daysOverdue <= 90) { buckets.days_90.push(inv); totals.days_90 += inv.outstanding; }
+      else { buckets.over_90.push(inv); totals.over_90 += inv.outstanding; }
+      totals.grand_total += inv.outstanding;
+    }
+
+    res.json({ buckets, totals, total_invoices: invoices.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

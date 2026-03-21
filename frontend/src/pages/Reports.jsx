@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon, CheckCircle, Settings } from 'lucide-react';
+import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon, CheckCircle, Settings, CreditCard } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
@@ -27,6 +27,7 @@ const TABS = [
   { key: 'quality', label: 'تقرير الجودة', icon: CheckCircle },
   { key: 'machines-report', label: 'تقرير الماكينات', icon: Settings },
   { key: 'inventory-status', label: 'حالة المخزون', icon: Warehouse },
+  { key: 'ar-aging', label: 'أعمار الديون', icon: CreditCard },
   { key: 'pivot', label: 'جدول محوري', icon: Table2 },
 ];
 
@@ -76,6 +77,7 @@ export default function Reports() {
   const [qualityData, setQualityData] = useState(null);
   const [machinesReport, setMachinesReport] = useState(null);
   const [inventoryStatus, setInventoryStatus] = useState(null);
+  const [arAgingData, setArAgingData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -145,6 +147,9 @@ export default function Reports() {
         } else if (tab === 'inventory-status') {
           const { data } = await api.get('/reports/inventory-status');
           setInventoryStatus(data);
+        } else if (tab === 'ar-aging') {
+          const { data } = await api.get('/reports/ar-aging');
+          setArAgingData(data);
         } else if (tab === 'pivot') {
           setLoading(false); return; // PivotTable loads its own data
         }
@@ -1088,6 +1093,74 @@ export default function Reports() {
     );
   };
 
+  const renderARaging = () => {
+    if (!arAgingData) return null;
+    const { buckets, totals, grand_total } = arAgingData;
+    const BUCKET_LABELS = { current: 'حالي (غير مستحق)', days_30: '0-30 يوم', days_60: '31-60 يوم', days_90: '61-90 يوم', over_90: '+90 يوم' };
+    const BUCKET_COLORS = { current: 'bg-green-50 text-green-600', days_30: 'bg-blue-50 text-blue-600', days_60: 'bg-yellow-50 text-yellow-700', days_90: 'bg-orange-50 text-orange-600', over_90: 'bg-red-50 text-red-600' };
+    const allInvoices = Object.entries(buckets).flatMap(([bk, arr]) => arr.map(inv => ({ ...inv, bucket: bk })));
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-bold text-[#1a1a2e]">تقرير أعمار الديون (AR Aging)</h3>
+          <button onClick={() => downloadCSV(allInvoices.map(inv => ({ 'رقم الفاتورة': inv.invoice_number, 'العميل': inv.customer_name, 'المبلغ': inv.total_amount, 'المدفوع': inv.paid_amount, 'المتبقي': inv.remaining, 'تاريخ الاستحقاق': inv.due_date, 'أيام التأخير': inv.days_overdue })), 'ar-aging')} className="btn btn-ghost text-xs">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {Object.entries(BUCKET_LABELS).map(([bk, label]) => (
+            <div key={bk} className="bg-white rounded-2xl shadow-sm p-4">
+              <p className="text-[10px] text-gray-400 mb-1">{label}</p>
+              <p className={`text-xl font-bold font-mono ${BUCKET_COLORS[bk]?.split(' ')[1] || ''}`}>{Math.round(totals[bk] || 0).toLocaleString('ar-EG')} ج</p>
+              <p className="text-[10px] text-gray-300">{(buckets[bk] || []).length} فاتورة</p>
+            </div>
+          ))}
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-4">
+          <p className="text-sm font-bold text-[#1a1a2e] mb-1">إجمالي المستحقات</p>
+          <p className="text-3xl font-bold font-mono text-[#c9a84c]">{Math.round(grand_total).toLocaleString('ar-EG')} ج</p>
+        </div>
+        {Object.entries(BUCKET_LABELS).map(([bk, label]) => {
+          const items = buckets[bk] || [];
+          if (!items.length) return null;
+          return (
+            <div key={bk} className="space-y-2">
+              <h4 className={`text-sm font-bold px-2 py-1 rounded-lg inline-block ${BUCKET_COLORS[bk]}`}>{label} ({items.length})</h4>
+              <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-right text-xs text-gray-500">رقم الفاتورة</th>
+                      <th className="px-4 py-2 text-right text-xs text-gray-500">العميل</th>
+                      <th className="px-4 py-2 text-center text-xs text-gray-500">المبلغ</th>
+                      <th className="px-4 py-2 text-center text-xs text-gray-500">المدفوع</th>
+                      <th className="px-4 py-2 text-center text-xs text-gray-500">المتبقي</th>
+                      <th className="px-4 py-2 text-center text-xs text-gray-500">تاريخ الاستحقاق</th>
+                      <th className="px-4 py-2 text-center text-xs text-gray-500">أيام التأخير</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((inv, i) => (
+                      <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                        <td className="px-4 py-2 font-mono text-xs font-bold">{inv.invoice_number}</td>
+                        <td className="px-4 py-2 font-bold text-[#1a1a2e]">{inv.customer_name}</td>
+                        <td className="px-4 py-2 text-center font-mono">{Math.round(inv.total_amount).toLocaleString('ar-EG')} ج</td>
+                        <td className="px-4 py-2 text-center font-mono text-green-600">{Math.round(inv.paid_amount).toLocaleString('ar-EG')} ج</td>
+                        <td className="px-4 py-2 text-center font-mono font-bold text-red-500">{Math.round(inv.remaining).toLocaleString('ar-EG')} ج</td>
+                        <td className="px-4 py-2 text-center text-xs text-gray-500">{inv.due_date || '—'}</td>
+                        <td className="px-4 py-2 text-center font-mono text-xs">{inv.days_overdue}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="page">
       <PageHeader title="مركز التقارير" subtitle="تحليلات وإحصائيات المصنع — جدول محوري وتقارير متقدمة" />
@@ -1148,6 +1221,7 @@ export default function Reports() {
           {tab === 'quality' && renderQuality()}
           {tab === 'machines-report' && renderMachinesReport()}
           {tab === 'inventory-status' && renderInventoryStatus()}
+          {tab === 'ar-aging' && renderARaging()}
           {tab === 'pivot' && <PivotTable />}
         </>
       )}
