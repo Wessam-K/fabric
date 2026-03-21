@@ -64,7 +64,7 @@ export default function AuditLog() {
         <select value={filters.entity_type} onChange={e => { setFilters({ ...filters, entity_type: e.target.value }); setPage(1); }}
           className="px-3 py-2.5 border rounded-xl text-sm">
           <option value="">جميع الأنواع</option>
-          {['user', 'work_order', 'invoice', 'model', 'fabric', 'accessory', 'supplier', 'po', 'employee', 'attendance_import', 'payroll_period', 'hr_adjustment'].map(t =>
+          {['user', 'work_order', 'invoice', 'model', 'fabric', 'accessory', 'supplier', 'po', 'employee', 'attendance_import', 'payroll_period', 'hr_adjustment', 'expenses', 'maintenance_orders', 'machines'].map(t =>
             <option key={t} value={t}>{t}</option>
           )}
         </select>
