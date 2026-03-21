@@ -126,8 +126,9 @@ function seed() {
   // Disable FK constraints during seed
   db.pragma('foreign_keys = OFF');
 
-  // ──────────── Clear data (all tables including V9) ────────────
+  // ──────────── Clear data (all tables including V15) ────────────
   const tables = [
+    'machine_maintenance', 'leave_requests', 'journal_entry_lines', 'journal_entries',
     'fabric_stock_movements', 'accessory_stock_movements', 'notifications',
     'user_permissions', 'hr_adjustments', 'payroll_records', 'payroll_periods',
     'attendance', 'attendance_imports',
@@ -635,13 +636,90 @@ function seed() {
   insFSM.run('LNG-001', 'in', 20, batch3.lastInsertRowid, 'po', po4.lastInsertRowid, 'استلام من PO-2026-004');
   insFSM.run('SLK-001', 'out', 5, null, 'work_order', wo1id, 'صرف لأمر تشغيل WO-2026-001');
 
+  // ──────────── Machines ────────────
+  const insMachine = db.prepare('INSERT INTO machines (code, name, machine_type, location, status, notes) VALUES (?,?,?,?,?,?)');
+  const mach1 = insMachine.run('MCH-001', 'ماكينة خياطة جوكي DDL-8700', 'sewing', 'خط إنتاج 1', 'active', 'ماكينة خياطة مستقيمة عالية السرعة — Juki');
+  const mach2 = insMachine.run('MCH-002', 'ماكينة خياطة جوكي MO-6816S', 'sewing', 'خط إنتاج 1', 'active', 'ماكينة أوفرلوك 5 خيوط — Juki');
+  const mach3 = insMachine.run('MCH-003', 'ماكينة قص كايمر KM', 'cutting', 'قسم القص', 'active', 'ماكينة قص كهربائية — Kaimer');
+  const mach4 = insMachine.run('MCH-004', 'مكبس بخار فيت VEIT 8363', 'pressing', 'قسم الكوي', 'active', 'مكبس بخار صناعي — Veit');
+  const mach5 = insMachine.run('MCH-005', 'ماكينة خياطة براذر S-7220C', 'sewing', 'خط إنتاج 2', 'active', 'ماكينة خياطة مستقيمة إلكترونية — Brother');
+  const mach6 = insMachine.run('MCH-006', 'ماكينة تطريز تاجيما TMEZ-SC', 'embroidery', 'قسم التطريز', 'active', 'ماكينة تطريز 6 رؤوس — Tajima');
+  const mach7 = insMachine.run('MCH-007', 'ماكينة عراوي جوكي LBH-1790', 'sewing', 'خط إنتاج 1', 'maintenance', 'ماكينة عراوي أوتوماتيكية — في الصيانة — Juki');
+  const mach8 = insMachine.run('MCH-008', 'ماكينة قص ليزر Golden Laser', 'cutting', 'قسم القص', 'inactive', 'معطلة — في انتظار قطع غيار — Golden Laser');
+
+  // ──────────── Machine Maintenance ────────────
+  const insMaint = db.prepare('INSERT INTO machine_maintenance (machine_id, maintenance_type, description, performed_by, performed_at, cost, next_due, notes) VALUES (?,?,?,?,?,?,?,?)');
+  insMaint.run(mach1.lastInsertRowid, 'routine', 'صيانة دورية — تنظيف وتزييت', 'فني الصيانة أحمد', '2025-05-01', 150, '2025-08-01', 'تم تغيير الزيت والإبرة');
+  insMaint.run(mach2.lastInsertRowid, 'routine', 'صيانة دورية — فحص شامل', 'فني الصيانة أحمد', '2025-04-15', 200, '2025-07-15', 'تم ضبط التوتر');
+  insMaint.run(mach3.lastInsertRowid, 'repair', 'إصلاح شفرة القص', 'فني خارجي — محمود', '2025-03-20', 450, '2025-09-20', 'تم تغيير الشفرة بالكامل');
+  insMaint.run(mach4.lastInsertRowid, 'routine', 'تنظيف خطوط البخار', 'فني الصيانة أحمد', '2025-05-10', 180, '2025-08-10', null);
+  insMaint.run(mach7.lastInsertRowid, 'repair', 'إصلاح محرك العراوي', 'فني خارجي — كريم', '2025-06-01', 1200, '2025-09-01', 'في انتظار قطعة غيار');
+  insMaint.run(mach6.lastInsertRowid, 'routine', 'صيانة دورية — تنظيف الرؤوس', 'فني الصيانة أحمد', '2025-05-20', 300, '2025-08-20', 'تم تنظيف جميع الرؤوس الست');
+
+  // ──────────── Leave Requests ────────────
+  const empIds = db.prepare('SELECT id, full_name FROM employees LIMIT 15').all();
+  const insLeave = db.prepare('INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, reason, status, reviewed_by, reviewed_at) VALUES (?,?,?,?,?,?,?,?)');
+  if (empIds.length >= 5) {
+    insLeave.run(empIds[0].id, 'annual', '2025-07-01', '2025-07-05', 'إجازة سنوية — سفر عائلي', 'approved', admin_id, '2025-06-20');
+    insLeave.run(empIds[1].id, 'sick', '2025-06-15', '2025-06-17', 'إجازة مرضية — تم تقديم تقرير طبي', 'approved', admin_id, '2025-06-15');
+    insLeave.run(empIds[2].id, 'annual', '2025-08-10', '2025-08-14', 'إجازة سنوية', 'pending', null, null);
+    insLeave.run(empIds[3].id, 'annual', '2025-06-25', '2025-06-26', 'ظروف شخصية', 'approved', admin_id, '2025-06-24');
+    insLeave.run(empIds[4].id, 'annual', '2025-09-01', '2025-09-10', 'إجازة سنوية طويلة — فترة ذروة', 'pending', null, null);
+    insLeave.run(empIds[0].id, 'sick', '2025-05-20', '2025-05-20', 'صداع شديد', 'approved', admin_id, '2025-05-20');
+    insLeave.run(empIds[2].id, 'annual', '2025-04-10', '2025-04-11', 'ظروف طارئة', 'approved', admin_id, '2025-04-10');
+  }
+
+  // ──────────── Journal Entries (sample accounting) ────────────
+  const insJE = db.prepare('INSERT INTO journal_entries (entry_number, entry_date, description, reference, status, created_by) VALUES (?,?,?,?,?,?)');
+
+  // Look up account IDs from chart_of_accounts
+  const getAccId = (code) => {
+    const row = db.prepare('SELECT id FROM chart_of_accounts WHERE code = ?').get(code);
+    return row ? row.id : null;
+  };
+  const insJEL = db.prepare('INSERT INTO journal_entry_lines (entry_id, account_id, description, debit, credit) VALUES (?,?,?,?,?)');
+
+  // JE1: Purchase invoice payment
+  const je1 = insJE.run('JE-2025-001', '2025-05-15', 'سداد فاتورة مشتريات أقمشة — PO-2026-001', 'PO-2026-001', 'posted', admin_id);
+  const accCash = getAccId('1000') || getAccId('1100');
+  const accInventory = getAccId('1300');
+  if (accCash && accInventory) {
+    insJEL.run(je1.lastInsertRowid, accInventory, 'تكلفة أقمشة', 12500, 0);
+    insJEL.run(je1.lastInsertRowid, accCash, 'نقدية — بنك', 0, 12500);
+  }
+
+  // JE2: Sales revenue
+  const je2 = insJE.run('JE-2025-002', '2025-05-20', 'إيراد مبيعات — فاتورة INV-001', 'INV-001', 'posted', admin_id);
+  const accAR = getAccId('1200');
+  const accRevenue = db.prepare("SELECT id FROM chart_of_accounts WHERE type = 'revenue' LIMIT 1").get();
+  if (accAR && accRevenue) {
+    insJEL.run(je2.lastInsertRowid, accAR, 'حسابات العملاء', 45000, 0);
+    insJEL.run(je2.lastInsertRowid, accRevenue.id, 'إيرادات مبيعات', 0, 45000);
+  }
+
+  // JE3: Salary payment
+  const je3 = insJE.run('JE-2025-003', '2025-05-30', 'صرف رواتب شهر مايو 2025', null, 'posted', admin_id);
+  const accSalary = getAccId('5100');
+  if (accSalary && accCash) {
+    insJEL.run(je3.lastInsertRowid, accSalary, 'مصروفات رواتب', 85000, 0);
+    insJEL.run(je3.lastInsertRowid, accCash, 'نقدية — بنك', 0, 85000);
+  }
+
+  // JE4: Draft entry
+  const je4 = insJE.run('JE-2025-004', '2025-06-10', 'مصروفات صيانة معدات', null, 'draft', admin_id);
+  const accMaint = getAccId('5200');
+  if (accMaint && accCash) {
+    insJEL.run(je4.lastInsertRowid, accMaint, 'مصروفات صيانة', 2500, 0);
+    insJEL.run(je4.lastInsertRowid, accCash, 'نقدية — بنك', 0, 2500);
+  }
+
   // ──────────── Summary ────────────
   const counts = {};
-  for (const [key, table] of [['settings','settings'],['stageTemplates','stage_templates'],['customers','customers'],['suppliers','suppliers'],['fabrics','fabrics'],['accessories','accessories'],['models','models'],['bomTemplates','bom_templates'],['workOrders','work_orders'],['woStages','wo_stages'],['purchaseOrders','purchase_orders'],['invoices','invoices'],['fabricBatches','fabric_inventory_batches'],['employees','employees'],['users','users'],['attendance','attendance'],['payrollPeriods','payroll_periods'],['payrollRecords','payroll_records'],['hrAdjustments','hr_adjustments'],['notifications','notifications'],['accStockMvts','accessory_stock_movements'],['fabStockMvts','fabric_stock_movements'],['auditLog','audit_log']]) {
+  for (const [key, table] of [['settings','settings'],['stageTemplates','stage_templates'],['customers','customers'],['suppliers','suppliers'],['fabrics','fabrics'],['accessories','accessories'],['models','models'],['bomTemplates','bom_templates'],['workOrders','work_orders'],['woStages','wo_stages'],['purchaseOrders','purchase_orders'],['invoices','invoices'],['fabricBatches','fabric_inventory_batches'],['employees','employees'],['users','users'],['attendance','attendance'],['payrollPeriods','payroll_periods'],['payrollRecords','payroll_records'],['hrAdjustments','hr_adjustments'],['notifications','notifications'],['accStockMvts','accessory_stock_movements'],['fabStockMvts','fabric_stock_movements'],['auditLog','audit_log'],['machines','machines'],['maintenance','machine_maintenance'],['leaveRequests','leave_requests'],['journalEntries','journal_entries'],['journalLines','journal_entry_lines']]) {
     counts[key] = db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get().c;
   }
 
-  console.log(`Seed complete! (v9)
+  console.log(`Seed complete! (v15)
   - ${counts.settings} settings
   - ${counts.stageTemplates} stage templates
   - ${counts.customers} customers
@@ -664,6 +742,11 @@ function seed() {
   - ${counts.notifications} notifications
   - ${counts.accStockMvts} accessory stock movements
   - ${counts.fabStockMvts} fabric stock movements
+  - ${counts.machines} machines
+  - ${counts.maintenance} machine maintenance records
+  - ${counts.leaveRequests} leave requests
+  - ${counts.journalEntries} journal entries
+  - ${counts.journalLines} journal entry lines
   - ${counts.auditLog} audit log entries`);
 
   console.log('\nLogin credentials (all passwords: 123456):');

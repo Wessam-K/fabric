@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Package, AlertTriangle, Search, RefreshCw } from 'lucide-react';
+import { Package, AlertTriangle, Search, RefreshCw, Edit3 } from 'lucide-react';
 import api from '../utils/api';
+import { useToast } from '../components/Toast';
 import { PageHeader, LoadingState } from '../components/ui';
+import ExportButton from '../components/ExportButton';
 
 const ACC_TYPE_LABELS = {
   button: 'أزرار', zipper: 'سوست', thread: 'خيوط', label: 'ليبلات',
@@ -10,13 +12,16 @@ const ACC_TYPE_LABELS = {
 const TYPES = [{ value: '', label: 'الكل' }, ...Object.entries(ACC_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))];
 
 export default function AccessoryInventory() {
+  const toast = useToast();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
+  const [adjustModal, setAdjustModal] = useState(null);
+  const [adjustForm, setAdjustForm] = useState({ qty_change: '', notes: '' });
 
-  const fetch = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
       const params = {};
@@ -28,7 +33,18 @@ export default function AccessoryInventory() {
     } catch {} finally { setLoading(false); }
   };
 
-  useEffect(() => { fetch(); }, [search, filterType, lowOnly]);
+  useEffect(() => { fetchData(); }, [search, filterType, lowOnly]);
+
+  const handleAdjust = async () => {
+    if (!adjustForm.qty_change || parseInt(adjustForm.qty_change) === 0) { toast.error('الكمية مطلوبة'); return; }
+    try {
+      await api.post(`/accessories/${adjustModal.code}/stock/adjust`, adjustForm);
+      toast.success('تم تعديل المخزون');
+      setAdjustModal(null);
+      setAdjustForm({ qty_change: '', notes: '' });
+      fetchData();
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
 
   const totalValue = items.reduce((s, a) => s + (a.quantity_on_hand || 0) * (a.unit_price || 0), 0);
   const lowCount = items.filter(a => a.is_low_stock).length;
@@ -36,7 +52,10 @@ export default function AccessoryInventory() {
   return (
     <div className="page">
       <PageHeader title="مخزون الاكسسوارات" subtitle={`${items.length} صنف · ${lowCount} منخفض المخزون`}
-        actions={<button onClick={fetch} className="btn btn-ghost"><RefreshCw size={14} /> تحديث</button>}
+        actions={<div className="flex items-center gap-2">
+          <ExportButton data={items} filename="accessory-inventory" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'acc_type',label:'النوع'},{key:'quantity_on_hand',label:'الكمية'},{key:'low_stock_threshold',label:'الحد الأدنى'},{key:'unit_price',label:'سعر الوحدة'}]} />
+          <button onClick={fetchData} className="btn btn-ghost"><RefreshCw size={14} /> تحديث</button>
+        </div>}
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -81,6 +100,7 @@ export default function AccessoryInventory() {
                 <th className="px-4 py-3 text-center text-xs text-gray-500">سعر الوحدة</th>
                 <th className="px-4 py-3 text-center text-xs text-gray-500">القيمة</th>
                 <th className="px-4 py-3 text-center text-xs text-gray-500">الحالة</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">تعديل</th>
               </tr>
             </thead>
             <tbody>
@@ -102,13 +122,44 @@ export default function AccessoryInventory() {
                       <span className="text-[10px] bg-green-100 text-green-600 px-2 py-0.5 rounded-full">جيد</span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-center">
+                    <button onClick={() => { setAdjustModal(a); setAdjustForm({ qty_change: '', notes: '' }); }}
+                      className="p-1.5 text-gray-400 hover:text-[#c9a84c] hover:bg-amber-50 rounded-lg transition-colors">
+                      <Edit3 size={14} />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {items.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-12 text-gray-400">لا توجد بيانات</td></tr>
+                <tr><td colSpan={9} className="text-center py-12 text-gray-400">لا توجد بيانات</td></tr>
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Stock Adjustment Modal */}
+      {adjustModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setAdjustModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-[#1a1a2e]">تعديل مخزون: {adjustModal.name}</h3>
+            <p className="text-xs text-gray-400">المخزون الحالي: <span className="font-mono font-bold">{adjustModal.quantity_on_hand || 0}</span></p>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">التعديل (+ إضافة / - سحب) *</label>
+              <input type="number" value={adjustForm.qty_change} onChange={e => setAdjustForm({...adjustForm, qty_change: e.target.value})}
+                placeholder="مثال: +50 أو -10"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:border-[#c9a84c] outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">ملاحظات</label>
+              <input type="text" value={adjustForm.notes} onChange={e => setAdjustForm({...adjustForm, notes: e.target.value})}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setAdjustModal(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
+              <button onClick={handleAdjust} className="px-5 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold">تنفيذ</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

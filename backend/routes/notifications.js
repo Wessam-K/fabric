@@ -58,6 +58,47 @@ router.get('/count', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /api/notifications/check-overdue — auto-generate notifications for overdue invoices & low stock
+router.post('/check-overdue', (req, res) => {
+  try {
+    const userId = req.user ? req.user.id : null;
+    let created = 0;
+    const insNotif = db.prepare('INSERT INTO notifications (user_id, type, title, message, related_type, related_id) VALUES (?,?,?,?,?,?)');
+
+    // Overdue invoices
+    const overdue = db.prepare(`SELECT id, invoice_number, customer_name, due_date FROM invoices WHERE status IN ('sent','partial') AND due_date < date('now')`).all();
+    for (const inv of overdue) {
+      const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND related_type=? AND related_id=? AND type=? AND created_at > datetime("now","-1 day")').get(userId, 'invoice', inv.id, 'overdue_invoice');
+      if (!exists) {
+        insNotif.run(userId, 'overdue_invoice', 'فاتورة متأخرة', `الفاتورة ${inv.invoice_number} (${inv.customer_name}) متأخرة منذ ${inv.due_date}`, 'invoice', inv.id);
+        created++;
+      }
+    }
+
+    // Low stock accessories
+    const lowStock = db.prepare('SELECT code, name, quantity_on_hand, low_stock_threshold FROM accessories WHERE quantity_on_hand <= low_stock_threshold AND status = "active"').all();
+    for (const acc of lowStock) {
+      const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND related_type=? AND related_id=? AND type=? AND created_at > datetime("now","-1 day")').get(userId, 'accessory', acc.code, 'low_stock');
+      if (!exists) {
+        insNotif.run(userId, 'low_stock', 'مخزون منخفض', `${acc.name} (${acc.code}) — الكمية: ${acc.quantity_on_hand} أقل من الحد الأدنى ${acc.low_stock_threshold}`, 'accessory', acc.code);
+        created++;
+      }
+    }
+
+    // Overdue maintenance
+    const overdueMaint = db.prepare(`SELECT mm.id, mm.next_maintenance_date, m.name as machine_name FROM machine_maintenance mm JOIN machines m ON m.id=mm.machine_id WHERE mm.next_maintenance_date < date('now') AND m.status='active'`).all();
+    for (const mt of overdueMaint) {
+      const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND related_type=? AND related_id=? AND type=? AND created_at > datetime("now","-1 day")').get(userId, 'maintenance', mt.id, 'overdue_maintenance');
+      if (!exists) {
+        insNotif.run(userId, 'overdue_maintenance', 'صيانة متأخرة', `${mt.machine_name} — موعد الصيانة كان ${mt.next_maintenance_date}`, 'maintenance', mt.id);
+        created++;
+      }
+    }
+
+    res.json({ message: `تم إنشاء ${created} إشعار جديد`, created });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Generate automatic notifications for low stock, overdue WOs, overdue invoices
 function generateNotifications() {
   try {

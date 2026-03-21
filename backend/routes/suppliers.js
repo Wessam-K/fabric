@@ -6,7 +6,7 @@ const { logAudit } = require('../middleware/auth');
 // GET /api/suppliers — list
 router.get('/', (req, res) => {
   try {
-    const { search, type, status } = req.query;
+    const { search, type, status, page, limit } = req.query;
     let q = 'SELECT * FROM suppliers WHERE 1=1';
     const p = [];
     if (type) { q += ' AND supplier_type = ?'; p.push(type); }
@@ -17,13 +17,29 @@ router.get('/', (req, res) => {
       const s = `%${search}%`; p.push(s, s, s, s);
     }
     q += ' ORDER BY created_at DESC';
-    const suppliers = db.prepare(q).all(...p);
 
     const balanceStmt = db.prepare(`SELECT
       COALESCE(SUM(total_amount),0) as total_ordered
       FROM purchase_orders WHERE supplier_id=? AND status NOT IN ('cancelled','draft')`);
     const paidStmt = db.prepare(`SELECT COALESCE(SUM(amount),0) as total_paid FROM supplier_payments WHERE supplier_id=?`);
 
+    if (page && limit) {
+      const countQ = q.replace('SELECT *', 'SELECT COUNT(*) as total');
+      const total = db.prepare(countQ).get(...p).total;
+      const pg = parseInt(page) || 1;
+      const lim = parseInt(limit) || 25;
+      q += ' LIMIT ? OFFSET ?';
+      p.push(lim, (pg - 1) * lim);
+      const suppliers = db.prepare(q).all(...p);
+      const data = suppliers.map(s => {
+        const ord = balanceStmt.get(s.id);
+        const pd = paidStmt.get(s.id);
+        return { ...s, total_ordered: ord.total_ordered, total_paid: pd.total_paid, balance: ord.total_ordered - pd.total_paid };
+      });
+      return res.json({ data, total, page: pg, totalPages: Math.ceil(total / lim) });
+    }
+
+    const suppliers = db.prepare(q).all(...p);
     const result = suppliers.map(s => {
       const ord = balanceStmt.get(s.id);
       const pd = paidStmt.get(s.id);

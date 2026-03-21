@@ -1293,6 +1293,7 @@ function runMigrations() {
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (10)`);
 
     // 10.7 Add new permission definitions for customers and machines
+    try {
     const insPD10 = db.prepare('INSERT OR IGNORE INTO permission_definitions (module, action, label_ar, description_ar, sort_order) VALUES (?,?,?,?,?)');
     const newPerms = [
       ['customers', 'view',   'عرض العملاء',   'عرض قائمة العملاء',    65],
@@ -1320,6 +1321,7 @@ function runMigrations() {
       insRP10.run(role, 'machines', 'view', 1);
       insRP10.run(role, 'machines', 'manage', 1);
     }
+    } catch {} // permission_definitions may not exist on fresh DB — created in V6 after runMigrations
   }
 
   // ═══════════════════════════════════════════════
@@ -1478,6 +1480,7 @@ function runMigrations() {
     for (const [code, name, type] of defaultCOA) coaInsert.run(code, name, type);
 
     // Add accounting permissions
+    try {
     const insAccPerm = db.prepare('INSERT OR IGNORE INTO permission_definitions (module, action, label_ar, description_ar, sort_order) VALUES (?,?,?,?,?)');
     const accPerms = [
       ['accounting', 'view',   'عرض المحاسبة',     'عرض دليل الحسابات والقيود',  120],
@@ -1488,14 +1491,13 @@ function runMigrations() {
     for (const p of accPerms) insAccPerm.run(...p);
 
     // Grant accounting permissions to admin role
-    try {
       const adminRole = db.prepare("SELECT id FROM roles WHERE name = 'admin'").get();
       if (adminRole) {
         const accPermDefs = db.prepare("SELECT id FROM permission_definitions WHERE module = 'accounting'").all();
         const insRP = db.prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?,?)');
         for (const pd of accPermDefs) insRP.run(adminRole.id, pd.id);
       }
-    } catch (e) { /* roles table may not exist yet on fresh DB */ }
+    } catch {} // permission_definitions may not exist on fresh DB
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (14)`);
   }

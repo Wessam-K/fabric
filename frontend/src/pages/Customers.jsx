@@ -4,10 +4,15 @@ import { Plus, Search, Phone, Mail, MapPin, DollarSign, X, FileText, Users } fro
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import Pagination from '../components/Pagination';
+import ExportButton from '../components/ExportButton';
 
 export default function Customers() {
   const toast = useToast();
   const [customers, setCustomers] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [cityFilter, setCityFilter] = useState('');
@@ -22,16 +27,18 @@ export default function Customers() {
   const load = async () => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { page, limit: pageSize };
       if (search) params.search = search;
       if (cityFilter) params.city = cityFilter;
       const { data } = await api.get('/customers', { params });
-      setCustomers(data.customers || data);
+      const list = data.customers || data.data || data;
+      setCustomers(Array.isArray(list) ? list : []);
+      setTotal(data.total || (Array.isArray(list) ? list.length : 0));
     } catch { toast.error('فشل تحميل العملاء'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [search, cityFilter]);
+  useEffect(() => { load(); }, [search, cityFilter, page, pageSize]);
 
   const openCreate = () => {
     setEditId(null);
@@ -76,7 +83,10 @@ export default function Customers() {
   return (
     <div className="page">
       <PageHeader title="العملاء" subtitle="إدارة العملاء والمستحقات"
-        action={<button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> عميل جديد</button>} />
+        action={<div className="flex items-center gap-2">
+          <ExportButton data={customers} filename="customers" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'customer_type',label:'النوع'},{key:'city',label:'المدينة'},{key:'phone',label:'الهاتف'},{key:'balance',label:'الرصيد'}]} />
+          <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> عميل جديد</button>
+        </div>} />
 
       {/* KPI */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -167,6 +177,8 @@ export default function Customers() {
           )}
         </div>
       )}
+
+      <Pagination total={total} page={page} pageSize={pageSize} onPageChange={(p, ps) => { setPage(p); setPageSize(ps); }} />
 
       {/* Create/Edit Modal */}
       {showModal && (

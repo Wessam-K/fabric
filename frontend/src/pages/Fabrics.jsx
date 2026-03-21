@@ -3,6 +3,8 @@ import { Plus, Edit2, Trash2, X, Camera, ArrowUpDown } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader, LoadingState, EmptyState } from '../components/ui';
+import Pagination from '../components/Pagination';
+import ExportButton from '../components/ExportButton';
 
 const TYPES = [
   { value: '', label: 'الكل' },
@@ -23,6 +25,9 @@ const emptyForm = { code: '', name: '', fabric_type: 'main', price_per_m: '', su
 export default function Fabrics() {
   const toast = useToast();
   const [fabrics, setFabrics] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
@@ -34,16 +39,17 @@ export default function Fabrics() {
 
   const fetchFabrics = async () => {
     try {
-      const params = {};
+      const params = { page, limit: pageSize };
       if (search) params.search = search;
       if (filterType) params.type = filterType;
       const { data } = await api.get('/fabrics', { params });
-      setFabrics(data);
+      if (data.data) { setFabrics(data.data); setTotal(data.total); }
+      else { setFabrics(data); setTotal(data.length); }
     } catch { toast.error('فشل تحميل الأقمشة'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchFabrics(); }, [search, filterType]);
+  useEffect(() => { fetchFabrics(); }, [search, filterType, page, pageSize]);
 
   const sorted = [...fabrics].sort((a, b) => {
     if (sortBy === 'price') return b.price_per_m - a.price_per_m;
@@ -111,8 +117,11 @@ export default function Fabrics() {
           </div>
         </div>
       )}
-      <PageHeader title="سجل الأقمشة" subtitle={`${fabrics.length} قماش مسجل`}
-        actions={<button onClick={openNew} className="btn btn-gold"><Plus size={16} /> إضافة قماش</button>}
+      <PageHeader title="سجل الأقمشة" subtitle={`${total} قماش مسجل`}
+        actions={<div className="flex items-center gap-2">
+          <ExportButton data={fabrics} filename="fabrics" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'fabric_type',label:'النوع'},{key:'price_per_m',label:'سعر المتر'},{key:'supplier',label:'المورد'},{key:'color',label:'اللون'}]} />
+          <button onClick={openNew} className="btn btn-gold"><Plus size={16} /> إضافة قماش</button>
+        </div>}
       />
 
       {/* Filters bar */}
@@ -194,6 +203,8 @@ export default function Fabrics() {
           ))}
         </div>
       )}
+
+      <Pagination total={total} page={page} pageSize={pageSize} onPageChange={(p, ps) => { setPage(p); setPageSize(ps); }} />
 
       {/* Slide-in Drawer */}
       {drawerOpen && (

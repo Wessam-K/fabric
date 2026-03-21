@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Eye, EyeOff, Lock } from 'lucide-react';
 
 export default function Login() {
   const { login } = useAuth();
@@ -11,9 +11,28 @@ export default function Login() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const lockoutTimer = useRef(null);
+
+  useEffect(() => {
+    return () => { if (lockoutTimer.current) clearInterval(lockoutTimer.current); };
+  }, []);
+
+  useEffect(() => {
+    if (lockoutSeconds > 0) {
+      lockoutTimer.current = setInterval(() => {
+        setLockoutSeconds(prev => {
+          if (prev <= 1) { clearInterval(lockoutTimer.current); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(lockoutTimer.current);
+    }
+  }, [lockoutSeconds > 0]);
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (lockoutSeconds > 0) return;
     setError('');
     setLoading(true);
     try {
@@ -24,11 +43,24 @@ export default function Login() {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'حدث خطأ في الاتصال');
+      const status = err.response?.status;
+      const msg = err.response?.data?.error || 'حدث خطأ في الاتصال';
+      setError(msg);
+      if (status === 423) {
+        const minsMatch = msg.match(/(\d+)\s*دقيقة/);
+        if (minsMatch) setLockoutSeconds(parseInt(minsMatch[1]) * 60);
+        else setLockoutSeconds(15 * 60);
+      }
     } finally {
       setLoading(false);
     }
   }
+
+  const formatCountdown = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  };
 
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center p-4" dir="rtl">
@@ -43,6 +75,14 @@ export default function Login() {
 
           {error && (
             <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded-xl text-sm text-center">{error}</div>
+          )}
+
+          {lockoutSeconds > 0 && (
+            <div className="bg-amber-500/20 border border-amber-500/50 text-amber-300 px-4 py-3 rounded-xl text-center">
+              <Lock size={18} className="inline ml-2" />
+              <span className="text-sm">الحساب مقفل — يمكنك المحاولة بعد </span>
+              <span className="font-mono font-bold text-lg">{formatCountdown(lockoutSeconds)}</span>
+            </div>
           )}
 
           <div>
@@ -65,14 +105,14 @@ export default function Login() {
             </div>
           </div>
 
-          <button type="submit" disabled={loading}
+          <button type="submit" disabled={loading || lockoutSeconds > 0}
             className="w-full py-3 bg-[#c9a84c] text-[#1a1a2e] font-semibold rounded-xl hover:bg-[#d4b85c] transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
             <LogIn size={18} />
-            {loading ? 'جاري الدخول...' : 'تسجيل الدخول'}
+            {loading ? 'جاري الدخول...' : lockoutSeconds > 0 ? `مقفل (${formatCountdown(lockoutSeconds)})` : 'تسجيل الدخول'}
           </button>
         </form>
 
-        <p className="text-center text-gray-600 text-xs mt-6">WK-Hub v12 — نظام إدارة المصنع</p>
+        <p className="text-center text-gray-600 text-xs mt-6">WK-Hub v15 — نظام إدارة المصنع</p>
       </div>
     </div>
   );

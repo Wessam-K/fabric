@@ -19,7 +19,7 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilt
 
 router.get('/', (req, res) => {
   try {
-    const { type, status, search, supplier_id } = req.query;
+    const { type, status, search, supplier_id, page, limit } = req.query;
     let q = 'SELECT f.*, s.name as supplier_name FROM fabrics f LEFT JOIN suppliers s ON s.id=f.supplier_id WHERE 1=1';
     const p = [];
     if (type) { q += ' AND f.fabric_type = ?'; p.push(type); }
@@ -27,6 +27,16 @@ router.get('/', (req, res) => {
     if (supplier_id) { q += ' AND f.supplier_id = ?'; p.push(supplier_id); }
     if (search) { q += ' AND (f.code LIKE ? OR f.name LIKE ? OR f.supplier LIKE ? OR s.name LIKE ?)'; const s = `%${search}%`; p.push(s, s, s, s); }
     q += ' ORDER BY f.created_at DESC';
+    if (page && limit) {
+      const countQ = q.replace(/SELECT f\.\*, s\.name as supplier_name/, 'SELECT COUNT(*) as total');
+      const total = db.prepare(countQ).get(...p).total;
+      const pg = parseInt(page) || 1;
+      const lim = parseInt(limit) || 25;
+      q += ' LIMIT ? OFFSET ?';
+      p.push(lim, (pg - 1) * lim);
+      const data = db.prepare(q).all(...p);
+      return res.json({ data, total, page: pg, totalPages: Math.ceil(total / lim) });
+    }
     res.json(db.prepare(q).all(...p));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

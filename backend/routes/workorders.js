@@ -507,7 +507,7 @@ router.patch('/:id/stages/:stageId', (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const stageId = parseInt(req.params.stageId);
-    const { status, assigned_to, quantity_done, quantity_in_stage, quantity_completed, notes } = req.body;
+    const { status, assigned_to, quantity_done, quantity_in_stage, quantity_completed, notes, machine_id } = req.body;
 
     const stage = db.prepare('SELECT * FROM wo_stages WHERE id=? AND wo_id=?').get(stageId, woId);
     if (!stage) return res.status(404).json({ error: 'المرحلة غير موجودة' });
@@ -524,6 +524,7 @@ router.patch('/:id/stages/:stageId', (req, res) => {
     if (quantity_in_stage !== undefined) { sets.push('quantity_in_stage=?'); params.push(quantity_in_stage); }
     if (quantity_completed !== undefined) { sets.push('quantity_completed=?'); params.push(quantity_completed); }
     if (notes !== undefined) { sets.push('notes=?'); params.push(notes); }
+    if (machine_id !== undefined) { sets.push('machine_id=?'); params.push(machine_id); }
 
     if (sets.length) {
       db.prepare(`UPDATE wo_stages SET ${sets.join(',')} WHERE id=?`).run(...params, stageId);

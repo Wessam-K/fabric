@@ -3,6 +3,8 @@ import { Plus, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, Mor
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader } from '../components/ui';
+import Pagination from '../components/Pagination';
+import ExportButton from '../components/ExportButton';
 
 const ACC_TYPES = [
   { value: '', label: 'الكل', icon: null },
@@ -34,6 +36,9 @@ const emptyForm = { code: '', acc_type: 'button', name: '', unit_price: '', unit
 export default function Accessories() {
   const toast = useToast();
   const [list, setList] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [loading, setLoading] = useState(true);
@@ -47,16 +52,17 @@ export default function Accessories() {
 
   const fetchList = async () => {
     try {
-      const params = {};
+      const params = { page, limit: pageSize };
       if (search) params.search = search;
       if (filterType) params.type = filterType;
       const { data } = await api.get('/accessories', { params });
-      setList(data);
+      if (data.data) { setList(data.data); setTotal(data.total); }
+      else { setList(data); setTotal(data.length); }
     } catch { toast.error('فشل التحميل'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchList(); }, [search, filterType]);
+  useEffect(() => { fetchList(); }, [search, filterType, page, pageSize]);
 
   const openNew = () => { setEditing(null); setForm({ ...emptyForm }); setImageFile(null); setDrawerOpen(true); };
   const openEdit = (a) => {
@@ -130,8 +136,11 @@ export default function Accessories() {
           </div>
         </div>
       )}
-      <PageHeader title="سجل الاكسسوارات" subtitle={`${list.length} اكسسوار مسجل`}
-        actions={<button onClick={openNew} className="btn btn-gold"><Plus size={16} /> إضافة اكسسوار</button>}
+      <PageHeader title="سجل الاكسسوارات" subtitle={`${total} اكسسوار مسجل`}
+        actions={<div className="flex items-center gap-2">
+          <ExportButton data={list} filename="accessories" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'acc_type',label:'النوع'},{key:'unit_price',label:'سعر الوحدة'},{key:'unit',label:'الوحدة'},{key:'quantity_on_hand',label:'المخزون'},{key:'supplier',label:'المورد'}]} />
+          <button onClick={openNew} className="btn btn-gold"><Plus size={16} /> إضافة اكسسوار</button>
+        </div>}
       />
 
       {/* Filters */}
@@ -214,6 +223,8 @@ export default function Accessories() {
           })}
         </div>
       )}
+
+      <Pagination total={total} page={page} pageSize={pageSize} onPageChange={(p, ps) => { setPage(p); setPageSize(ps); }} />
 
       {/* Slide-in Drawer */}
       {drawerOpen && (

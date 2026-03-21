@@ -4,12 +4,17 @@ import { Plus, Search, Star, Phone, Mail, Building2, DollarSign, X } from 'lucid
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import Pagination from '../components/Pagination';
+import ExportButton from '../components/ExportButton';
 
 const TYPE_MAP = { fabric: 'أقمشة', accessory: 'اكسسوارات', both: 'أقمشة واكسسوارات', other: 'أخرى' };
 
 export default function Suppliers() {
   const toast = useToast();
   const [suppliers, setSuppliers] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -24,16 +29,17 @@ export default function Suppliers() {
   const load = async () => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { page, limit: pageSize };
       if (search) params.search = search;
       if (typeFilter) params.type = typeFilter;
       const { data } = await api.get('/suppliers', { params });
-      setSuppliers(data);
+      if (data.data) { setSuppliers(data.data); setTotal(data.total); }
+      else { setSuppliers(data); setTotal(data.length); }
     } catch { toast.error('فشل تحميل الموردين'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [search, typeFilter]);
+  useEffect(() => { load(); }, [search, typeFilter, page, pageSize]);
 
   const openCreate = () => {
     setEditId(null);
@@ -80,7 +86,10 @@ export default function Suppliers() {
   return (
     <div className="page">
       <PageHeader title="الموردين" subtitle="إدارة الموردين والمدفوعات"
-        action={<button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مورد جديد</button>} />
+        action={<div className="flex items-center gap-2">
+          <ExportButton data={suppliers} filename="suppliers" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'supplier_type',label:'النوع'},{key:'phone',label:'الهاتف'},{key:'balance',label:'المستحقات'},{key:'rating',label:'التقييم'}]} />
+          <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مورد جديد</button>
+        </div>} />
 
       {/* KPI */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -163,6 +172,8 @@ export default function Suppliers() {
           )}
         </div>
       )}
+
+      <Pagination total={total} page={page} pageSize={pageSize} onPageChange={(p, ps) => { setPage(p); setPageSize(ps); }} />
 
       {/* Create/Edit Modal */}
       {showModal && (

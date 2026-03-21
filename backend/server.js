@@ -108,7 +108,7 @@ app.get('/api/health', (req, res) => {
     userCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE status='active'").get().c;
   } catch (e) { dbStatus = 'error: ' + e.message; }
   res.json({
-    status: 'ok', app: 'WK-Hub', version: 'v12',
+    status: 'ok', app: 'WK-Hub', version: 'v15',
     timestamp: new Date().toISOString(),
     uptime_seconds: Math.floor(process.uptime()),
     database: { status: dbStatus, schema_version: dbVersion, active_users: userCount },
