@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Phone, Mail, MapPin, DollarSign, X, FileText, Users } from 'lucide-react';
+import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
@@ -72,25 +73,20 @@ export default function Customers() {
   const totalOutstanding = customers.reduce((s, c) => s + (c.balance || 0), 0);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-[#1a1a2e]">العملاء</h2>
-          <p className="text-xs text-gray-400 mt-0.5">إدارة العملاء والمستحقات</p>
-        </div>
-        <button onClick={openCreate} className="flex items-center gap-1.5 px-4 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold"><Plus size={16} /> عميل جديد</button>
-      </div>
+    <div className="page">
+      <PageHeader title="العملاء" subtitle="إدارة العملاء والمستحقات"
+        action={<button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> عميل جديد</button>} />
 
       {/* KPI */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm p-4">
+        <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50 text-blue-600 mb-2"><Users size={18} /></div>
-          <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{customers.length}</p>
+          <p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{customers.length}</p>
           <p className="text-xs text-gray-400">عميل نشط</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-4">
+        <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-50 text-red-600 mb-2"><DollarSign size={18} /></div>
-          <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{fmt(totalOutstanding)} ج.م</p>
+          <p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(totalOutstanding)} ج.م</p>
           <p className="text-xs text-gray-400">إجمالي المستحقات</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm p-4">

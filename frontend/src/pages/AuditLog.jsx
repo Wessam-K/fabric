@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ClipboardList, Search, Download } from 'lucide-react';
+import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
 
@@ -44,16 +45,9 @@ export default function AuditLog() {
   const totalPages = Math.ceil(total / 50);
 
   return (
-    <div className="p-6 space-y-6" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><ClipboardList className="text-[#c9a84c]" /> سجل المراجعة</h1>
-          <p className="text-sm text-gray-500 mt-1">تتبع جميع العمليات والتغييرات في النظام</p>
-        </div>
-        <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 border rounded-xl hover:bg-gray-50">
-          <Download size={16} /> تصدير Excel
-        </button>
-      </div>
+    <div className="page">
+      <PageHeader title="سجل المراجعة" subtitle="تتبع جميع العمليات والتغييرات في النظام"
+        action={<button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير Excel</button>} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

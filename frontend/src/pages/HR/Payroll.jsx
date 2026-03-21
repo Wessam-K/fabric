@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DollarSign, Calculator, CheckCircle2, CreditCard, Download, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { PageHeader } from '../../components/ui';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import { exportPayrollToExcel } from '../../utils/exportExcel';
@@ -99,15 +100,9 @@ export default function Payroll() {
   }), { base: 0, allowances: 0, overtime: 0, gross: 0, deductions: 0, adjustments: 0, net: 0 });
 
   return (
-    <div className="p-6 space-y-6" dir="rtl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <DollarSign className="text-[#c9a84c]" /> المرتبات
-        </h1>
-        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 bg-[#c9a84c] text-white rounded-xl hover:bg-[#b8993f]">
-          <Calculator size={16} /> فترة جديدة
-        </button>
-      </div>
+    <div className="page">
+      <PageHeader title="المرتبات" subtitle="إدارة فترات الرواتب"
+        action={<button onClick={() => setShowCreate(true)} className="btn btn-gold"><Calculator size={16} /> فترة جديدة</button>} />
 
       {/* Create Period Modal */}
       {showCreate && (

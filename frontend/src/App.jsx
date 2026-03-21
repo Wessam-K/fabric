@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, Printer, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, Bell, UserCheck, Cog } from 'lucide-react';
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -49,6 +50,9 @@ function ProtectedRoute({ children, roles, perm }) {
 
 function AppLayout() {
   const { user, logout, can, ROLE_LABELS, ROLE_COLORS } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
+  const [openGroup, setOpenGroup] = useState(null);
+  const location = useLocation();
 
   const navGroups = [
     {
@@ -57,17 +61,21 @@ function AppLayout() {
       ],
     },
     {
+      id: 'production',
       label: 'الإنتاج',
+      icon: Factory,
       show: () => can('work_orders', 'view') || can('models', 'view'),
       items: [
         { path: '/work-orders', label: 'أوامر الإنتاج', icon: Factory, hide: () => !can('work_orders', 'view') },
-        { path: '/work-orders/new', label: '+ أمر إنتاج جديد', icon: PlusCircle, hide: () => !can('work_orders', 'create') },
+        { path: '/work-orders/new', label: 'أمر جديد', icon: PlusCircle, hide: () => !can('work_orders', 'create') },
         { path: '/models', label: 'الموديلات', icon: List, hide: () => !can('models', 'view') },
         { path: '/machines', label: 'الماكينات', icon: Cog, hide: () => !can('machines', 'view') },
       ],
     },
     {
+      id: 'inventory',
       label: 'المخزون',
+      icon: Package,
       show: () => can('fabrics', 'view') || can('inventory', 'view'),
       items: [
         { path: '/fabrics', label: 'الأقمشة', icon: Scissors, hide: () => !can('fabrics', 'view') },
@@ -76,7 +84,9 @@ function AppLayout() {
       ],
     },
     {
-      label: 'المالية والموردين',
+      id: 'finance',
+      label: 'المالية',
+      icon: FileText,
       show: () => can('invoices', 'view') || can('suppliers', 'view'),
       items: [
         { path: '/customers', label: 'العملاء', icon: UserCheck, hide: () => !can('invoices', 'view') },
@@ -86,11 +96,13 @@ function AppLayout() {
       ],
     },
     {
+      id: 'hr',
       label: 'الموارد البشرية',
+      icon: Users,
       show: () => can('hr', 'view'),
       items: [
         { path: '/hr/employees', label: 'الموظفون', icon: Users, hide: () => !can('hr', 'view') },
-        { path: '/hr/attendance', label: 'الحضور والانصراف', icon: Clock, hide: () => !can('hr', 'view') },
+        { path: '/hr/attendance', label: 'الحضور', icon: Clock, hide: () => !can('hr', 'view') },
         { path: '/hr/payroll', label: 'الرواتب', icon: Banknote, hide: () => !can('payroll', 'view') },
       ],
     },
@@ -100,72 +112,144 @@ function AppLayout() {
       ],
     },
     {
+      id: 'admin',
       label: 'الإدارة',
+      icon: Shield,
       show: () => can('users', 'view') || can('audit', 'view') || can('settings', 'view'),
       items: [
-        { path: '/users', label: 'إدارة المستخدمين', icon: Shield, hide: () => !can('users', 'manage') },
+        { path: '/users', label: 'المستخدمين', icon: Shield, hide: () => !can('users', 'manage') },
         { path: '/audit-log', label: 'سجل المراجعة', icon: ClipboardList, hide: () => !can('audit', 'view') },
         { path: '/settings', label: 'الإعدادات', icon: Settings, hide: () => !can('settings', 'view') },
       ],
     },
   ];
 
+  // Auto-open group based on current path
+  const getActiveGroup = () => {
+    for (const g of navGroups) {
+      if (g.id && g.items.some(i => location.pathname.startsWith(i.path.split('/').slice(0, 2).join('/')))) return g.id;
+    }
+    return null;
+  };
+
+  const activeGroup = openGroup ?? getActiveGroup();
+
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <aside className="w-60 bg-[#1a1a2e] flex flex-col shrink-0 no-print">
-        <div className="p-5 border-b border-white/10">
-          <h1 className="text-xl font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</h1>
-          <p className="text-[10px] text-gray-400 mt-0.5">نظام إدارة المصنع — v10</p>
+    <div className="flex min-h-screen bg-[#f8f9fb]">
+      {/* Sidebar */}
+      <aside className={`${collapsed ? 'w-16' : 'w-56'} bg-[#1a1a2e] flex flex-col shrink-0 no-print transition-all duration-200`}>
+        {/* Header */}
+        <div className={`flex items-center ${collapsed ? 'justify-center px-2' : 'px-4'} h-14 border-b border-white/8`}>
+          {!collapsed && (
+            <div className="flex-1 min-w-0">
+              <span className="text-[15px] font-bold text-[#c9a84c] font-[JetBrains_Mono] tracking-tight">WK-Hub</span>
+            </div>
+          )}
+          <button onClick={() => setCollapsed(!collapsed)} className="text-gray-500 hover:text-gray-300 p-1 rounded transition-colors">
+            {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+          </button>
         </div>
-        <div className="px-3 pt-2 flex items-center gap-2">
-          <div className="flex-1"><GlobalSearch /></div>
-          <NotificationBell />
-        </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+
+        {/* Search + Notifications (only expanded) */}
+        {!collapsed && (
+          <div className="px-3 pt-2.5 pb-1 flex items-center gap-2">
+            <div className="flex-1"><GlobalSearch /></div>
+            <NotificationBell />
+          </div>
+        )}
+
+        {/* Navigation */}
+        <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
           {navGroups.map((group, gi) => {
             if (group.show && !group.show()) return null;
             const visibleItems = group.items.filter(item => !item.hide || !item.hide());
             if (visibleItems.length === 0) return null;
+
+            // Single items (no group)
+            if (!group.id) {
+              return visibleItems.map(item => (
+                <NavLink key={item.path} to={item.path} end={item.path === '/dashboard'}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 ${collapsed ? 'justify-center px-2' : 'px-3'} py-2 rounded-lg text-[13px] transition-colors ${
+                      isActive ? 'bg-[#c9a84c]/15 text-[#c9a84c]' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                    }`}>
+                  <item.icon size={16} strokeWidth={1.8} />
+                  {!collapsed && <span>{item.label}</span>}
+                </NavLink>
+              ));
+            }
+
+            // Collapsible group
+            const isOpen = activeGroup === group.id;
+            const GroupIcon = group.icon;
+            const hasActive = visibleItems.some(i => location.pathname.startsWith(i.path.split('/').slice(0, 2).join('/')));
+
             return (
               <div key={gi}>
-                {group.label && (
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider px-4 pt-3 pb-1">{group.label}</p>
+                <button onClick={() => setOpenGroup(isOpen ? null : group.id)}
+                  className={`w-full flex items-center gap-2.5 ${collapsed ? 'justify-center px-2' : 'px-3'} py-2 rounded-lg text-[13px] transition-colors
+                    ${hasActive ? 'text-[#c9a84c]' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>
+                  <GroupIcon size={16} strokeWidth={1.8} />
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1 text-right">{group.label}</span>
+                      <ChevronDown size={13} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </>
+                  )}
+                </button>
+                {isOpen && !collapsed && (
+                  <div className="mr-4 mt-0.5 space-y-0.5 border-r border-white/8 pr-0">
+                    {visibleItems.map(item => (
+                      <NavLink key={item.path} to={item.path} end={item.path === '/models' || item.path === '/work-orders'}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] transition-colors ${
+                            isActive ? 'text-[#c9a84c] bg-[#c9a84c]/10' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                          }`}>
+                        <item.icon size={14} strokeWidth={1.5} />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
                 )}
-                {visibleItems.map(item => (
-                  <NavLink key={item.path} to={item.path} end={item.path === '/models' || item.path === '/work-orders'}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors ${
-                        isActive ? 'bg-[#c9a84c]/20 text-[#c9a84c]' : 'text-gray-400 hover:text-white hover:bg-white/5'
-                      }`}>
-                    <item.icon size={17} />
-                    {item.label}
-                  </NavLink>
-                ))}
               </div>
             );
           })}
         </nav>
-        {/* User info at bottom */}
-        {user && (
-          <div className="p-4 border-t border-white/10">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#c9a84c]/20 flex items-center justify-center text-[#c9a84c] font-bold text-sm">
+
+        {/* User footer */}
+        {user && !collapsed && (
+          <div className="px-3 py-3 border-t border-white/8">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/15 flex items-center justify-center text-[#c9a84c] font-bold text-xs">
                 {user.full_name?.charAt(0) || 'U'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white truncate">{user.full_name}</p>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-gray-500 text-white'}`}>
+                <p className="text-[12px] text-gray-200 truncate">{user.full_name}</p>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded ${ROLE_COLORS[user.role] || 'bg-gray-500 text-white'}`}>
                   {ROLE_LABELS[user.role] || user.role}
                 </span>
               </div>
+              <button onClick={logout} title="تسجيل الخروج"
+                className="text-gray-500 hover:text-red-400 p-1.5 rounded transition-colors">
+                <LogOut size={14} />
+              </button>
             </div>
-            <button onClick={logout}
-              className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-red-400 hover:bg-white/5 transition-colors">
-              <LogOut size={14} /> تسجيل الخروج
+          </div>
+        )}
+        {user && collapsed && (
+          <div className="px-2 py-3 border-t border-white/8 flex flex-col items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/15 flex items-center justify-center text-[#c9a84c] font-bold text-xs">
+              {user.full_name?.charAt(0) || 'U'}
+            </div>
+            <button onClick={logout} title="تسجيل الخروج"
+              className="text-gray-500 hover:text-red-400 p-1.5 rounded transition-colors">
+              <LogOut size={14} />
             </button>
           </div>
         )}
       </aside>
+
+      {/* Main content */}
       <main className="flex-1 overflow-auto">
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

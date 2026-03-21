@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, GripVertical, Factory } from 'lucide-react';
+import { PageHeader, LoadingState } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
@@ -79,29 +80,17 @@ export default function SettingsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin h-10 w-10 border-4 border-[#c9a84c] border-t-transparent rounded-full" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-[#1a1a2e]">الإعدادات</h2>
-          <p className="text-xs text-gray-400 mt-0.5">القيم الافتراضية ومراحل الإنتاج</p>
-        </div>
-        <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-1.5 px-5 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
-          <Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ'}
-        </button>
-      </div>
+    <div className="page">
+      <PageHeader title="الإعدادات" subtitle="القيم الافتراضية ومراحل الإنتاج"
+        action={<button onClick={handleSave} disabled={saving} className="btn btn-gold"><Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ'}</button>} />
 
       {/* Default Values */}
-      <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
-        <h3 className="font-bold text-sm text-[#1a1a2e]">القيم الافتراضية</h3>
+      <div className="card card-body space-y-5">
+        <h3 className="section-title">القيم الافتراضية</h3>
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
           هذه القيم ستُطبَّق تلقائياً على كل موديل جديد
         </div>
@@ -119,10 +108,10 @@ export default function SettingsPage() {
       </div>
 
       {/* Production Stages */}
-      <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+      <div className="card card-body space-y-4">
         <div className="flex items-center gap-2">
           <Factory size={18} className="text-blue-600" />
-          <h3 className="font-bold text-sm text-[#1a1a2e]">مراحل الإنتاج</h3>
+          <h3 className="section-title">مراحل الإنتاج</h3>
           <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{stages.length}</span>
         </div>
         <p className="text-xs text-gray-400">تُستخدم في أوامر الإنتاج لتتبع تقدم كل أمر</p>

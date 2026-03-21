@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, Warehouse, Package, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { PageHeader, LoadingState, EmptyState } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
@@ -43,18 +44,15 @@ export default function FabricInventory() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-[#1a1a2e] flex items-center gap-2"><Warehouse size={22} className="text-[#c9a84c]" /> مخزون الأقمشة</h2>
-        <p className="text-xs text-gray-400 mt-0.5">تتبع الدفعات والأمتار المتاحة من كل قماش</p>
-      </div>
+    <div className="page">
+      <PageHeader title="مخزون الأقمشة" subtitle="تتبع الدفعات والأمتار المتاحة من كل قماش" />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم أو الكود..."
-            className="w-full pr-9 pl-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-[#c9a84c] outline-none" />
+            className="w-full pr-9 pl-3 py-2 text-sm form-input" />
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input type="checkbox" checked={lowOnly} onChange={e => setLowOnly(e.target.checked)} className="accent-[#c9a84c]" />
@@ -63,9 +61,9 @@ export default function FabricInventory() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><div className="animate-spin h-10 w-10 border-4 border-[#c9a84c] border-t-transparent rounded-full" /></div>
+        <LoadingState />
       ) : stock.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">لا توجد أقمشة في المخزون</div>
+        <EmptyState title="لا توجد أقمشة في المخزون" />
       ) : (
         <div className="space-y-3">
           {stock.map(f => (

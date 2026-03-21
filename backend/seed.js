@@ -1,8 +1,127 @@
 const db = require('./database');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
+const zlib = require('zlib');
+
+// ── Generate simple colored PNG placeholder images ──
+function generatePlaceholderPNG(width, height, r, g, b) {
+  // Create raw pixel data (RGBA)
+  const rawData = Buffer.alloc(height * (1 + width * 4)); // filter byte + pixels per row
+  for (let y = 0; y < height; y++) {
+    const rowOffset = y * (1 + width * 4);
+    rawData[rowOffset] = 0; // filter: None
+    for (let x = 0; x < width; x++) {
+      const px = rowOffset + 1 + x * 4;
+      // Simple gradient effect
+      const shade = 1 - (y / height) * 0.3;
+      rawData[px] = Math.round(r * shade);
+      rawData[px + 1] = Math.round(g * shade);
+      rawData[px + 2] = Math.round(b * shade);
+      rawData[px + 3] = 255; // alpha
+    }
+  }
+
+  const compressed = zlib.deflateSync(rawData);
+
+  // Build PNG file
+  function crc32(buf) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < buf.length; i++) {
+      crc ^= buf[i];
+      for (let j = 0; j < 8; j++) {
+        crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+      }
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function chunk(type, data) {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const typeAndData = Buffer.concat([Buffer.from(type), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(typeAndData));
+    return Buffer.concat([len, typeAndData, crc]);
+  }
+
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // color type: RGBA
+  ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+
+  return Buffer.concat([
+    signature,
+    chunk('IHDR', ihdr),
+    chunk('IDAT', compressed),
+    chunk('IEND', Buffer.alloc(0))
+  ]);
+}
+
+function seedImages() {
+  const dirs = ['uploads/models', 'uploads/fabrics', 'uploads/accessories'];
+  for (const dir of dirs) {
+    const fullDir = path.join(__dirname, dir);
+    if (!fs.existsSync(fullDir)) fs.mkdirSync(fullDir, { recursive: true });
+  }
+
+  const colors = {
+    models: [
+      [180, 60, 60],   [60, 60, 180],  [60, 140, 80],  [160, 120, 40], [120, 60, 160],
+      [40, 140, 160],  [180, 100, 40], [100, 40, 100], [60, 120, 60],  [140, 80, 80]
+    ],
+    fabrics: [
+      [245,245,245], [220,210,180], [40,40,40],    [30,30,30],   [25,25,80],
+      [25,25,80],    [250,250,240], [250,250,240], [60,80,180],  [80,130,200],
+      [150,150,150], [220,210,180], [20,20,20],    [120,20,30],  [200,180,80],
+      [255,255,255], [10,10,10],    [220,200,160], [20,20,60],   [240,240,240]
+    ],
+    accessories: [
+      [200,200,200], [180,180,190], [160,130,80],  [180,180,180], [80,80,80],
+      [60,60,70],    [100,100,110], [240,240,240],  [220,200,180], [200,30,30],
+      [30,30,30],    [180,180,180], [240,220,200],  [200,200,180], [180,40,60]
+    ]
+  };
+
+  const fabricCodes = ['CTN-001','CTN-002','CTN-003','PLY-001','PLY-002','SLK-001','SLK-002','LNN-001','DNM-001','DNM-002','WOL-001','WOL-002','CRP-001','VLV-001','TFL-001','LNG-001','LNG-002','LNG-003','LNG-004','LNG-005'];
+  const modelCodes = ['DRS-001','PNT-001','JKT-001','SHR-001','SKR-001','ABY-001','TSH-001','VES-001','DRS-002','COT-001'];
+  const accCodes = ['BTN-001','BTN-002','BTN-003','BTN-004','ZPR-001','ZPR-002','ZPR-003','THR-001','THR-002','LBL-001','LBL-002','PAD-001','PAD-002','ITF-001','OTH-001'];
+
+  const images = { models: {}, fabrics: {}, accessories: {} };
+
+  modelCodes.forEach((code, i) => {
+    const [r, g, b] = colors.models[i];
+    const filename = `mdl-seed-${code.toLowerCase()}.png`;
+    fs.writeFileSync(path.join(__dirname, 'uploads/models', filename), generatePlaceholderPNG(200, 200, r, g, b));
+    images.models[code] = `/uploads/models/${filename}`;
+  });
+
+  fabricCodes.forEach((code, i) => {
+    const [r, g, b] = colors.fabrics[i];
+    const filename = `fab-seed-${code.toLowerCase()}.png`;
+    fs.writeFileSync(path.join(__dirname, 'uploads/fabrics', filename), generatePlaceholderPNG(200, 200, r, g, b));
+    images.fabrics[code] = `/uploads/fabrics/${filename}`;
+  });
+
+  accCodes.forEach((code, i) => {
+    const [r, g, b] = colors.accessories[i];
+    const filename = `acc-seed-${code.toLowerCase()}.png`;
+    fs.writeFileSync(path.join(__dirname, 'uploads/accessories', filename), generatePlaceholderPNG(200, 200, r, g, b));
+    images.accessories[code] = `/uploads/accessories/${filename}`;
+  });
+
+  return images;
+}
 
 function seed() {
-  console.log('Seeding WK-Hub database (v9 schema)...');
+  console.log('Seeding WK-Hub database (v12 schema)...');
+
+  // Generate placeholder images
+  const images = seedImages();
+  console.log('  ✓ Generated placeholder images for models, fabrics, and accessories');
 
   // Disable FK constraints during seed
   db.pragma('foreign_keys = OFF');
@@ -14,11 +133,12 @@ function seed() {
     'attendance', 'attendance_imports',
     'partial_invoices', 'wo_extra_expenses', 'wo_accessories_detail', 'wo_fabric_batches', 'fabric_inventory_batches',
     'wo_accessory_consumption', 'wo_fabric_consumption', 'wo_waste', 'wo_invoices', 'stage_movement_log',
+    'wo_stage_qc', 'customer_payments', 'accessory_inventory_batches',
     'cost_snapshots', 'supplier_payments', 'purchase_order_items', 'purchase_orders',
     'invoice_items', 'invoices',
     'wo_stages', 'wo_sizes', 'wo_accessories', 'wo_fabrics', 'work_orders',
     'bom_template_sizes', 'bom_template_accessories', 'bom_template_fabrics', 'bom_templates',
-    'accessories', 'fabrics', 'suppliers', 'customers', 'settings', 'stage_templates', 'models',
+    'machines', 'accessories', 'fabrics', 'suppliers', 'customers', 'settings', 'stage_templates', 'models',
     'audit_log', 'users', 'employees'
   ];
   for (const t of tables) {
@@ -67,8 +187,8 @@ function seed() {
   const sup5 = insSup.run('SUP-005', 'واردات الحرير', 'fabric', 'سارة أحمد', '01033322211', 'silk@imports.com', 'الإسكندرية', 'حرير طبيعي ومستورد');
   const sup6 = insSup.run('SUP-006', 'مصنع البطائن', 'fabric', 'يوسف إبراهيم', '01099988877', 'lining@factory.com', 'المنصورة', 'بطائن بجميع الأنواع');
 
-  // ──────────── Fabrics (20) — with stock tracking ────────────
-  const insFab = db.prepare('INSERT INTO fabrics (code, name, fabric_type, price_per_m, supplier, supplier_id, color, available_meters, low_stock_threshold) VALUES (?,?,?,?,?,?,?,?,?)');
+  // ──────────── Fabrics (20) — with stock tracking + images ────────────
+  const insFab = db.prepare('INSERT INTO fabrics (code, name, fabric_type, price_per_m, supplier, supplier_id, color, available_meters, low_stock_threshold, image_path) VALUES (?,?,?,?,?,?,?,?,?,?)');
   [
     ['CTN-001', 'قطن مصري ممتاز',  'main',   120, 'مصنع النسيج المصري',      sup1.lastInsertRowid, 'أبيض',     80,  20],
     ['CTN-002', 'قطن مخلوط',       'main',    95, 'مصنع النسيج المصري',      sup1.lastInsertRowid, 'بيج',      55,  20],
@@ -90,10 +210,10 @@ function seed() {
     ['LNG-003', 'بطانة ساتان',     'lining',  55, 'مصنع البطائن',           sup6.lastInsertRowid, 'بيج',      40,  25],
     ['LNG-004', 'بطانة حرير',      'lining',  90, 'مصنع البطائن',           sup6.lastInsertRowid, 'كحلي',     20,  10],
     ['LNG-005', 'بطانة شفافة',     'lining',  25, 'مصنع البطائن',           sup6.lastInsertRowid, 'أبيض',     35,  15],
-  ].forEach(f => insFab.run(...f));
+  ].forEach(f => insFab.run(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], images.fabrics[f[0]] || null));
 
-  // ──────────── Accessories (15) — with stock tracking ────────────
-  const insAcc = db.prepare('INSERT INTO accessories (code, acc_type, name, unit_price, unit, supplier, supplier_id, quantity_on_hand, low_stock_threshold, reorder_qty) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  // ──────────── Accessories (15) — with stock tracking + images ────────────
+  const insAcc = db.prepare('INSERT INTO accessories (code, acc_type, name, unit_price, unit, supplier, supplier_id, quantity_on_hand, low_stock_threshold, reorder_qty, image_path) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
   [
     ['BTN-001', 'button',       'زرار بلاستيك صغير',    0.5,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid, 500, 100, 500],
     ['BTN-002', 'button',       'زرار معدني فضي',       2.0,  'piece', 'مصنع الأزرار',  sup3.lastInsertRowid, 200, 50, 200],
@@ -110,21 +230,21 @@ function seed() {
     ['PAD-002', 'padding',      'حشو صدر',              5.0,  'piece', 'مصنع الحشو',    null,                  30, 10, 40],
     ['ITF-001', 'interfacing',  'فازلين لاصق',         20.0,  'meter', 'مصنع الفازلين',  null,                  25, 10, 50],
     ['OTH-001', 'other',        'شريط ساتان',           5.0,  'meter', 'مصنع الشرائط',   null,                  35, 10, 30],
-  ].forEach(a => insAcc.run(...a));
+  ].forEach(a => insAcc.run(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], images.accessories[a[0]] || null));
 
-  // ──────────── Models (10 — simplified, no cost fields) ────────────
-  const insModel = db.prepare('INSERT INTO models (serial_number, model_code, model_name, category, gender, notes) VALUES (?,?,?,?,?,?)');
+  // ──────────── Models (10 — with images) ────────────
+  const insModel = db.prepare('INSERT INTO models (serial_number, model_code, model_name, category, gender, notes, model_image) VALUES (?,?,?,?,?,?,?)');
 
-  const m1  = insModel.run('1-001', 'DRS-001', 'فستان سهرة كلاسيك',   'فساتين',  'female', 'فستان سهرة طويل بأكمام وتطريز يدوي');
-  const m2  = insModel.run('1-002', 'PNT-001', 'بنطلون جينز كاجوال',  'بناطيل',  'male',   'بنطلون جينز بقصة مستقيمة مع 5 جيوب');
-  const m3  = insModel.run('1-003', 'JKT-001', 'جاكيت صوف رسمي',     'جاكيتات', 'male',   'جاكيت صوف بليزر بطانة ساتان وحشو كتف');
-  const m4  = insModel.run('1-004', 'SHR-001', 'قميص رسمي قطن',      'قمصان',   'male',   'قميص رسمي بياقة كلاسيك وأزرار صدف');
-  const m5  = insModel.run('1-005', 'SKR-001', 'تنورة كريب ميدي',    'أخرى',    'female', 'تنورة ميدي بقصة A-line مع حزام');
-  const m6  = insModel.run('1-006', 'ABY-001', 'عباية كريب مطرزة',    'أخرى',    'female', 'عباية كريب سوداء بتطريز ذهبي على الأكمام');
-  const m7  = insModel.run('1-007', 'TSH-001', 'تيشيرت قطن لايكرا',  'قمصان',   'male',   'تيشيرت رجالي بياقة دائرية');
-  const m8  = insModel.run('1-008', 'VES-001', 'فيست صوف كشمير',     'جاكيتات', 'male',   'فيست رسمي بدون أكمام بطانة ساتان');
-  const m9  = insModel.run('1-009', 'DRS-002', 'فستان كتان صيفي',    'فساتين',  'female', 'فستان صيفي من الكتان الطبيعي بقصة واسعة');
-  const m10 = insModel.run('1-010', 'COT-001', 'معطف شتوي طويل',     'أخرى',    'unisex', 'معطف شتوي بطانة حرير وحشو حراري');
+  const m1  = insModel.run('1-001', 'DRS-001', 'فستان سهرة كلاسيك',   'فساتين',  'female', 'فستان سهرة طويل بأكمام وتطريز يدوي', images.models['DRS-001']);
+  const m2  = insModel.run('1-002', 'PNT-001', 'بنطلون جينز كاجوال',  'بناطيل',  'male',   'بنطلون جينز بقصة مستقيمة مع 5 جيوب', images.models['PNT-001']);
+  const m3  = insModel.run('1-003', 'JKT-001', 'جاكيت صوف رسمي',     'جاكيتات', 'male',   'جاكيت صوف بليزر بطانة ساتان وحشو كتف', images.models['JKT-001']);
+  const m4  = insModel.run('1-004', 'SHR-001', 'قميص رسمي قطن',      'قمصان',   'male',   'قميص رسمي بياقة كلاسيك وأزرار صدف', images.models['SHR-001']);
+  const m5  = insModel.run('1-005', 'SKR-001', 'تنورة كريب ميدي',    'أخرى',    'female', 'تنورة ميدي بقصة A-line مع حزام', images.models['SKR-001']);
+  const m6  = insModel.run('1-006', 'ABY-001', 'عباية كريب مطرزة',    'أخرى',    'female', 'عباية كريب سوداء بتطريز ذهبي على الأكمام', images.models['ABY-001']);
+  const m7  = insModel.run('1-007', 'TSH-001', 'تيشيرت قطن لايكرا',  'قمصان',   'male',   'تيشيرت رجالي بياقة دائرية', images.models['TSH-001']);
+  const m8  = insModel.run('1-008', 'VES-001', 'فيست صوف كشمير',     'جاكيتات', 'male',   'فيست رسمي بدون أكمام بطانة ساتان', images.models['VES-001']);
+  const m9  = insModel.run('1-009', 'DRS-002', 'فستان كتان صيفي',    'فساتين',  'female', 'فستان صيفي من الكتان الطبيعي بقصة واسعة', images.models['DRS-002']);
+  const m10 = insModel.run('1-010', 'COT-001', 'معطف شتوي طويل',     'أخرى',    'unisex', 'معطف شتوي بطانة حرير وحشو حراري', images.models['COT-001']);
 
   const modelIds = {
     m1: m1.lastInsertRowid, m2: m2.lastInsertRowid, m3: m3.lastInsertRowid,

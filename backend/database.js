@@ -717,7 +717,7 @@ function initializeDatabase() {
         'invoices:*','suppliers:*','purchase_orders:*','inventory:view',
         'reports:*','payroll:view'
       ],
-      production: [
+      ccproduction: [
         'dashboard:view','models:*','fabrics:*','accessories:*','work_orders:*',
         'inventory:view','reports:view'
       ],
@@ -1370,6 +1370,19 @@ function runMigrations() {
     addColumnSafe('supplier_payments', 'payment_type', "TEXT DEFAULT 'payment'");
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (11)`);
+  }
+
+  // ═══════════════════════════════════════════════
+  // V12 — Accessory image support
+  // ═══════════════════════════════════════════════
+  if (currentVersion < 12) {
+    const addColumnSafe = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch {}
+    };
+
+    addColumnSafe('accessories', 'image_path', 'TEXT');
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (12)`);
   }
 }
 

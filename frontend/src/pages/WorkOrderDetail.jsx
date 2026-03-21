@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker, Printer, XCircle } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
-import StatusBadge from '../components/StatusBadge';
 import StageChecklist from '../components/StageChecklist';
 import CostPanel from '../components/CostPanel';
+import { StatusBadge, LoadingState, Modal } from '../components/ui';
 
 const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
 
@@ -247,7 +247,7 @@ export default function WorkOrderDetail() {
     window.print();
   };
 
-  if (loading) return <div className="flex items-center justify-center h-96"><div className="animate-spin h-10 w-10 border-4 border-[#c9a84c] border-t-transparent rounded-full" /></div>;
+  if (loading) return <LoadingState />;
   if (!wo) return null;
 
   const completedStages = wo.stages?.filter(s => s.status === 'completed').length || 0;
@@ -262,28 +262,28 @@ export default function WorkOrderDetail() {
   const piecesNotStarted = Math.max(0, totalPieces - piecesCompleted - piecesInProgress - piecesRejected);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="page">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/work-orders')} className="p-2 hover:bg-gray-100 rounded-lg"><ArrowRight size={20} /></button>
+          <button onClick={() => navigate('/work-orders')} className="btn btn-ghost p-2"><ArrowRight size={20} /></button>
           <div>
-            <h2 className="text-xl font-bold text-[#1a1a2e] flex items-center gap-2">
-              <span className="font-mono text-[#c9a84c]">{wo.wo_number}</span>
-              <StatusBadge status={wo.status} type="work_order" />
+            <h2 className="page-title flex items-center gap-2">
+              <span className="font-mono text-[var(--color-gold)]">{wo.wo_number}</span>
+              <StatusBadge status={wo.status} />
             </h2>
-            <p className="text-xs text-gray-400">{wo.model_code} — {wo.model_name || ''} {wo.template_name ? `• ${wo.template_name}` : ''}</p>
+            <p className="page-subtitle">{wo.model_code} — {wo.model_name || ''} {wo.template_name ? `• ${wo.template_name}` : ''}</p>
           </div>
         </div>
         <div className="flex gap-2">
-          {wo.status === 'draft' && <button onClick={() => handleStatusChange('in_progress')} className="flex items-center gap-1.5 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-bold"><Play size={14} /> بدء التنفيذ</button>}
-          {wo.status === 'in_progress' && <button onClick={handleFinalize} className="flex items-center gap-1.5 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-bold"><CheckCircle size={14} /> إنهاء الإنتاج</button>}
+          {wo.status === 'draft' && <button onClick={() => handleStatusChange('in_progress')} className="btn btn-primary"><Play size={14} /> بدء التنفيذ</button>}
+          {wo.status === 'in_progress' && <button onClick={handleFinalize} className="btn" style={{background:'var(--color-success)',color:'white'}}><CheckCircle size={14} /> إنهاء الإنتاج</button>}
           {!['completed', 'cancelled', 'delivered'].includes(wo.status) && (
-            <button onClick={() => setShowCancelModal(true)} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm"><XCircle size={14} /> إلغاء</button>
+            <button onClick={() => setShowCancelModal(true)} className="btn btn-ghost" style={{color:'var(--color-danger)'}}><XCircle size={14} /> إلغاء</button>
           )}
-          <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700"><Printer size={14} /> طباعة</button>
-          <button onClick={() => navigate(`/work-orders/${id}/edit`)} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700"><Edit2 size={14} /> تعديل</button>
-          <button onClick={handleDelete} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+          <button onClick={handlePrint} className="btn btn-ghost"><Printer size={14} /> طباعة</button>
+          <button onClick={() => navigate(`/work-orders/${id}/edit`)} className="btn btn-outline"><Edit2 size={14} /> تعديل</button>
+          <button onClick={handleDelete} className="btn btn-ghost" style={{color:'var(--color-danger)'}}><Trash2 size={16} /></button>
         </div>
       </div>
 
@@ -303,7 +303,7 @@ export default function WorkOrderDetail() {
         {/* Left: tabs + main content */}
         <div className="lg:col-span-2 space-y-4">
           {/* Info card */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div className="card card-body">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div><span className="text-gray-400">الكمية:</span> <span className="font-mono font-bold">{totalPieces} قطعة</span></div>
               <div><span className="text-gray-400">مكتمل:</span> <span className="font-mono font-bold text-green-600">{piecesCompleted} قطعة</span></div>
@@ -315,10 +315,10 @@ export default function WorkOrderDetail() {
           </div>
 
           {/* Tab bar */}
-          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto">
+          <div className="flex gap-1 bg-[var(--color-surface)] rounded-xl p-1 overflow-x-auto">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${tab === t.key ? 'bg-white text-[#1a1a2e] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${tab === t.key ? 'bg-white text-[var(--color-navy)] shadow-sm' : 'text-[var(--color-muted)] hover:text-[var(--color-navy)]'}`}>
                 <t.icon size={14} /> {t.label}
               </button>
             ))}
@@ -682,7 +682,7 @@ export default function WorkOrderDetail() {
         {/* Right sidebar */}
         <div className="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto space-y-4">
           {/* Progress */}
-          <div className="bg-gradient-to-br from-[#1a1a2e] to-[#2a2a4e] rounded-2xl p-5 text-white">
+          <div className="bg-gradient-to-br from-[var(--color-navy)] to-[var(--color-navy-light)] rounded-xl p-5 text-white">
             <h4 className="text-xs text-gray-300 mb-3">التقدم</h4>
             <div className="text-center mb-3"><span className="text-4xl font-bold font-mono text-[#c9a84c]">{progressPct}%</span></div>
             <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2">

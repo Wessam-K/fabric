@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, FileText, DollarSign, Clock, CheckCircle, AlertTriangle, Send, X, Eye, Pencil, Trash2, Download, Filter } from 'lucide-react';
+import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
@@ -69,24 +70,16 @@ export default function Invoices() {
   ];
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-[#1a1a2e]">الفواتير</h2>
-          <p className="text-xs text-gray-400 mt-0.5">إدارة الفواتير والمدفوعات</p>
-        </div>
-        <button onClick={() => { setEditInvoice(null); setShowForm(true); }}
-          className="flex items-center gap-1.5 px-5 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold transition-colors">
-          <Plus size={16} /> فاتورة جديدة
-        </button>
-      </div>
+    <div className="page">
+      <PageHeader title="الفواتير" subtitle="إدارة الفواتير والمدفوعات"
+        action={<button onClick={() => { setEditInvoice(null); setShowForm(true); }} className="btn btn-gold"><Plus size={16} /> فاتورة جديدة</button>} />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpiCards.map((c, i) => (
-          <div key={i} className="bg-white rounded-2xl shadow-sm p-4">
+          <div key={i} className="stat-card">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${c.color} mb-2`}><c.icon size={18} /></div>
-            <p className="text-xl font-bold font-mono text-[#1a1a2e]">{c.value}</p>
+            <p className="text-xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{c.value}</p>
             <p className="text-[11px] text-gray-400">{c.label}</p>
           </div>
         ))}

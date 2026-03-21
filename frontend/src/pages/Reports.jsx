@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon, CheckCircle, Settings } from 'lucide-react';
+import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
@@ -1055,11 +1056,8 @@ export default function Reports() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-[#1a1a2e]">مركز التقارير</h2>
-        <p className="text-xs text-gray-400 mt-0.5">تحليلات وإحصائيات المصنع — جدول محوري وتقارير متقدمة</p>
-      </div>
+    <div className="page">
+      <PageHeader title="مركز التقارير" subtitle="تحليلات وإحصائيات المصنع — جدول محوري وتقارير متقدمة" />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto">

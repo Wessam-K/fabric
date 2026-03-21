@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { PageHeader } from '../components/ui';
 
 const ACC_TYPES = [
   { value: '', label: 'الكل', icon: null },
@@ -111,37 +112,27 @@ export default function Accessories() {
   const TypeIcon = (t) => ACC_TYPES.find(x => x.value === t)?.icon || MoreHorizontal;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-5">
+    <div className="page">
       {confirmDel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
-            <h3 className="text-base font-bold text-[#1a1a2e] mb-2">تأكيد الحذف</h3>
-            <p className="text-sm text-gray-500 mb-5">إلغاء تفعيل هذا الاكسسوار؟</p>
+          <div className="card card-body max-w-sm w-full mx-4">
+            <h3 className="section-title mb-2">تأكيد الحذف</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-5">إلغاء تفعيل هذا الاكسسوار؟</p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setConfirmDel(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600">إلغاء</button>
-              <button onClick={doDelete} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-bold">تأكيد</button>
+              <button onClick={() => setConfirmDel(null)} className="btn btn-ghost">إلغاء</button>
+              <button onClick={doDelete} className="btn btn-danger">تأكيد</button>
             </div>
           </div>
         </div>
       )}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-[#1a1a2e]">سجل الاكسسوارات</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{list.length} اكسسوار مسجل</p>
-        </div>
-        <button onClick={openNew}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold transition-colors">
-          <Plus size={16} /> إضافة اكسسوار
-        </button>
-      </div>
+      <PageHeader title="سجل الاكسسوارات" subtitle={`${list.length} اكسسوار مسجل`}
+        actions={<button onClick={openNew} className="btn btn-gold"><Plus size={16} /> إضافة اكسسوار</button>}
+      />
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap items-center">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث..."
-            className="w-full border border-gray-300 rounded-lg pr-9 pl-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
-        </div>
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث..."
+          className="form-input flex-1 max-w-xs" />
         <div className="flex gap-1.5 flex-wrap">
           {ACC_TYPES.map(t => (
             <button key={t.value} onClick={() => setFilterType(t.value)}
@@ -277,8 +268,8 @@ export default function Accessories() {
               </div>
             </div>
             <div className="p-5 border-t flex gap-2">
-              <button onClick={() => setDrawerOpen(false)} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600">إلغاء</button>
-              <button onClick={handleSave} className="flex-1 px-4 py-2.5 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold">حفظ</button>
+              <button onClick={() => setDrawerOpen(false)} className="flex-1 btn btn-ghost">إلغاء</button>
+              <button onClick={handleSave} className="flex-1 btn btn-gold">حفظ</button>
             </div>
           </div>
         </>

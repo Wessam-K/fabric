@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Shield, Plus, Search, Edit2, Key, X, UserX, ChevronDown, ChevronUp, Check, Lock, Unlock, Eye } from 'lucide-react';
+import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 
 const ROLES = [
@@ -189,17 +190,10 @@ export default function UsersPage() {
   const modules = Object.keys(permGrouped);
 
   return (
-    <div className="p-6 space-y-6" dir="rtl">
+    <div className="page">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Shield className="text-[#c9a84c]" size={24} /> إدارة المستخدمين والصلاحيات</h1>
-          <p className="text-sm text-gray-500 mt-1">إدارة الحسابات، الأدوار، ومصفوفة الصلاحيات</p>
-        </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-5 py-2.5 bg-[#c9a84c] text-white rounded-xl hover:bg-[#b8993f] transition-colors shadow-sm">
-          <Plus size={16} /> مستخدم جديد
-        </button>
-      </div>
+      <PageHeader title="إدارة المستخدمين والصلاحيات" subtitle="إدارة الحسابات، الأدوار، ومصفوفة الصلاحيات"
+        action={<button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مستخدم جديد</button>} />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">

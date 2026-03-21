@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Plus, Save, Trash2, Star, Scissors, Package, Layers, DollarSign, BarChart3 } from 'lucide-react';
+import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import FabricBlock from '../components/FabricBlock';
 import SizeGrid from '../components/SizeGrid';
@@ -235,35 +236,24 @@ export default function BomTemplates() {
   }
 
   return (
-    <div className="p-4 lg:p-6 max-w-[1400px] mx-auto">
+    <div className="page">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(`/models/${code}/edit`)} className="p-2 hover:bg-gray-100 rounded-lg"><ArrowRight size={20} /></button>
-          <div>
-            <h2 className="text-xl font-bold text-[#1a1a2e]">قوائم المواد (BOM)</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              <span className="font-mono text-[#c9a84c]">{code}</span> — {model?.model_name || model?.serial_number}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        title="قوائم المواد (BOM)"
+        subtitle={<><span className="font-mono" style={{color:'var(--color-gold)'}}>{code}</span> — {model?.model_name || model?.serial_number}</>}
+        action={<div className="flex gap-2">
+          <button onClick={() => navigate(`/models/${code}/edit`)} className="btn btn-ghost"><ArrowRight size={16} /> رجوع</button>
           {templates.length > 1 && (
             <button onClick={() => setShowMatrix(!showMatrix)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm transition-colors ${showMatrix ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+              className={`btn ${showMatrix ? 'btn-primary' : 'btn-outline'}`}>
               <BarChart3 size={16} /> مقارنة
             </button>
           )}
-          <button onClick={handleNew}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors">
-            <Plus size={16} /> قالب جديد
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-1.5 px-5 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
+          <button onClick={handleNew} className="btn btn-outline"><Plus size={16} /> قالب جديد</button>
+          <button onClick={handleSave} disabled={saving} className="btn btn-gold">
             <Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ'}
           </button>
-        </div>
-      </div>
+        </div>} />
 
       {/* Template tabs */}
       {templates.length > 0 && (

@@ -1,7 +1,21 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
 const db = require('../database');
 const { logAudit } = require('../middleware/auth');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'uploads', 'accessories')),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `acc-${Date.now()}${ext}`);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, cb) => {
+  if (/image\/(jpeg|jpg|png|webp)/.test(file.mimetype)) cb(null, true);
+  else cb(new Error('Only images allowed'));
+}});
 
 router.get('/', (req, res) => {
   try {
@@ -17,12 +31,13 @@ router.get('/', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', (req, res) => {
+router.post('/', upload.single('image'), (req, res) => {
   try {
     const { code, acc_type, name, unit_price, unit, supplier, supplier_id, notes, quantity_on_hand, low_stock_threshold, reorder_qty } = req.body;
     if (!code || !acc_type || !name || unit_price == null) return res.status(400).json({ error: 'الكود والنوع والاسم وسعر الوحدة مطلوبين' });
-    const r = db.prepare(`INSERT INTO accessories (code,acc_type,name,unit_price,unit,supplier,supplier_id,notes,quantity_on_hand,low_stock_threshold,reorder_qty) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(code, acc_type, name, parseFloat(unit_price), unit || 'piece', supplier || null, supplier_id || null, notes || null, quantity_on_hand || 0, low_stock_threshold || 10, reorder_qty || 50);
+    const image_path = req.file ? `/uploads/accessories/${req.file.filename}` : null;
+    const r = db.prepare(`INSERT INTO accessories (code,acc_type,name,unit_price,unit,supplier,supplier_id,notes,quantity_on_hand,low_stock_threshold,reorder_qty,image_path) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(code, acc_type, name, parseFloat(unit_price), unit || 'piece', supplier || null, supplier_id || null, notes || null, quantity_on_hand || 0, low_stock_threshold || 10, reorder_qty || 50, image_path);
     const created = db.prepare('SELECT * FROM accessories WHERE id=?').get(r.lastInsertRowid);
     logAudit(req, 'CREATE', 'accessory', code, name);
     res.status(201).json(created);
@@ -32,13 +47,14 @@ router.post('/', (req, res) => {
   }
 });
 
-router.put('/:code', (req, res) => {
+router.put('/:code', upload.single('image'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { acc_type, name, unit_price, unit, supplier, supplier_id, status, notes, low_stock_threshold, reorder_qty } = req.body;
-    db.prepare(`UPDATE accessories SET acc_type=COALESCE(?,acc_type),name=COALESCE(?,name),unit_price=COALESCE(?,unit_price),unit=COALESCE(?,unit),supplier=COALESCE(?,supplier),supplier_id=COALESCE(?,supplier_id),status=COALESCE(?,status),notes=COALESCE(?,notes),low_stock_threshold=COALESCE(?,low_stock_threshold),reorder_qty=COALESCE(?,reorder_qty) WHERE code=?`)
-      .run(acc_type||null, name||null, unit_price!=null?parseFloat(unit_price):null, unit||null, supplier||null, supplier_id||null, status||null, notes||null, low_stock_threshold!=null?parseInt(low_stock_threshold):null, reorder_qty!=null?parseInt(reorder_qty):null, req.params.code);
+    const image_path = req.file ? `/uploads/accessories/${req.file.filename}` : existing.image_path;
+    db.prepare(`UPDATE accessories SET acc_type=COALESCE(?,acc_type),name=COALESCE(?,name),unit_price=COALESCE(?,unit_price),unit=COALESCE(?,unit),supplier=COALESCE(?,supplier),supplier_id=COALESCE(?,supplier_id),status=COALESCE(?,status),notes=COALESCE(?,notes),low_stock_threshold=COALESCE(?,low_stock_threshold),reorder_qty=COALESCE(?,reorder_qty),image_path=? WHERE code=?`)
+      .run(acc_type||null, name||null, unit_price!=null?parseFloat(unit_price):null, unit||null, supplier||null, supplier_id||null, status||null, notes||null, low_stock_threshold!=null?parseInt(low_stock_threshold):null, reorder_qty!=null?parseInt(reorder_qty):null, image_path, req.params.code);
     const updated = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     logAudit(req, 'UPDATE', 'accessory', req.params.code, existing.name, existing, updated);
     res.json(updated);
@@ -52,6 +68,19 @@ router.delete('/:code', (req, res) => {
     db.prepare("UPDATE accessories SET status='inactive' WHERE code=?").run(req.params.code);
     logAudit(req, 'DELETE', 'accessory', req.params.code, existing.name);
     res.json({ message: 'تم التعطيل', code: req.params.code });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Upload / replace accessory image
+router.post('/:code/image', upload.single('image'), (req, res) => {
+  try {
+    const existing = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
+    if (!existing) return res.status(404).json({ error: 'الاكسسوار غير موجود' });
+    if (!req.file) return res.status(400).json({ error: 'لم يتم رفع صورة' });
+    const image_path = `/uploads/accessories/${req.file.filename}`;
+    db.prepare('UPDATE accessories SET image_path=? WHERE code=?').run(image_path, req.params.code);
+    logAudit(req, 'UPDATE', 'accessory', req.params.code, existing.name, { image_path: existing.image_path }, { image_path });
+    res.json({ image_path });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

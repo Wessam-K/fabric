@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, ShoppingCart, Truck, Clock, CheckCircle, DollarSign, Package } from 'lucide-react';
+import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 
@@ -140,35 +141,30 @@ export default function PurchaseOrders() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-[#1a1a2e]">أوامر الشراء</h2>
-          <p className="text-xs text-gray-400 mt-0.5">إدارة مشتريات الخامات والاكسسوارات</p>
-        </div>
-        <button onClick={openCreate} className="flex items-center gap-1.5 px-4 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold"><Plus size={16} /> أمر شراء جديد</button>
-      </div>
+    <div className="page">
+      <PageHeader title="أوامر الشراء" subtitle="إدارة مشتريات الخامات والاكسسوارات"
+        action={<button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> أمر شراء جديد</button>} />
 
       {/* KPI */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm p-4">
+        <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50 text-blue-600 mb-2"><ShoppingCart size={18} /></div>
-          <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{totals.total || 0}</p>
+          <p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{totals.total || 0}</p>
           <p className="text-xs text-gray-400">إجمالي الأوامر</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-4">
+        <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-50 text-amber-600 mb-2"><Clock size={18} /></div>
-          <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{fmt(totals.pending_total)} ج</p>
+          <p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(totals.pending_total)} ج</p>
           <p className="text-xs text-gray-400">مبلغ معلق</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-4">
+        <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-green-50 text-green-600 mb-2"><CheckCircle size={18} /></div>
-          <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{fmt(totals.received_total)} ج</p>
+          <p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(totals.received_total)} ج</p>
           <p className="text-xs text-gray-400">مبلغ مُستلم</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm p-4">
+        <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gray-50 text-gray-600 mb-2"><DollarSign size={18} /></div>
-          <p className="text-2xl font-bold font-mono text-[#1a1a2e]">{fmt(totals.draft_total)} ج</p>
+          <p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(totals.draft_total)} ج</p>
           <p className="text-xs text-gray-400">مسودات</p>
         </div>
       </div>

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Printer, Edit2, Trash2, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, FileText, Printer, List } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { PageHeader, LoadingState, EmptyState } from '../components/ui';
 
 const CATEGORY_MAP = { men: 'رجالي', women: 'حريمي', kids: 'أطفال', unisex: 'يونيسكس' };
-const GENDER_MAP = { male: 'ذكر', female: 'أنثى', unisex: 'يونيسكس' };
 
 export default function ModelsList() {
   const navigate = useNavigate();
@@ -36,85 +36,45 @@ export default function ModelsList() {
     } catch { toast.error('فشل الحذف'); }
   };
 
-  const fmt = (v) => (v || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-[#1a1a2e]">قائمة الموديلات</h2>
-        <button onClick={() => navigate('/models/new')}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold transition-colors">
-          <Plus size={16} /> موديل جديد
-        </button>
-      </div>
+    <div className="page">
+      <PageHeader title="قائمة الموديلات" subtitle="إدارة موديلات المصنع"
+        actions={<button onClick={() => navigate('/models/new')} className="btn btn-gold"><Plus size={16} /> موديل جديد</button>}
+      />
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="بحث بالكود أو الاسم أو التسلسلي..."
-          className="w-full border border-gray-300 rounded-lg pr-9 pl-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
-      </div>
+      <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+        placeholder="بحث بالكود أو الاسم أو التسلسلي..." className="form-input max-w-sm" />
 
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="animate-spin h-10 w-10 border-4 border-[#c9a84c] border-t-transparent rounded-full" />
-        </div>
-      ) : models.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
-          <p className="text-lg mb-2">لا توجد موديلات</p>
-          <p className="text-sm">ابدأ بإنشاء موديل جديد</p>
-        </div>
+      {loading ? <LoadingState /> : models.length === 0 ? (
+        <EmptyState icon={List} message="لا توجد موديلات" sub="ابدأ بإنشاء موديل جديد" />
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           {models.map(m => (
             <div key={m.model_code}
-              className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-5 hover:shadow-md transition-shadow cursor-pointer"
+              className="card card-body flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer"
               onClick={() => navigate(`/models/${m.model_code}/edit`)}>
-              {/* Image */}
-              <div className="w-16 h-16 rounded-xl bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center">
-                {m.model_image ? (
-                  <img src={m.model_image} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-2xl text-gray-300">📷</span>
-                )}
+              <div className="w-14 h-14 rounded-lg bg-[var(--color-surface)] overflow-hidden shrink-0 flex items-center justify-center">
+                {m.model_image ? <img src={m.model_image} alt="" className="w-full h-full object-cover" /> :
+                  <List size={20} className="text-gray-300" />}
               </div>
-
-              {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">{m.serial_number}</span>
-                  <span className="font-mono text-sm font-bold text-[#1a1a2e]">{m.model_code}</span>
-                  {m.category && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{CATEGORY_MAP[m.category] || m.category}</span>}
+                  <span className="font-mono text-xs bg-[var(--color-surface)] px-2 py-0.5 rounded">{m.serial_number}</span>
+                  <span className="font-mono text-sm font-bold text-[var(--color-navy)]">{m.model_code}</span>
+                  {m.category && <span className="badge badge-info text-[10px]">{CATEGORY_MAP[m.category] || m.category}</span>}
                 </div>
-                {m.model_name && <p className="text-sm text-gray-600 mt-0.5 truncate">{m.model_name}</p>}
-                <p className="text-[10px] text-gray-400 mt-0.5">{new Date(m.created_at).toLocaleDateString('ar-EG')}</p>
+                {m.model_name && <p className="text-sm text-[var(--color-muted)] mt-0.5 truncate">{m.model_name}</p>}
+                <p className="text-[10px] text-[var(--color-muted)] mt-0.5">{new Date(m.created_at).toLocaleDateString('ar-EG')}</p>
               </div>
-
-              {/* BOM Templates badge */}
               <div className="text-center shrink-0">
-                <p className="text-[10px] text-gray-400">قوالب BOM</p>
-                <p className="font-mono font-bold text-[#c9a84c] text-lg">{m.bom_template_count ?? '—'}</p>
+                <p className="text-[10px] text-[var(--color-muted)]">قوالب BOM</p>
+                <p className="font-mono font-bold text-[var(--color-gold)] text-lg">{m.bom_template_count ?? '—'}</p>
               </div>
-
-              {/* Actions */}
               <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                <button onClick={() => navigate(`/models/${m.model_code}/bom`)}
-                  className="p-2 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors" title="قوالب BOM">
-                  <FileText size={16} />
-                </button>
-                <button onClick={() => navigate(`/models/${m.model_code}/edit`)}
-                  className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
-                  <Edit2 size={16} />
-                </button>
-                <button onClick={() => window.open(`/models/${m.model_code}/print`, '_blank')}
-                  className="p-2 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition-colors">
-                  <Printer size={16} />
-                </button>
-                <button onClick={() => handleDelete(m.model_code)}
-                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                  <Trash2 size={16} />
-                </button>
+                <button onClick={() => navigate(`/models/${m.model_code}/bom`)} className="btn btn-ghost btn-xs" title="قوالب BOM"><FileText size={16} /></button>
+                <button onClick={() => navigate(`/models/${m.model_code}/edit`)} className="btn btn-ghost btn-xs"><Edit2 size={16} /></button>
+                <button onClick={() => window.open(`/models/${m.model_code}/print`, '_blank')} className="btn btn-ghost btn-xs"><Printer size={16} /></button>
+                <button onClick={() => handleDelete(m.model_code)} className="btn btn-ghost btn-xs" style={{color:'var(--color-danger)'}}><Trash2 size={16} /></button>
               </div>
             </div>
           ))}

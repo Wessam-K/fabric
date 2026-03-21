@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Clock, Upload, Plus, Download, Search } from 'lucide-react';
+import { PageHeader } from '../../components/ui';
 import api from '../../utils/api';
 import { exportToExcel } from '../../utils/exportExcel';
 
@@ -80,23 +81,16 @@ export default function Attendance() {
   });
 
   return (
-    <div className="p-6 space-y-6" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Clock className="text-[#c9a84c]" /> الحضور والانصراف</h1>
-        </div>
-        <div className="flex gap-2">
-          <input type="month" value={month} onChange={e => setMonth(e.target.value)}
-            className="px-3 py-2 border rounded-xl text-sm" />
-          <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 border rounded-xl hover:bg-gray-50">
-            <Download size={16} /> تصدير
-          </button>
-          <label className="flex items-center gap-2 px-4 py-2 bg-[#c9a84c] text-white rounded-xl hover:bg-[#b8993f] cursor-pointer">
+    <div className="page">
+      <PageHeader title="الحضور والانصراف" subtitle="إدارة سجلات الحضور"
+        action={<div className="flex gap-2">
+          <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="form-input" />
+          <button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير</button>
+          <label className="btn btn-gold cursor-pointer">
             <Upload size={16} /> استيراد من Excel
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} className="hidden" />
           </label>
-        </div>
-      </div>
+        </div>} />
 
       {/* Import Result */}
       {importStep === 2 && importResult && (

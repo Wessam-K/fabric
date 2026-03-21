@@ -8,6 +8,7 @@ import AccessoryTable from '../components/AccessoryTable';
 import CostPanel from '../components/CostPanel';
 import useCostCalc from '../hooks/useCostCalc';
 import { useToast } from '../components/Toast';
+import { PageHeader, LoadingState } from '../components/ui';
 
 const emptyFabric = (role, wastePct = 5) => ({ fabric_code: '', role, meters_per_piece: '', waste_pct: wastePct, color_note: '' });
 const emptySize = () => ({ color_label: '', qty_s: 0, qty_m: 0, qty_l: 0, qty_xl: 0, qty_2xl: 0, qty_3xl: 0 });
@@ -275,33 +276,28 @@ export default function WorkOrderForm() {
     }
   };
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-96"><div className="animate-spin h-10 w-10 border-4 border-[#c9a84c] border-t-transparent rounded-full" /></div>;
-  }
+  if (loading) return <LoadingState />;
 
   return (
-    <div className="p-4 lg:p-6 max-w-[1400px] mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/work-orders')} className="p-2 hover:bg-gray-100 rounded-lg"><ArrowRight size={20} /></button>
-          <div>
-            <h2 className="text-xl font-bold text-[#1a1a2e]">{isEdit ? 'تعديل أمر الإنتاج' : 'أمر إنتاج جديد'}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">الشاشة الرئيسية لقرارات التصنيع</p>
+    <div className="page" style={{ maxWidth: 1400 }}>
+      <PageHeader title={isEdit ? 'تعديل أمر الإنتاج' : 'أمر إنتاج جديد'} subtitle="الشاشة الرئيسية لقرارات التصنيع"
+        actions={
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate('/work-orders')} className="btn btn-ghost"><ArrowRight size={16} /> رجوع</button>
+            <button onClick={handleSave} disabled={saving} className="btn btn-gold">
+              <Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ'}
+            </button>
           </div>
-        </div>
-        <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-1.5 px-5 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
-          <Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ'}
-        </button>
-      </div>
+        }
+      />
 
       <div className="flex gap-6">
         {/* ======= LEFT: Main content ======= */}
         <div className="flex-1 min-w-0 space-y-6">
           {/* WO Header */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2"><Factory size={16} className="text-orange-500" /> بيانات أمر الإنتاج</h3>
+          <div className="card">
+            <div className="card-header"><h3 className="section-title flex items-center gap-2"><Factory size={16} className="text-orange-500" /> بيانات أمر الإنتاج</h3></div>
+            <div className="card-body">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-[11px] text-gray-500 mb-1">رقم الأمر *</label>
@@ -379,10 +375,11 @@ export default function WorkOrderForm() {
               <textarea rows={2} value={woNotes} onChange={e => setWoNotes(e.target.value)}
                 className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-[#c9a84c] outline-none resize-none" placeholder="ملاحظات..." />
             </div>
+            </div>
           </div>
 
           {/* Main Fabrics */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div className="card card-body">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-[#1a1a2e] flex items-center gap-2">
                 <Scissors size={16} className="text-blue-500" /> الأقمشة الأساسية
@@ -403,7 +400,7 @@ export default function WorkOrderForm() {
           </div>
 
           {/* Linings */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div className="card card-body">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-[#1a1a2e] flex items-center gap-2">
                 <Scissors size={16} className="text-green-500" /> البطانة
@@ -424,7 +421,7 @@ export default function WorkOrderForm() {
           </div>
 
           {/* Size Grid */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div className="card card-body">
             <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2">
               <Layers size={16} className="text-purple-500" /> جدول المقاسات والألوان
               <span className="text-[10px] font-normal text-gray-400">إجمالي القطع: <span className="font-mono font-bold text-[#1a1a2e]">{grandTotal}</span></span>
@@ -433,7 +430,7 @@ export default function WorkOrderForm() {
           </div>
 
           {/* Accessories */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div className="card card-body">
             <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2">
               <Package size={16} className="text-amber-500" /> الاكسسوارات
             </h3>
@@ -441,7 +438,7 @@ export default function WorkOrderForm() {
           </div>
 
           {/* V4: Fabric Batches (from PO) */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div className="card card-body">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-[#1a1a2e] flex items-center gap-2">
                 <Layers size={16} className="text-teal-500" /> دفعات الأقمشة (من أوامر الشراء)
@@ -503,7 +500,7 @@ export default function WorkOrderForm() {
           </div>
 
           {/* V4: Extra Expenses */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div className="card card-body">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-[#1a1a2e] flex items-center gap-2">
                 <DollarSign size={16} className="text-red-500" /> مصروفات إضافية
@@ -530,7 +527,7 @@ export default function WorkOrderForm() {
           </div>
 
           {/* Cost Panel Mobile */}
-          <div className="lg:hidden bg-white rounded-2xl shadow-sm p-5">
+          <div className="lg:hidden card card-body">
             <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2">
               <DollarSign size={16} className="text-[#c9a84c]" /> التكلفة والتسعير
             </h3>
@@ -547,9 +544,9 @@ export default function WorkOrderForm() {
         {/* ======= RIGHT: Sticky Cost Sidebar (desktop) ======= */}
         <div className="hidden lg:block w-[320px] shrink-0">
           <div className="sticky top-6 space-y-4">
-            <div className="bg-white rounded-2xl shadow-sm p-5">
-              <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2">
-                <DollarSign size={16} className="text-[#c9a84c]" /> التكلفة والتسعير
+            <div className="card card-body">
+              <h3 className="section-title flex items-center gap-2 mb-4">
+                <DollarSign size={16} className="text-[var(--color-gold)]" /> التكلفة والتسعير
               </h3>
               <CostPanel
                 cost={cost}
@@ -561,7 +558,7 @@ export default function WorkOrderForm() {
             </div>
 
             {/* Quick Stats */}
-            <div className="bg-gradient-to-br from-[#1a1a2e] to-[#2a2a4e] rounded-2xl p-5 text-white">
+            <div className="bg-gradient-to-br from-[var(--color-navy)] to-[var(--color-navy-light)] rounded-xl p-5 text-white">
               <h4 className="text-xs text-gray-300 mb-3">ملخص سريع</h4>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
@@ -592,14 +589,13 @@ export default function WorkOrderForm() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="sticky bottom-0 mt-6 bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg p-4 flex items-center justify-between no-print border border-gray-100">
+      <div className="sticky bottom-0 mt-6 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-4 flex items-center justify-between no-print border border-[var(--color-border)]">
         <div className="text-sm text-gray-500">
           إجمالي القطع: <span className="font-mono font-bold text-[#1a1a2e]">{grandTotal}</span>
           &nbsp;•&nbsp; تكلفة القطعة: <span className="font-mono font-bold text-[#c9a84c]">{(Math.round(cost.cost_per_piece * 100) / 100).toLocaleString('ar-EG')} ج</span>
           &nbsp;•&nbsp; الإجمالي: <span className="font-mono font-bold text-[#1a1a2e]">{(Math.round(cost.total_cost * 100) / 100).toLocaleString('ar-EG')} ج</span>
         </div>
-        <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-1.5 px-6 py-2.5 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
+        <button onClick={handleSave} disabled={saving} className="btn btn-gold">
           <Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ أمر الإنتاج'}
         </button>
       </div>

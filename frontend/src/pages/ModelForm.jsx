@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Save, Printer, Camera, Layers, FileText, ClipboardList, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
+import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import ImageUpload from '../components/ImageUpload';
 import { useToast } from '../components/Toast';
@@ -155,32 +156,22 @@ export default function ModelForm() {
   }
 
   return (
-    <div className="p-4 lg:p-6 max-w-[1100px] mx-auto">
+    <div className="page">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-[#1a1a2e]">{isEdit ? 'تعديل الموديل' : 'موديل جديد'}</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{isEdit ? `كود: ${code}` : 'إضافة موديل جديد للكتالوج'}</p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader title={isEdit ? 'تعديل الموديل' : 'موديل جديد'} subtitle={isEdit ? `كود: ${code}` : 'إضافة موديل جديد للكتالوج'}
+        action={<div className="flex gap-2">
           {isEdit && (
             <>
               <button onClick={() => navigate(`/models/${code}/bom`)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-lg text-sm text-indigo-700 transition-colors">
-                <ClipboardList size={16} /> قوائم المواد ({bomTemplates.length})
-              </button>
+                className="btn btn-outline"><ClipboardList size={16} /> قوائم المواد ({bomTemplates.length})</button>
               <button onClick={() => window.open(`/models/${code}/print`, '_blank')}
-                className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors">
-                <Printer size={16} /> طباعة
-              </button>
+                className="btn btn-ghost"><Printer size={16} /> طباعة</button>
             </>
           )}
-          <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-1.5 px-5 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving} className="btn btn-gold">
             <Save size={16} /> {saving ? 'جاري الحفظ...' : 'حفظ'}
           </button>
-        </div>
-      </div>
+        </div>} />
 
       {/* Main content with optional sticky cost panel */}
       <div className={`${hasCostPanel ? 'lg:grid lg:grid-cols-[1fr_240px] lg:gap-6 lg:items-start' : ''}`}>
