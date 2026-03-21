@@ -1488,12 +1488,14 @@ function runMigrations() {
     for (const p of accPerms) insAccPerm.run(...p);
 
     // Grant accounting permissions to admin role
-    const adminRole = db.prepare("SELECT id FROM roles WHERE name = 'admin'").get();
-    if (adminRole) {
-      const accPermDefs = db.prepare("SELECT id FROM permission_definitions WHERE module = 'accounting'").all();
-      const insRP = db.prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?,?)');
-      for (const pd of accPermDefs) insRP.run(adminRole.id, pd.id);
-    }
+    try {
+      const adminRole = db.prepare("SELECT id FROM roles WHERE name = 'admin'").get();
+      if (adminRole) {
+        const accPermDefs = db.prepare("SELECT id FROM permission_definitions WHERE module = 'accounting'").all();
+        const insRP = db.prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?,?)');
+        for (const pd of accPermDefs) insRP.run(adminRole.id, pd.id);
+      }
+    } catch (e) { /* roles table may not exist yet on fresh DB */ }
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (14)`);
   }

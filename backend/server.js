@@ -32,7 +32,11 @@ const accountingRouter = require('./routes/accounting');
 const app = express();
 const PORT = process.env.PORT || 9002;
 
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  hsts: { maxAge: 31536000, includeSubDomains: true },
+}));
 if (process.env.NODE_ENV !== 'test') app.use(morgan('short'));
 const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
@@ -48,16 +52,26 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ═══ Security headers ═══
+// ═══ Input sanitization — strip HTML tags from string fields ═══
+function stripTags(str) {
+  return typeof str === 'string' ? str.replace(/<[^>]*>/g, '') : str;
+}
+function sanitizeBody(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeBody);
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = typeof v === 'string' ? stripTags(v) : typeof v === 'object' ? sanitizeBody(v) : v;
+  }
+  return out;
+}
 app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (req.body && typeof req.body === 'object') req.body = sanitizeBody(req.body);
   next();
 });
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ═══ Simple rate limiter for auth endpoints ═══
 const loginAttempts = new Map();

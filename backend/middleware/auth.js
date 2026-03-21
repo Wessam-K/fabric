@@ -74,9 +74,11 @@ function requirePermission(module, action) {
 
 function logAudit(req, action, entityType, entityId, entityLabel, oldValues = null, newValues = null) {
   try {
+    const ip = req.ip || req.connection?.remoteAddress || '';
+    const ua = req.get?.('user-agent') || '';
     db.prepare(`INSERT INTO audit_log 
-      (user_id, username, action, entity_type, entity_id, entity_label, old_values, new_values)
-      VALUES (?,?,?,?,?,?,?,?)`)
+      (user_id, username, action, entity_type, entity_id, entity_label, old_values, new_values, ip_address, user_agent)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
     .run(
       req.user?.id || null,
       req.user?.username || 'system',
@@ -84,9 +86,10 @@ function logAudit(req, action, entityType, entityId, entityLabel, oldValues = nu
       String(entityId || ''),
       entityLabel || '',
       oldValues ? JSON.stringify(oldValues) : null,
-      newValues ? JSON.stringify(newValues) : null
+      newValues ? JSON.stringify(newValues) : null,
+      ip, ua
     );
-  } catch(e) { /* non-blocking */ }
+  } catch(e) { console.error('Audit log error:', e.message); }
 }
 
 module.exports = { generateToken, requireAuth, requireRole, requirePermission, logAudit, JWT_SECRET };
