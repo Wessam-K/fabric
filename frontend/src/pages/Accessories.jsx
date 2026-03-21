@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle, Camera } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader } from '../components/ui';
@@ -43,6 +43,7 @@ export default function Accessories() {
   const [stockModal, setStockModal] = useState(null);
   const [stockAdjust, setStockAdjust] = useState({ qty_change: '', notes: '' });
   const [confirmDel, setConfirmDel] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
 
   const fetchList = async () => {
     try {
@@ -57,10 +58,11 @@ export default function Accessories() {
 
   useEffect(() => { fetchList(); }, [search, filterType]);
 
-  const openNew = () => { setEditing(null); setForm({ ...emptyForm }); setDrawerOpen(true); };
+  const openNew = () => { setEditing(null); setForm({ ...emptyForm }); setImageFile(null); setDrawerOpen(true); };
   const openEdit = (a) => {
     setEditing(a.code);
     setForm({ code: a.code, acc_type: a.acc_type, name: a.name, unit_price: String(a.unit_price), unit: a.unit || 'piece', supplier: a.supplier || '', notes: a.notes || '' });
+    setImageFile(null);
     setDrawerOpen(true);
   };
 
@@ -70,11 +72,14 @@ export default function Accessories() {
       return;
     }
     try {
+      const fd = new FormData();
+      Object.keys(form).forEach(k => { if (form[k]) fd.append(k, form[k]); });
+      if (imageFile) fd.append('image', imageFile);
       if (editing) {
-        await api.put(`/accessories/${editing}`, form);
+        await api.put(`/accessories/${editing}`, fd);
         toast.success('تم التحديث');
       } else {
-        await api.post('/accessories', form);
+        await api.post('/accessories', fd);
         toast.success('تمت الإضافة');
       }
       setDrawerOpen(false);
@@ -220,6 +225,29 @@ export default function Accessories() {
               <button onClick={() => setDrawerOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Image upload zone */}
+              <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-[#c9a84c] transition-colors">
+                {imageFile ? (
+                  <div className="relative">
+                    <img src={URL.createObjectURL(imageFile)} alt="" className="w-full h-32 object-cover rounded-lg" />
+                    <button onClick={() => setImageFile(null)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full"><X size={12} /></button>
+                  </div>
+                ) : editing && list.find(a => a.code === editing)?.image_path ? (
+                  <div className="relative">
+                    <img src={list.find(a => a.code === editing).image_path} alt="" className="w-full h-32 object-cover rounded-lg" />
+                    <label className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg cursor-pointer opacity-0 hover:opacity-100 transition-opacity">
+                      <Camera size={24} className="text-white" />
+                      <input type="file" accept="image/*" className="hidden" onChange={e => setImageFile(e.target.files[0] || null)} />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer block">
+                    <Camera size={32} className="mx-auto text-gray-300 mb-2" />
+                    <p className="text-xs text-gray-400">اضغط لرفع صورة الاكسسوار</p>
+                    <input type="file" accept="image/*" className="hidden" onChange={e => setImageFile(e.target.files[0] || null)} />
+                  </label>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] text-gray-500 mb-0.5">الكود *</label>

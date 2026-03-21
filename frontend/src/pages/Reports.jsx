@@ -407,6 +407,11 @@ export default function Reports() {
     const completedOrders = stats.completed || 0;
     return (
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(orders.map(o => ({ wo_number: o.wo_number, model_code: o.model_code, status: o.status, quantity: o.quantity, priority: o.priority })), 'workorders-report.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard label="إجمالي الأوامر" value={totalOrders} icon={Layers} color="bg-blue-50 text-blue-600" />
           <KPICard label="أوامر نشطة" value={activeOrders} icon={TrendingUp} color="bg-amber-50 text-amber-600" />
@@ -647,6 +652,11 @@ export default function Reports() {
     };
     return (
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(dept_breakdown.map(d => ({ department: d.department, count: d.count, total_salary: d.total_salary })), 'hr-report.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <KPICard label="إجمالي الموظفين" value={total_employees} icon={Users} color="bg-blue-50 text-blue-600" />
           <KPICard label="إجمالي الرواتب (الشهر الحالي)" value={`${fmt(total_payroll)} ج`} icon={DollarSign} color="bg-green-50 text-green-600" />
@@ -752,6 +762,11 @@ export default function Reports() {
     const { stage_quality, recent_rejections, overall_pass_rate, total_passed, total_rejected } = qualityData;
     return (
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(stage_quality.map(s => ({ stage: s.stage_name, wo_count: s.wo_count, passed: s.total_passed, rejected: s.total_rejected, pass_rate: s.pass_rate })), 'quality-report.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <KPICard label="نسبة النجاح الكلية" value={`${overall_pass_rate}%`} icon={CheckCircle} color="bg-green-50 text-green-600" />
           <KPICard label="إجمالي القطع الناجحة" value={total_passed} icon={TrendingUp} color="bg-blue-50 text-blue-600" />
@@ -818,6 +833,11 @@ export default function Reports() {
     const { machines } = machinesReport;
     return (
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(machines.map(m => ({ code: m.code, name: m.name, type: m.machine_type, status: m.status, active_stages: m.active_stages, total_stages: m.total_stages, hours: Math.round(m.total_hours || 0), pieces: m.total_pieces })), 'machines-report.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard label="إجمالي الماكينات" value={machines.length} icon={Settings} color="bg-blue-50 text-blue-600" />
           <KPICard label="نشطة" value={machines.filter(m => m.status === 'active').length} icon={CheckCircle} color="bg-green-50 text-green-600" />
@@ -867,6 +887,14 @@ export default function Reports() {
     const { fabrics, accessories, low_stock_fabrics, low_stock_accessories } = inventoryStatus;
     return (
       <div className="space-y-6">
+        <div className="flex justify-end gap-2">
+          <button onClick={() => downloadCSV(fabrics.map(f => ({ code: f.code, name: f.name, color: f.color, available_meters: f.available_meters || 0, threshold: f.low_stock_threshold || 10, low_stock: f.is_low_stock ? 'نعم' : 'لا' })), 'inventory-fabrics.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير أقمشة
+          </button>
+          <button onClick={() => downloadCSV(accessories.map(a => ({ code: a.code, name: a.name, type: a.acc_type, qty: a.quantity_on_hand || 0, threshold: a.low_stock_threshold || 10, low_stock: a.is_low_stock ? 'نعم' : 'لا' })), 'inventory-accessories.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير إكسسوارات
+          </button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard label="أقمشة نشطة" value={fabrics.length} icon={Scissors} color="bg-blue-50 text-blue-600" />
           <KPICard label="أقمشة منخفضة المخزون" value={low_stock_fabrics} icon={AlertTriangle} color="bg-red-50 text-red-600" />
@@ -1016,6 +1044,11 @@ export default function Reports() {
     };
     return (
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(supplierConsumptionData.map(s => ({ supplier: s.supplier_name, items: s.item_count || 0, total_meters: s.total_meters, total_cost: s.total_cost })), 'supplier-consumption.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <KPICard label="عدد الموردين" value={supplierConsumptionData.length} icon={Package} color="bg-blue-50 text-blue-600" />
           <KPICard label="إجمالي الأمتار" value={`${fmt(totalMeters)} م`} icon={Scissors} color="bg-green-50 text-green-600" />

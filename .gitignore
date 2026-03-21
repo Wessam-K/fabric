@@ -21,6 +21,12 @@ backend/.env
 .env.local
 .env.production
 !.env.example
+backend/.jwt_secret
+backend/_*.txt
+backend/test-output*.txt
+backend/test-stderr.txt
+backend/test-stdout.txt
+test-results/
 
 # Electron release
 release/

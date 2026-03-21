@@ -1,12 +1,21 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const fs = require('fs');
+const pathModule = require('path');
 const db = require('../database');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'wk-hub-secret-2026-change-in-prod';
-const JWT_EXPIRES = '24h';
-
-if (JWT_SECRET === 'wk-hub-secret-2026-change-in-prod') {
-  console.warn('⚠️  WARNING: Using default JWT_SECRET. Set JWT_SECRET in .env for production!');
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET === 'wk-hub-secret-2026-change-in-prod') {
+  const secretFile = pathModule.join(__dirname, '..', '.jwt_secret');
+  if (fs.existsSync(secretFile)) {
+    JWT_SECRET = fs.readFileSync(secretFile, 'utf8').trim();
+  } else {
+    JWT_SECRET = crypto.randomBytes(64).toString('hex');
+    try { fs.writeFileSync(secretFile, JWT_SECRET, { mode: 0o600 }); } catch {}
+    console.log('Generated new JWT_SECRET and saved to .jwt_secret');
+  }
 }
+const JWT_EXPIRES = '24h';
 
 function generateToken(user) {
   return jwt.sign(
