@@ -17,8 +17,12 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await login(username, password);
-      navigate('/dashboard');
+      const data = await login(username, password);
+      if (data.user?.must_change_password) {
+        navigate('/change-password');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'حدث خطأ في الاتصال');
     } finally {

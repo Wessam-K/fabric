@@ -1384,6 +1384,42 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (12)`);
   }
+
+  // ═══════════════════════════════════════════════
+  // V13 — Auth hardening: lockout, must_change_password, password history, sessions
+  // ═══════════════════════════════════════════════
+  if (currentVersion < 13) {
+    const addColumnSafe = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch {}
+    };
+
+    addColumnSafe('users', 'must_change_password', 'INTEGER DEFAULT 0');
+    addColumnSafe('users', 'failed_login_attempts', 'INTEGER DEFAULT 0');
+    addColumnSafe('users', 'locked_until', 'TEXT');
+    addColumnSafe('users', 'password_changed_at', 'TEXT');
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS password_history (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        password_hash TEXT NOT NULL,
+        created_at    TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash  TEXT NOT NULL,
+        ip_address  TEXT,
+        user_agent  TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        expires_at  TEXT,
+        revoked     INTEGER DEFAULT 0
+      );
+    `);
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (13)`);
+  }
 }
 
 initializeDatabase();

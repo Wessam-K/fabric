@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -30,6 +30,8 @@ import Employees from './pages/HR/Employees';
 import Attendance from './pages/HR/Attendance';
 import Payroll from './pages/HR/Payroll';
 import PaySlip from './pages/HR/PaySlip';
+import Profile from './pages/Profile';
+import ChangePassword from './pages/ChangePassword';
 import GlobalSearch from './components/GlobalSearch';
 import NotificationBell from './components/NotificationBell';
 import { ToastProvider } from './components/Toast';
@@ -220,15 +222,20 @@ function AppLayout() {
         {user && !collapsed && (
           <div className="px-3 py-3 border-t border-white/8">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/15 flex items-center justify-center text-[#c9a84c] font-bold text-xs">
+              <NavLink to="/profile" className="w-8 h-8 rounded-lg bg-[#c9a84c]/15 flex items-center justify-center text-[#c9a84c] font-bold text-xs hover:bg-[#c9a84c]/25 transition-colors">
                 {user.full_name?.charAt(0) || 'U'}
-              </div>
+              </NavLink>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] text-gray-200 truncate">{user.full_name}</p>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded ${ROLE_COLORS[user.role] || 'bg-gray-500 text-white'}`}>
-                  {ROLE_LABELS[user.role] || user.role}
-                </span>
+                <NavLink to="/profile" className="text-[12px] text-gray-200 truncate block hover:text-[#c9a84c] transition-colors">{user.full_name}</NavLink>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${ROLE_COLORS[user.role] || 'bg-gray-500 text-white'}`}>
+                    {ROLE_LABELS[user.role] || user.role}
+                  </span>
+                </div>
               </div>
+              <NavLink to="/change-password" title="تغيير كلمة المرور" className="text-gray-500 hover:text-[#c9a84c] p-1.5 rounded transition-colors">
+                <Key size={14} />
+              </NavLink>
               <button onClick={logout} title="تسجيل الخروج"
                 className="text-gray-500 hover:text-red-400 p-1.5 rounded transition-colors">
                 <LogOut size={14} />
@@ -238,9 +245,9 @@ function AppLayout() {
         )}
         {user && collapsed && (
           <div className="px-2 py-3 border-t border-white/8 flex flex-col items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/15 flex items-center justify-center text-[#c9a84c] font-bold text-xs">
+            <NavLink to="/profile" className="w-8 h-8 rounded-lg bg-[#c9a84c]/15 flex items-center justify-center text-[#c9a84c] font-bold text-xs hover:bg-[#c9a84c]/25 transition-colors">
               {user.full_name?.charAt(0) || 'U'}
-            </div>
+            </NavLink>
             <button onClick={logout} title="تسجيل الخروج"
               className="text-gray-500 hover:text-red-400 p-1.5 rounded transition-colors">
               <LogOut size={14} />
@@ -278,6 +285,8 @@ function AppLayout() {
           <Route path="/hr/attendance" element={<ProtectedRoute perm={['hr','view']}><Attendance /></ProtectedRoute>} />
           <Route path="/hr/payroll" element={<ProtectedRoute perm={['payroll','view']}><Payroll /></ProtectedRoute>} />
           <Route path="/hr/payroll/:periodId/slip/:employeeId" element={<ProtectedRoute perm={['payroll','view']}><PaySlip /></ProtectedRoute>} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/change-password" element={<ChangePassword />} />
           {/* Legacy redirects */}
           <Route path="/workorders" element={<Navigate to="/work-orders" replace />} />
           <Route path="/workorders/:id" element={<Navigate to="/work-orders/:id" replace />} />

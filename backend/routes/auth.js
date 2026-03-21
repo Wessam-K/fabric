@@ -13,10 +13,31 @@ router.post('/login', (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE username = ? AND status = ?').get(username, 'active');
     if (!user) return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيح' });
 
-    const valid = bcrypt.compareSync(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيح' });
+    // Account lockout check
+    if (user.locked_until) {
+      const lockExpiry = new Date(user.locked_until);
+      if (lockExpiry > new Date()) {
+        const mins = Math.ceil((lockExpiry - new Date()) / 60000);
+        return res.status(423).json({ error: `الحساب مقفل. حاول بعد ${mins} دقيقة` });
+      }
+      // Lock expired, reset
+      db.prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
+    }
 
-    db.prepare('UPDATE users SET last_login = datetime(?) WHERE id = ?').run(new Date().toISOString(), user.id);
+    const valid = bcrypt.compareSync(password, user.password_hash);
+    if (!valid) {
+      const attempts = (user.failed_login_attempts || 0) + 1;
+      if (attempts >= 5) {
+        const lockUntil = new Date(Date.now() + 15 * 60000).toISOString();
+        db.prepare('UPDATE users SET failed_login_attempts = ?, locked_until = ? WHERE id = ?').run(attempts, lockUntil, user.id);
+        return res.status(423).json({ error: 'تم قفل الحساب لمدة 15 دقيقة بسبب محاولات كثيرة' });
+      }
+      db.prepare('UPDATE users SET failed_login_attempts = ? WHERE id = ?').run(attempts, user.id);
+      return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيح' });
+    }
+
+    // Reset failed attempts on success
+    db.prepare('UPDATE users SET last_login = datetime(?), failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(new Date().toISOString(), user.id);
 
     const token = generateToken(user);
     
@@ -28,7 +49,7 @@ router.post('/login', (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, username: user.username, full_name: user.full_name, role: user.role, department: user.department }
+      user: { id: user.id, username: user.username, full_name: user.full_name, role: user.role, department: user.department, must_change_password: !!user.must_change_password }
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -44,7 +65,7 @@ router.post('/logout', requireAuth, (req, res) => {
 // GET /api/auth/me
 router.get('/me', requireAuth, (req, res) => {
   try {
-    const user = db.prepare('SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, must_change_password FROM users WHERE id = ?').get(req.user.id);
     if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
     res.json(user);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -55,7 +76,10 @@ router.put('/change-password', requireAuth, (req, res) => {
   try {
     const { current_password, new_password } = req.body;
     if (!current_password || !new_password) return res.status(400).json({ error: 'كلمة المرور الحالية والجديدة مطلوبتان' });
-    if (new_password.length < 6) return res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل' });
+    if (new_password.length < 8) return res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل' });
+    if (!/[A-Z]/.test(new_password) || !/[0-9]/.test(new_password)) {
+      return res.status(400).json({ error: 'كلمة المرور يجب أن تحتوي على حرف كبير ورقم على الأقل' });
+    }
 
     const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
     if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
@@ -63,10 +87,30 @@ router.put('/change-password', requireAuth, (req, res) => {
     const valid = bcrypt.compareSync(current_password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'كلمة المرور الحالية غير صحيحة' });
 
+    // Check password history (last 5)
+    const history = db.prepare('SELECT password_hash FROM password_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 5').all(req.user.id);
+    for (const h of history) {
+      if (bcrypt.compareSync(new_password, h.password_hash)) {
+        return res.status(400).json({ error: 'لا يمكن استخدام كلمة مرور سابقة' });
+      }
+    }
+
     const hash = bcrypt.hashSync(new_password, 12);
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, password_changed_at = datetime(?) WHERE id = ?').run(hash, new Date().toISOString(), req.user.id);
+    // Save to password history
+    db.prepare('INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)').run(req.user.id, hash);
     logAudit(req, 'UPDATE', 'user', req.user.id, 'change-password');
     res.json({ message: 'تم تغيير كلمة المرور بنجاح' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/auth/profile — detailed profile with recent activity
+router.get('/profile', requireAuth, (req, res) => {
+  try {
+    const user = db.prepare('SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, password_changed_at FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+    const recentActivity = db.prepare('SELECT action, entity_type, entity_label, created_at FROM audit_log WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(req.user.id);
+    res.json({ ...user, recent_activity: recentActivity });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

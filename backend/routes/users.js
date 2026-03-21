@@ -79,7 +79,7 @@ router.patch('/:id/reset-password', requireRole('superadmin'), (req, res) => {
     if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
 
     const hash = bcrypt.hashSync(new_password, 12);
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1, failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(hash, user.id);
     logAudit(req, 'UPDATE', 'user', user.id, user.full_name + ' (reset-password)');
     res.json({ message: 'تم إعادة تعيين كلمة المرور بنجاح' });
   } catch (err) { res.status(500).json({ error: err.message }); }
