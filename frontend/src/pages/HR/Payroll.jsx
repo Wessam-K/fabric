@@ -4,6 +4,7 @@ import { PageHeader } from '../../components/ui';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import { exportPayrollToExcel } from '../../utils/exportExcel';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 const PERIOD_STATUS = {
   draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-700' },
@@ -14,6 +15,7 @@ const PERIOD_STATUS = {
 
 export default function Payroll() {
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [periods, setPeriods] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
   const [records, setRecords] = useState([]);
@@ -74,7 +76,8 @@ export default function Payroll() {
   }
 
   async function payPeriod(periodId) {
-    if (!confirm('هل أنت متأكد من تسجيل صرف الرواتب؟')) return;
+    const ok = await confirm({ title: 'صرف الرواتب', message: 'هل أنت متأكد من تسجيل صرف الرواتب؟', variant: 'warning' });
+    if (!ok) return;
     try {
       await api.patch(`/hr/payroll/${periodId}/pay`);
       loadRecords(periodId);
@@ -101,6 +104,7 @@ export default function Payroll() {
 
   return (
     <div className="page">
+      {ConfirmDialog}
       <PageHeader title="المرتبات" subtitle="إدارة فترات الرواتب"
         action={<button onClick={() => setShowCreate(true)} className="btn btn-gold"><Calculator size={16} /> فترة جديدة</button>} />
 

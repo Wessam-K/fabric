@@ -6,6 +6,7 @@ import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
 import { exportFromBackend } from '../utils/exportUtils';
+import { useConfirm } from '../components/ConfirmDialog';
 
 const STATUS_MAP = {
   draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-600', icon: FileText },
@@ -20,6 +21,7 @@ const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG', { 
 export default function Invoices() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [invoices, setInvoices] = useState([]);
   const [totals, setTotals] = useState({});
   const [loading, setLoading] = useState(true);
@@ -56,7 +58,8 @@ export default function Invoices() {
   };
 
   const deleteInvoice = async (id) => {
-    if (!confirm('هل تريد حذف هذه الفاتورة؟')) return;
+    const ok = await confirm({ title: 'حذف الفاتورة', message: 'هل تريد حذف هذه الفاتورة؟' });
+    if (!ok) return;
     try {
       await api.delete(`/invoices/${id}`);
       toast.success('تم حذف الفاتورة');
@@ -73,6 +76,7 @@ export default function Invoices() {
 
   return (
     <div className="page">
+      {ConfirmDialog}
       <PageHeader title="الفواتير" subtitle="إدارة الفواتير والمدفوعات"
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="invoices" />

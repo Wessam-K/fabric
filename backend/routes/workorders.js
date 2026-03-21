@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { logAudit } = require('../middleware/auth');
+const { logAudit, requirePermission } = require('../middleware/auth');
 
 // ═══════════════════════════════════════════════
 // COST CALCULATION (used by multiple endpoints)
@@ -287,7 +287,7 @@ router.get('/by-stage', (req, res) => {
 // ═══════════════════════════════════════════════
 // POST /api/work-orders — create (v4 expanded)
 // ═══════════════════════════════════════════════
-router.post('/', (req, res) => {
+router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
   try {
     const { model_id, template_id, wo_number, priority, due_date, assigned_to,
             masnaiya, masrouf, margin_pct, consumer_price, wholesale_price,
@@ -439,7 +439,7 @@ router.get('/:id/cost-summary', (req, res) => {
 });
 
 // PUT /api/work-orders/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const existing = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
@@ -501,7 +501,7 @@ router.put('/:id', (req, res) => {
 });
 
 // PATCH /api/work-orders/:id/status
-router.patch('/:id/status', (req, res) => {
+router.patch('/:id/status', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { status } = req.body;
@@ -516,7 +516,7 @@ router.patch('/:id/status', (req, res) => {
 });
 
 // PATCH /api/work-orders/:id/stages/:stageId
-router.patch('/:id/stages/:stageId', (req, res) => {
+router.patch('/:id/stages/:stageId', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const stageId = parseInt(req.params.stageId);
@@ -561,7 +561,7 @@ router.patch('/:id/stages/:stageId', (req, res) => {
 });
 
 // PATCH /api/work-orders/:id/stage-quantity — WIP tracking
-router.patch('/:id/stage-quantity', (req, res) => {
+router.patch('/:id/stage-quantity', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { stage_id, quantity_in_stage, quantity_completed, assigned_to, notes } = req.body;
@@ -587,7 +587,7 @@ router.patch('/:id/stage-quantity', (req, res) => {
 });
 
 // PATCH /api/work-orders/:id/actual-fabric — record actual usage
-router.patch('/:id/actual-fabric', (req, res) => {
+router.patch('/:id/actual-fabric', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { batch_id, actual_meters_per_piece, actual_total_meters, waste_meters } = req.body;
@@ -631,7 +631,7 @@ router.patch('/:id/actual-fabric', (req, res) => {
 });
 
 // POST /api/work-orders/:id/expenses
-router.post('/:id/expenses', (req, res) => {
+router.post('/:id/expenses', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { description, amount, stage_id, notes } = req.body;
@@ -647,7 +647,7 @@ router.post('/:id/expenses', (req, res) => {
 });
 
 // DELETE /api/work-orders/:id/expenses/:expId
-router.delete('/:id/expenses/:expId', (req, res) => {
+router.delete('/:id/expenses/:expId', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     db.prepare('DELETE FROM wo_extra_expenses WHERE id=? AND wo_id=?').run(parseInt(req.params.expId), woId);
@@ -658,7 +658,7 @@ router.delete('/:id/expenses/:expId', (req, res) => {
 });
 
 // POST /api/work-orders/:id/finalize — close production with real cost calculation
-router.post('/:id/finalize', (req, res) => {
+router.post('/:id/finalize', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
@@ -726,7 +726,7 @@ router.post('/:id/finalize', (req, res) => {
 });
 
 // POST /api/work-orders/:id/partial-invoice
-router.post('/:id/partial-invoice', (req, res) => {
+router.post('/:id/partial-invoice', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
@@ -749,7 +749,7 @@ router.post('/:id/partial-invoice', (req, res) => {
 });
 
 // POST /api/work-orders/:id/cost-snapshot
-router.post('/:id/cost-snapshot', (req, res) => {
+router.post('/:id/cost-snapshot', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const wo = getFullWO(parseInt(req.params.id));
     if (!wo) return res.status(404).json({ error: 'غير موجود' });
@@ -761,7 +761,7 @@ router.post('/:id/cost-snapshot', (req, res) => {
 });
 
 // DELETE /api/work-orders/:id — soft delete
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('work_orders', 'delete'), (req, res) => {
   try {
     db.prepare("UPDATE work_orders SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(parseInt(req.params.id));
     logAudit(req, 'DELETE', 'work_order', req.params.id, `WO#${req.params.id}`);
@@ -772,7 +772,7 @@ router.delete('/:id', (req, res) => {
 // ═══════════════════════════════════════════════
 // V7 — Stage Advance (move pieces between stages)
 // ═══════════════════════════════════════════════
-router.patch('/:id/stage-advance', (req, res) => {
+router.patch('/:id/stage-advance', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { from_stage_id, qty_to_pass, qty_rejected, rejection_reason, notes } = req.body;
@@ -858,7 +858,7 @@ router.patch('/:id/stage-advance', (req, res) => {
 // ═══════════════════════════════════════════════
 // V7 — Stage Start (explicitly start a stage)
 // ═══════════════════════════════════════════════
-router.patch('/:id/stage-start', (req, res) => {
+router.patch('/:id/stage-start', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const { stage_id } = req.body;
@@ -941,7 +941,7 @@ router.get('/:id/fabric-consumption', (req, res) => {
 });
 
 // POST /api/work-orders/:id/fabric-consumption
-router.post('/:id/fabric-consumption', (req, res) => {
+router.post('/:id/fabric-consumption', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
@@ -981,7 +981,7 @@ router.post('/:id/fabric-consumption', (req, res) => {
 });
 
 // PATCH /api/work-orders/:id/fabric-consumption/:consumptionId
-router.patch('/:id/fabric-consumption/:consumptionId', (req, res) => {
+router.patch('/:id/fabric-consumption/:consumptionId', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const cId = parseInt(req.params.consumptionId);
@@ -1016,7 +1016,7 @@ router.patch('/:id/fabric-consumption/:consumptionId', (req, res) => {
 });
 
 // DELETE /api/work-orders/:id/fabric-consumption/:consumptionId
-router.delete('/:id/fabric-consumption/:consumptionId', (req, res) => {
+router.delete('/:id/fabric-consumption/:consumptionId', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const cId = parseInt(req.params.consumptionId);
@@ -1050,7 +1050,7 @@ router.get('/:id/waste', (req, res) => {
 });
 
 // POST /api/work-orders/:id/waste
-router.post('/:id/waste', (req, res) => {
+router.post('/:id/waste', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
@@ -1079,7 +1079,7 @@ router.post('/:id/waste', (req, res) => {
 // ═══════════════════════════════════════════════
 // V8 — Partial Invoice from Work Order (creates real invoice)
 // ═══════════════════════════════════════════════
-router.post('/:id/create-invoice', (req, res) => {
+router.post('/:id/create-invoice', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT wo.*, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.id=?').get(woId);
@@ -1131,7 +1131,7 @@ router.post('/:id/create-invoice', (req, res) => {
 });
 
 // POST /api/work-orders/:id/cancel — cancel a WO
-router.post('/:id/cancel', (req, res) => {
+router.post('/:id/cancel', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);

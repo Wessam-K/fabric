@@ -4,6 +4,7 @@ import { PageHeader } from '../../components/ui';
 import HelpButton from '../../components/HelpButton';
 import api from '../../utils/api';
 import { exportToExcel } from '../../utils/exportExcel';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 const DEPARTMENTS = ['الإنتاج', 'المخازن', 'المحاسبة', 'الإدارة', 'الموارد البشرية'];
 const EMP_TYPES = { full_time: 'دوام كامل', part_time: 'دوام جزئي', daily: 'يومي', piece_work: 'بالقطعة' };
@@ -11,6 +12,7 @@ const SALARY_TYPES = { monthly: 'شهري', daily: 'يومي', hourly: 'بالس
 const TABS = ['البيانات الأساسية', 'الراتب والمزايا', 'الخصومات الثابتة', 'الحساب المصرفي'];
 
 export default function Employees() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [employees, setEmployees] = useState([]);
   const [kpi, setKpi] = useState({});
   const [search, setSearch] = useState('');
@@ -68,7 +70,8 @@ export default function Employees() {
   }
 
   async function handleDelete(emp) {
-    if (!confirm(`إنهاء خدمة ${emp.full_name}?`)) return;
+    const ok = await confirm({ title: 'إنهاء الخدمة', message: `إنهاء خدمة ${emp.full_name}؟` });
+    if (!ok) return;
     try { await api.delete(`/hr/employees/${emp.id}`); load(); } catch (err) { alert(err.response?.data?.error || 'حدث خطأ'); }
   }
 
@@ -88,6 +91,7 @@ export default function Employees() {
 
   return (
     <div className="page">
+      {ConfirmDialog}
       <PageHeader title="الموظفون" subtitle="إدارة بيانات الموظفين"
         action={<div className="flex gap-2">
           <HelpButton pageKey="hr" />

@@ -121,7 +121,7 @@ router.get('/:id', (req, res) => {
 // ═══════════════════════════════════════════════
 // POST /api/machines — create
 // ═══════════════════════════════════════════════
-router.post('/', (req, res) => {
+router.post('/', requirePermission('machines', 'create'), (req, res) => {
   try {
     const { code, name, machine_type, location, capacity_per_hour, cost_per_hour, notes, sort_order } = req.body;
     if (!name || !name.trim()) return validationError(res, 'اسم الماكينة مطلوب', 'name');
@@ -161,7 +161,7 @@ router.post('/', (req, res) => {
 // ═══════════════════════════════════════════════
 // PATCH /api/machines/:id — update
 // ═══════════════════════════════════════════════
-router.patch('/:id', (req, res) => {
+router.patch('/:id', requirePermission('machines', 'edit'), (req, res) => {
   try {
     const machine = db.prepare('SELECT * FROM machines WHERE id = ?').get(req.params.id);
     if (!machine) return res.status(404).json({ error: 'الماكينة غير موجودة' });
@@ -202,7 +202,7 @@ router.patch('/:id', (req, res) => {
 // ═══════════════════════════════════════════════
 // DELETE /api/machines/:id — soft delete
 // ═══════════════════════════════════════════════
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('machines', 'delete'), (req, res) => {
   try {
     const machine = db.prepare('SELECT * FROM machines WHERE id = ?').get(req.params.id);
     if (!machine) return res.status(404).json({ error: 'الماكينة غير موجودة' });
@@ -230,7 +230,7 @@ router.get('/:id/maintenance', (req, res) => {
 });
 
 // POST /api/machines/:id/maintenance
-router.post('/:id/maintenance', (req, res) => {
+router.post('/:id/maintenance', requirePermission('machines', 'edit'), (req, res) => {
   try {
     const machine = db.prepare('SELECT id FROM machines WHERE id = ?').get(req.params.id);
     if (!machine) return res.status(404).json({ error: 'الماكينة غير موجودة' });
@@ -253,7 +253,7 @@ router.post('/:id/maintenance', (req, res) => {
 });
 
 // PUT /api/machines/:id/maintenance/:mid
-router.put('/:id/maintenance/:mid', (req, res) => {
+router.put('/:id/maintenance/:mid', requirePermission('machines', 'edit'), (req, res) => {
   try {
     const record = db.prepare('SELECT * FROM machine_maintenance WHERE id=? AND machine_id=?').get(req.params.mid, req.params.id);
     if (!record) return notFound(res, 'سجل الصيانة');
@@ -284,7 +284,7 @@ router.get('/:id/expenses', (req, res) => {
 // ═══════════════════════════════════════════════
 // POST /api/machines/:id/expenses
 // ═══════════════════════════════════════════════
-router.post('/:id/expenses', (req, res) => {
+router.post('/:id/expenses', requirePermission('machines', 'edit'), (req, res) => {
   try {
     const machine = db.prepare('SELECT id FROM machines WHERE id = ?').get(req.params.id);
     if (!machine) return notFound(res, 'الماكينة');
@@ -299,7 +299,7 @@ router.post('/:id/expenses', (req, res) => {
 // ═══════════════════════════════════════════════
 // POST /api/machines/import
 // ═══════════════════════════════════════════════
-router.post('/import', (req, res) => {
+router.post('/import', requirePermission('machines', 'create'), (req, res) => {
   try {
     const items = req.body;
     if (!Array.isArray(items)) return validationError(res, 'يجب إرسال مصفوفة من الماكينات');

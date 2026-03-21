@@ -5,12 +5,14 @@ import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader, LoadingState, EmptyState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
+import { useConfirm } from '../components/ConfirmDialog';
 
 const CATEGORY_MAP = { men: 'رجالي', women: 'حريمي', kids: 'أطفال', unisex: 'يونيسكس' };
 
 export default function ModelsList() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [models, setModels] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -29,7 +31,8 @@ export default function ModelsList() {
   useEffect(() => { fetchModels(); }, [search]);
 
   const handleDelete = async (code) => {
-    if (!confirm('هل تريد إلغاء تفعيل هذا الموديل؟')) return;
+    const ok = await confirm({ title: 'إلغاء تفعيل الموديل', message: 'هل تريد إلغاء تفعيل هذا الموديل؟', variant: 'warning' });
+    if (!ok) return;
     try {
       await api.delete(`/models/${code}`);
       toast.success('تم إلغاء تفعيل الموديل');
@@ -39,6 +42,7 @@ export default function ModelsList() {
 
   return (
     <div className="page">
+      {ConfirmDialog}
       <PageHeader title="قائمة الموديلات" subtitle="إدارة موديلات المصنع"
         actions={<div className="flex gap-2"><HelpButton pageKey="models" /><button onClick={() => navigate('/models/new')} className="btn btn-gold"><Plus size={16} /> موديل جديد</button></div>}
       />

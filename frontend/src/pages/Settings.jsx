@@ -4,6 +4,7 @@ import { PageHeader, LoadingState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { useConfirm } from '../components/ConfirmDialog';
 
 const TABS = [
   { key: 'factory', label: 'إعدادات المصنع', icon: Building2 },
@@ -51,6 +52,7 @@ const SYSTEM_FIELDS = [
 
 export default function SettingsPage() {
   const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [settings, setSettings] = useState({});
   const [stages, setStages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +95,8 @@ export default function SettingsPage() {
   };
 
   const deleteStage = async (id) => {
-    if (!confirm('حذف هذه المرحلة؟')) return;
+    const ok = await confirm({ title: 'حذف المرحلة', message: 'حذف هذه المرحلة؟' });
+    if (!ok) return;
     try {
       await api.delete(`/settings/stages/${id}`);
       const { data } = await api.get('/settings/stages');
@@ -142,6 +145,7 @@ export default function SettingsPage() {
 
   return (
     <div className="page">
+      {ConfirmDialog}
       <PageHeader title="الإعدادات" subtitle="إدارة إعدادات المصنع والنظام"
         action={<div className="flex gap-2">
           <HelpButton pageKey="settings" />

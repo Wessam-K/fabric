@@ -164,6 +164,49 @@ function generateNotifications() {
         }
       }
     }
+
+    // V17 — Pending expense approvals
+    try {
+      const pendingExpenses = db.prepare(`SELECT id, description, amount FROM expenses WHERE is_deleted=0 AND status='pending'`).all();
+      for (const exp of pendingExpenses) {
+        for (const u of adminUsers) {
+          const exists = db.prepare(`SELECT id FROM notifications WHERE user_id=? AND reference_type='expense' AND reference_id=? AND is_read=0 AND type='expense_pending'`).get(u.id, String(exp.id));
+          if (!exists) {
+            createNotification(u.id, 'expense_pending', `مصروف بانتظار الاعتماد`, `${exp.description} — ${exp.amount} ج.م`, 'expense', String(exp.id));
+          }
+        }
+      }
+    } catch {}
+
+    // V17 — Maintenance due within 7 days
+    try {
+      const upcoming = db.prepare(`SELECT mo.id, mo.title, mo.scheduled_date, m.name as machine_name
+        FROM maintenance_orders mo JOIN machines m ON m.id=mo.machine_id
+        WHERE mo.is_deleted=0 AND mo.status='pending' AND mo.scheduled_date BETWEEN date('now') AND date('now','+7 days')`).all();
+      for (const mt of upcoming) {
+        for (const u of adminUsers) {
+          const exists = db.prepare(`SELECT id FROM notifications WHERE user_id=? AND reference_type='maintenance' AND reference_id=? AND is_read=0 AND type='maintenance_upcoming'`).get(u.id, String(mt.id));
+          if (!exists) {
+            createNotification(u.id, 'maintenance_upcoming', `صيانة قادمة: ${mt.machine_name}`, `${mt.title} — مجدولة في ${mt.scheduled_date}`, 'maintenance', String(mt.id));
+          }
+        }
+      }
+    } catch {}
+
+    // V17 — Maintenance open > 48 hours
+    try {
+      const stale = db.prepare(`SELECT mo.id, mo.title, m.name as machine_name, mo.created_at
+        FROM maintenance_orders mo JOIN machines m ON m.id=mo.machine_id
+        WHERE mo.is_deleted=0 AND mo.status IN ('pending','in_progress') AND mo.created_at < datetime('now','-2 days')`).all();
+      for (const mt of stale) {
+        for (const u of adminUsers) {
+          const exists = db.prepare(`SELECT id FROM notifications WHERE user_id=? AND reference_type='maintenance' AND reference_id=? AND is_read=0 AND type='maintenance_stale'`).get(u.id, String(mt.id));
+          if (!exists) {
+            createNotification(u.id, 'maintenance_stale', `صيانة مفتوحة أكثر من 48 ساعة`, `${mt.machine_name}: ${mt.title}`, 'maintenance', String(mt.id));
+          }
+        }
+      }
+    } catch {}
   } catch (err) { console.error('generateNotifications error:', err.message); }
 }
 

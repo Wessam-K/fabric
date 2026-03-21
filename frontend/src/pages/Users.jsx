@@ -3,6 +3,7 @@ import { Shield, Plus, Search, Edit2, Key, X, UserX, ChevronDown, ChevronUp, Che
 import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
+import { useConfirm } from '../components/ConfirmDialog';
 
 const ROLES = [
   { value: 'superadmin', label: 'مدير النظام' },
@@ -32,6 +33,7 @@ const MODULE_LABELS = {
 const ACTION_LABELS = { view: 'عرض', create: 'إنشاء', edit: 'تعديل', delete: 'حذف', export: 'تصدير', manage: 'إدارة' };
 
 export default function UsersPage() {
+  const { confirm, ConfirmDialog } = useConfirm();
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
   const [showDrawer, setShowDrawer] = useState(false);
@@ -99,7 +101,8 @@ export default function UsersPage() {
   }
 
   async function handleDeactivate(u) {
-    if (!confirm(`تعطيل حساب ${u.full_name}?`)) return;
+    const ok = await confirm({ title: 'تعطيل الحساب', message: `تعطيل حساب ${u.full_name}؟` });
+    if (!ok) return;
     try { await api.delete(`/users/${u.id}`); load(); } catch (err) { alert(err.response?.data?.error || 'حدث خطأ'); }
   }
 
@@ -192,6 +195,7 @@ export default function UsersPage() {
 
   return (
     <div className="page">
+      {ConfirmDialog}
       {/* Header */}
       <PageHeader title="إدارة المستخدمين والصلاحيات" subtitle="إدارة الحسابات، الأدوار، ومصفوفة الصلاحيات"
         action={<div className="flex gap-2"><HelpButton pageKey="users" /><button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مستخدم جديد</button></div>} />

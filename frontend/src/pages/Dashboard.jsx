@@ -119,6 +119,43 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Machine Status Board */}
+      {data?.machine_status_board?.length > 0 && (
+        <div className="card">
+          <div className="card-header flex items-center justify-between">
+            <h3 className="section-title flex items-center gap-2">
+              <Factory size={14} className="text-[var(--color-navy)]" /> حالة الماكينات ({data.machine_status_board.length})
+            </h3>
+            <span className="text-xs text-[var(--color-muted)] cursor-pointer hover:underline" onClick={() => navigate('/machines')}>عرض الكل ←</span>
+          </div>
+          <div className="card-body">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+              {data.machine_status_board.map(m => (
+                <div key={m.id} onClick={() => navigate('/machines')}
+                  className={`rounded-lg p-2 text-center cursor-pointer transition-all hover:scale-105 border ${
+                    m.status === 'active' ? 'bg-green-50 border-green-200' :
+                    m.status === 'maintenance' ? 'bg-yellow-50 border-yellow-200' :
+                    'bg-red-50 border-red-200'
+                  }`}>
+                  <div className={`w-3 h-3 rounded-full mx-auto mb-1 ${
+                    m.status === 'active' ? 'bg-green-500' :
+                    m.status === 'maintenance' ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`} />
+                  <p className="text-[10px] font-bold truncate">{m.code || m.name}</p>
+                  <p className="text-[9px] text-gray-500 truncate">{m.location || m.machine_type || ''}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-4 mt-3 text-[10px] text-gray-500 justify-center">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> نشط</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" /> صيانة</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> متوقف</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Grid: Pipeline + Finance + Stock */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Production Pipeline */}

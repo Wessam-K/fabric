@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { logAudit } = require('../middleware/auth');
+const { logAudit, requirePermission } = require('../middleware/auth');
 
 // GET /api/invoices — list with search, status filter, date range
 router.get('/', (req, res) => {
@@ -76,7 +76,7 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/invoices — create invoice
-router.post('/', (req, res) => {
+router.post('/', requirePermission('invoices', 'create'), (req, res) => {
   try {
     const { invoice_number, customer_name, customer_phone, customer_email, customer_id, notes, tax_pct, discount, due_date, items, status } = req.body;
     if (!invoice_number || !customer_name) return res.status(400).json({ error: 'رقم الفاتورة واسم العميل مطلوبين' });
@@ -116,7 +116,7 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/invoices/:id — update invoice
-router.put('/:id', (req, res) => {
+router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
   try {
     const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
     if (!invoice) return res.status(404).json({ error: 'غير موجود' });
@@ -154,7 +154,7 @@ router.put('/:id', (req, res) => {
 });
 
 // PATCH /api/invoices/:id/status — quick status update
-router.patch('/:id/status', (req, res) => {
+router.patch('/:id/status', requirePermission('invoices', 'edit'), (req, res) => {
   try {
     const { status } = req.body;
     if (!['draft', 'sent', 'paid', 'overdue', 'cancelled'].includes(status)) {
@@ -166,7 +166,7 @@ router.patch('/:id/status', (req, res) => {
 });
 
 // DELETE /api/invoices/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('invoices', 'delete'), (req, res) => {
   try {
     db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(req.params.id);
     db.prepare('DELETE FROM invoices WHERE id = ?').run(req.params.id);

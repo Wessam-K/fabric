@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const db = require('../database');
-const { logAudit } = require('../middleware/auth');
+const { logAudit, requirePermission } = require('../middleware/auth');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'uploads', 'accessories')),
@@ -41,7 +41,7 @@ router.get('/', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', upload.single('image'), (req, res) => {
+router.post('/', upload.single('image'), requirePermission('accessories', 'create'), (req, res) => {
   try {
     const { code, acc_type, name, unit_price, unit, supplier, supplier_id, notes, quantity_on_hand, low_stock_threshold, reorder_qty } = req.body;
     if (!code || !acc_type || !name || unit_price == null) return res.status(400).json({ error: 'الكود والنوع والاسم وسعر الوحدة مطلوبين' });
@@ -71,7 +71,7 @@ router.get('/export', (req, res) => {
 });
 
 // POST /api/accessories/import — bulk import
-router.post('/import', (req, res) => {
+router.post('/import', requirePermission('accessories', 'create'), (req, res) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
@@ -93,7 +93,7 @@ router.post('/import', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:code', upload.single('image'), (req, res) => {
+router.put('/:code', upload.single('image'), requirePermission('accessories', 'edit'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
@@ -107,7 +107,7 @@ router.put('/:code', upload.single('image'), (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:code', (req, res) => {
+router.delete('/:code', requirePermission('accessories', 'delete'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
@@ -141,7 +141,7 @@ router.get('/:code/stock', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/:code/stock/adjust', (req, res) => {
+router.post('/:code/stock/adjust', requirePermission('accessories', 'edit'), (req, res) => {
   try {
     const acc = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     if (!acc) return res.status(404).json({ error: 'الاكسسوار غير موجود' });

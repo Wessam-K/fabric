@@ -245,6 +245,12 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
         GROUP BY ws.stage_name ORDER BY total_wip DESC LIMIT 5`).all();
     } catch {}
 
+    // V17 — Machine status board
+    let machineStatusBoard = [];
+    try {
+      machineStatusBoard = db.prepare(`SELECT id, code, name, status, location, machine_type FROM machines ORDER BY sort_order, name LIMIT 30`).all();
+    } catch {}
+
     res.json({
       total_models: totalModels, total_fabrics: totalFabrics, total_accessories: totalAccessories,
       total_invoices: totalInvoices, active_work_orders: activeWorkOrders,
@@ -268,6 +274,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       total_expenses_this_month: (() => { try { return db.prepare("SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= date('now','start of month')").get().v; } catch { return 0; } })(),
       pending_maintenance_count: (() => { try { return db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND status='pending'").get().c; } catch { return 0; } })(),
       critical_maintenance_count: (() => { try { return db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND priority='critical' AND status NOT IN ('completed','cancelled')").get().c; } catch { return 0; } })(),
+      machine_status_board: machineStatusBoard,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -8,6 +8,7 @@ import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
 import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
+import { useConfirm } from '../components/ConfirmDialog';
 
 const PRIORITY_COLORS = { critical: 'bg-red-100 text-red-700', high: 'bg-orange-100 text-orange-700', medium: 'bg-yellow-100 text-yellow-700', low: 'bg-green-100 text-green-700' };
 const PRIORITY_LABELS = { critical: 'حرج', high: 'عالي', medium: 'متوسط', low: 'منخفض' };
@@ -18,6 +19,7 @@ const TYPES = { preventive: 'وقائية', corrective: 'تصحيحية', emerge
 export default function Maintenance() {
   const toast = useToast();
   const { can } = useAuth();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState({});
   const [machines, setMachines] = useState([]);
@@ -76,7 +78,8 @@ export default function Maintenance() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('هل تريد حذف أمر الصيانة؟')) return;
+    const ok = await confirm({ title: 'حذف أمر الصيانة', message: 'هل تريد حذف أمر الصيانة؟' });
+    if (!ok) return;
     try {
       await api.delete(`/maintenance/${id}`);
       toast.success('تم الحذف');
@@ -118,6 +121,7 @@ export default function Maintenance() {
 
   return (
     <div className="page">
+      {ConfirmDialog}
       <PageHeader title="أوامر الصيانة" subtitle="إدارة صيانة الماكينات"
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="maintenance" />

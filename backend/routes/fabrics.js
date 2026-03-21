@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { logAudit } = require('../middleware/auth');
+const { logAudit, requirePermission } = require('../middleware/auth');
 const path = require('path');
 const db = require('../database');
 
@@ -41,7 +41,7 @@ router.get('/', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', upload.single('image'), (req, res) => {
+router.post('/', upload.single('image'), requirePermission('fabrics', 'create'), (req, res) => {
   try {
     const { code, name, fabric_type, price_per_m, supplier, supplier_id, color, notes } = req.body;
     if (!code || !name || !price_per_m) return res.status(400).json({ error: 'الكود والاسم وسعر المتر مطلوبين' });
@@ -71,7 +71,7 @@ router.get('/export', (req, res) => {
 });
 
 // POST /api/fabrics/import — bulk import
-router.post('/import', (req, res) => {
+router.post('/import', requirePermission('fabrics', 'create'), (req, res) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
@@ -93,7 +93,7 @@ router.post('/import', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:code', upload.single('image'), (req, res) => {
+router.put('/:code', upload.single('image'), requirePermission('fabrics', 'edit'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM fabrics WHERE code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
@@ -116,7 +116,7 @@ router.post('/:code/image', upload.single('image'), (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:code', (req, res) => {
+router.delete('/:code', requirePermission('fabrics', 'delete'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM fabrics WHERE code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
