@@ -28,6 +28,7 @@ const TABS = [
   { key: 'machines-report', label: 'تقرير الماكينات', icon: Settings },
   { key: 'inventory-status', label: 'حالة المخزون', icon: Warehouse },
   { key: 'ar-aging', label: 'أعمار الديون', icon: CreditCard },
+  { key: 'inventory-valuation', label: 'تقييم المخزون', icon: Package },
   { key: 'pivot', label: 'جدول محوري', icon: Table2 },
 ];
 
@@ -78,6 +79,7 @@ export default function Reports() {
   const [machinesReport, setMachinesReport] = useState(null);
   const [inventoryStatus, setInventoryStatus] = useState(null);
   const [arAgingData, setArAgingData] = useState(null);
+  const [inventoryValuation, setInventoryValuation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -150,6 +152,9 @@ export default function Reports() {
         } else if (tab === 'ar-aging') {
           const { data } = await api.get('/reports/ar-aging');
           setArAgingData(data);
+        } else if (tab === 'inventory-valuation') {
+          const { data } = await api.get('/reports/inventory-valuation');
+          setInventoryValuation(data);
         } else if (tab === 'pivot') {
           setLoading(false); return; // PivotTable loads its own data
         }
@@ -1161,6 +1166,96 @@ export default function Reports() {
     );
   };
 
+  const renderInventoryValuation = () => {
+    if (!inventoryValuation) return null;
+    const { fabrics, accessories, fabric_total, accessory_total, grand_total } = inventoryValuation;
+    const fmt = (n) => Math.round(n || 0).toLocaleString('ar-EG');
+    const allRows = [
+      ...fabrics.map(f => ({ 'النوع': 'قماش', 'الكود': f.code, 'الاسم': f.name, 'الكمية': f.qty, 'سعر الوحدة': f.unit_price, 'القيمة': f.value })),
+      ...accessories.map(a => ({ 'النوع': 'اكسسوار', 'الكود': a.code, 'الاسم': a.name, 'الكمية': a.qty, 'سعر الوحدة': a.unit_price, 'القيمة': a.value })),
+    ];
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-bold text-[#1a1a2e]">تقييم المخزون</h3>
+          <button onClick={() => downloadCSV(allRows, 'inventory-valuation')} className="btn btn-ghost text-xs"><Download size={14} /> تصدير CSV</button>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <p className="text-xs text-gray-400">أقمشة</p>
+            <p className="text-xl font-bold font-mono text-blue-600">{fmt(fabric_total)} ج</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <p className="text-xs text-gray-400">اكسسوارات</p>
+            <p className="text-xl font-bold font-mono text-purple-600">{fmt(accessory_total)} ج</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <p className="text-xs text-gray-400">إجمالي قيمة المخزون</p>
+            <p className="text-xl font-bold font-mono text-[#c9a84c]">{fmt(grand_total)} ج</p>
+          </div>
+        </div>
+        {fabrics.length > 0 && (
+          <div>
+            <h4 className="text-sm font-bold text-blue-600 mb-2">الأقمشة ({fabrics.length})</h4>
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50"><tr>
+                  <th className="px-4 py-2 text-right text-xs text-gray-500">الكود</th>
+                  <th className="px-4 py-2 text-right text-xs text-gray-500">الاسم</th>
+                  <th className="px-4 py-2 text-center text-xs text-gray-500">اللون</th>
+                  <th className="px-4 py-2 text-center text-xs text-gray-500">الكمية (م)</th>
+                  <th className="px-4 py-2 text-center text-xs text-gray-500">سعر المتر</th>
+                  <th className="px-4 py-2 text-center text-xs text-gray-500">القيمة</th>
+                </tr></thead>
+                <tbody>
+                  {fabrics.map((f, i) => (
+                    <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-4 py-2 font-mono text-xs">{f.code}</td>
+                      <td className="px-4 py-2 font-bold">{f.name}</td>
+                      <td className="px-4 py-2 text-center text-xs">{f.color || '—'}</td>
+                      <td className="px-4 py-2 text-center font-mono">{fmt(f.qty)}</td>
+                      <td className="px-4 py-2 text-center font-mono text-xs">{f.unit_price} ج</td>
+                      <td className="px-4 py-2 text-center font-mono font-bold text-blue-600">{fmt(f.value)} ج</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {accessories.length > 0 && (
+          <div>
+            <h4 className="text-sm font-bold text-purple-600 mb-2">الاكسسوارات ({accessories.length})</h4>
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50"><tr>
+                  <th className="px-4 py-2 text-right text-xs text-gray-500">الكود</th>
+                  <th className="px-4 py-2 text-right text-xs text-gray-500">الاسم</th>
+                  <th className="px-4 py-2 text-center text-xs text-gray-500">النوع</th>
+                  <th className="px-4 py-2 text-center text-xs text-gray-500">الكمية</th>
+                  <th className="px-4 py-2 text-center text-xs text-gray-500">سعر الوحدة</th>
+                  <th className="px-4 py-2 text-center text-xs text-gray-500">القيمة</th>
+                </tr></thead>
+                <tbody>
+                  {accessories.map((a, i) => (
+                    <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-4 py-2 font-mono text-xs">{a.code}</td>
+                      <td className="px-4 py-2 font-bold">{a.name}</td>
+                      <td className="px-4 py-2 text-center text-xs">{a.acc_type}</td>
+                      <td className="px-4 py-2 text-center font-mono">{fmt(a.qty)}</td>
+                      <td className="px-4 py-2 text-center font-mono text-xs">{a.unit_price} ج</td>
+                      <td className="px-4 py-2 text-center font-mono font-bold text-purple-600">{fmt(a.value)} ج</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="page">
       <PageHeader title="مركز التقارير" subtitle="تحليلات وإحصائيات المصنع — جدول محوري وتقارير متقدمة" />
@@ -1222,6 +1317,7 @@ export default function Reports() {
           {tab === 'machines-report' && renderMachinesReport()}
           {tab === 'inventory-status' && renderInventoryStatus()}
           {tab === 'ar-aging' && renderARaging()}
+          {tab === 'inventory-valuation' && renderInventoryValuation()}
           {tab === 'pivot' && <PivotTable />}
         </>
       )}

@@ -706,4 +706,33 @@ router.get('/ar-aging', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/inventory-valuation — fabric + accessory stock with monetary values
+router.get('/inventory-valuation', (req, res) => {
+  try {
+    const fabrics = db.prepare(`
+      SELECT f.code, f.name, f.color, f.unit_price,
+        COALESCE(f.available_meters, 0) AS qty,
+        COALESCE(f.available_meters, 0) * COALESCE(f.unit_price, 0) AS value
+      FROM fabrics f WHERE f.status='active' ORDER BY value DESC
+    `).all();
+
+    const accessories = db.prepare(`
+      SELECT a.code, a.name, a.acc_type, a.unit_price,
+        COALESCE(a.quantity_on_hand, 0) AS qty,
+        COALESCE(a.quantity_on_hand, 0) * COALESCE(a.unit_price, 0) AS value
+      FROM accessories a WHERE a.status='active' ORDER BY value DESC
+    `).all();
+
+    const fabricTotal = fabrics.reduce((s, f) => s + f.value, 0);
+    const accessoryTotal = accessories.reduce((s, a) => s + a.value, 0);
+
+    res.json({
+      fabrics, accessories,
+      fabric_total: fabricTotal,
+      accessory_total: accessoryTotal,
+      grand_total: fabricTotal + accessoryTotal,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
