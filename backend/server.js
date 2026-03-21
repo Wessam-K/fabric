@@ -74,7 +74,7 @@ app.use('/api/auth/login', (req, res, next) => {
 
 // ═══ Health check (public, no auth) ═══
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: 'v10', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: 'v11', timestamp: new Date().toISOString() });
 });
 
 // ═══ Public routes (no auth) ═══
@@ -181,6 +181,23 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     const totalRejected = db.prepare(`SELECT COALESCE(SUM(quantity_rejected),0) as v FROM wo_stages`).get().v;
     const qualityRate = (totalPassed + totalRejected) > 0 ? Math.round((totalPassed / (totalPassed + totalRejected)) * 10000) / 100 : 100;
 
+    // V11 — top models by production volume
+    let topModels = [];
+    try {
+      topModels = db.prepare(`SELECT model_code, model_name, total_wo, completed_wo, total_quantity, total_pieces_completed, avg_cost_per_piece
+        FROM model_production_summary ORDER BY total_wo DESC LIMIT 5`).all();
+    } catch {}
+
+    // V11 — stage bottleneck detection (stages with most WIP)
+    let stageBottlenecks = [];
+    try {
+      stageBottlenecks = db.prepare(`SELECT ws.stage_name, SUM(ws.quantity_in_stage) as total_wip, COUNT(DISTINCT ws.wo_id) as wo_count,
+        AVG(JULIANDAY('now') - JULIANDAY(ws.started_at)) as avg_days_in_stage
+        FROM wo_stages ws JOIN work_orders wo ON wo.id=ws.wo_id
+        WHERE wo.status='in_progress' AND ws.status='in_progress' AND ws.quantity_in_stage > 0
+        GROUP BY ws.stage_name ORDER BY total_wip DESC LIMIT 5`).all();
+    } catch {}
+
     res.json({
       total_models: totalModels, total_fabrics: totalFabrics, total_accessories: totalAccessories,
       total_invoices: totalInvoices, active_work_orders: activeWorkOrders,
@@ -199,6 +216,8 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       total_customers: totalCustomers,
       customer_outstanding: Math.round(customerOutstanding * 100) / 100,
       quality_rate: qualityRate,
+      top_models: topModels,
+      stage_bottlenecks: stageBottlenecks,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

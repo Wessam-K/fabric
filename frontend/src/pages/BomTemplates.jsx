@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Plus, Save, Trash2, Star, Scissors, Package, Layers, DollarSign } from 'lucide-react';
+import { ArrowRight, Plus, Save, Trash2, Star, Scissors, Package, Layers, DollarSign, BarChart3 } from 'lucide-react';
 import api from '../utils/api';
 import FabricBlock from '../components/FabricBlock';
 import SizeGrid from '../components/SizeGrid';
@@ -74,6 +74,8 @@ export default function BomTemplates() {
   const [accessories, setAccessories] = useState([]);
   const [notes, setNotes] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [showMatrix, setShowMatrix] = useState(false);
+  const [matrixData, setMatrixData] = useState([]);
 
   // Registry data
   const [fabricsList, setFabricsList] = useState([]);
@@ -101,6 +103,11 @@ export default function BomTemplates() {
         const defTpl = tpls.find(t => t.is_default) || tpls[0];
         await loadTemplate(defTpl.id);
       }
+      // Load matrix data for variant comparison
+      try {
+        const { data: matrix } = await api.get(`/models/${code}/bom-matrix`);
+        setMatrixData(matrix);
+      } catch {}
     } catch (err) {
       toast.error('فشل تحميل البيانات');
     } finally {
@@ -170,6 +177,8 @@ export default function BomTemplates() {
       // Refresh templates list
       const { data: tpls } = await api.get(`/models/${code}/bom-templates`);
       setTemplates(tpls);
+      // Refresh matrix
+      try { const { data: mx } = await api.get(`/models/${code}/bom-matrix`); setMatrixData(mx); } catch {}
     } catch (err) {
       toast.error(err.response?.data?.error || 'خطأ أثناء الحفظ');
     } finally {
@@ -239,6 +248,12 @@ export default function BomTemplates() {
           </div>
         </div>
         <div className="flex gap-2">
+          {templates.length > 1 && (
+            <button onClick={() => setShowMatrix(!showMatrix)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm transition-colors ${showMatrix ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+              <BarChart3 size={16} /> مقارنة
+            </button>
+          )}
           <button onClick={handleNew}
             className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors">
             <Plus size={16} /> قالب جديد
@@ -269,6 +284,42 @@ export default function BomTemplates() {
               + جديد
             </span>
           )}
+        </div>
+      )}
+
+      {/* Variant Comparison Matrix */}
+      {showMatrix && matrixData.length > 1 && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6 overflow-x-auto">
+          <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2">
+            <BarChart3 size={16} className="text-indigo-500" /> مقارنة قوالب المواد
+          </h3>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-right py-2 px-2 text-gray-500 font-normal">البند</th>
+                {matrixData.map(v => (
+                  <th key={v.id} className="text-center py-2 px-2">
+                    <span className="font-bold text-[#1a1a2e]">{v.template_name}</span>
+                    {v.is_default ? <span className="mr-1 text-[10px] text-[#c9a84c]">⭐</span> : null}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              <tr><td className="py-1.5 px-2 text-gray-500">عدد القطع</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono">{v.grand_total}</td>)}</tr>
+              <tr><td className="py-1.5 px-2 text-gray-500">عدد الأقمشة</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono">{v.fabric_count}</td>)}</tr>
+              <tr><td className="py-1.5 px-2 text-gray-500">عدد الاكسسوارات</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono">{v.accessory_count}</td>)}</tr>
+              <tr className="bg-gray-50/50"><td className="py-1.5 px-2 text-gray-500">قماش رئيسي</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono">{fmt(v.main_fabric_cost)} ج</td>)}</tr>
+              <tr><td className="py-1.5 px-2 text-gray-500">بطانة</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono">{fmt(v.lining_cost)} ج</td>)}</tr>
+              <tr className="bg-gray-50/50"><td className="py-1.5 px-2 text-gray-500">اكسسوارات</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono">{fmt(v.accessories_cost)} ج</td>)}</tr>
+              <tr><td className="py-1.5 px-2 text-gray-500">مصنعية</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono">{fmt(v.masnaiya)} ج</td>)}</tr>
+              <tr className="bg-gray-50/50"><td className="py-1.5 px-2 text-gray-500">مصروفات</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono">{fmt(v.masrouf)} ج</td>)}</tr>
+              <tr className="border-t border-gray-200 font-bold"><td className="py-2 px-2 text-[#1a1a2e]">الإجمالي</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono text-[#c9a84c]">{fmt(v.total_cost)} ج</td>)}</tr>
+              <tr className="font-bold"><td className="py-2 px-2 text-[#1a1a2e]">تكلفة/قطعة</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono text-[#c9a84c]">{fmt(v.cost_per_piece)} ج</td>)}</tr>
+              <tr><td className="py-1.5 px-2 text-gray-500">هامش %</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono">{v.margin_pct}%</td>)}</tr>
+              <tr className="font-bold border-t border-gray-200"><td className="py-2 px-2 text-[#1a1a2e]">سعر مقترح</td>{matrixData.map(v => <td key={v.id} className="text-center font-mono text-green-600">{fmt(v.suggested_price)} ج</td>)}</tr>
+            </tbody>
+          </table>
         </div>
       )}
 

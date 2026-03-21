@@ -126,6 +126,7 @@ export default function WorkOrdersList() {
                   <th className="px-4 py-3 text-center text-xs text-gray-500">الأولوية</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">الحالة</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">التقدم</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">المرحلة</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">التسليم</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">المسؤول</th>
                 </tr>
@@ -138,6 +139,7 @@ export default function WorkOrdersList() {
                     <td className="px-4 py-3">
                       <span className="font-bold text-[#1a1a2e]">{wo.model_code}</span>
                       {wo.model_name && <span className="text-gray-400 text-xs mr-2">{wo.model_name}</span>}
+                      {wo.fabric_variant_label && <span className="text-[10px] text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded mr-1">{wo.fabric_variant_label}</span>}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <PriorityBadge priority={wo.priority} />
@@ -147,6 +149,9 @@ export default function WorkOrdersList() {
                     </td>
                     <td className="px-4 py-3 w-32">
                       <StageProgress done={wo.stages_done || 0} total={wo.stages_total || 0} />
+                    </td>
+                    <td className="px-4 py-3 text-center text-xs text-gray-500">
+                      {wo.last_active_stage_name || '—'}
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-gray-400">
                       {wo.due_date ? new Date(wo.due_date).toLocaleDateString('ar-EG') : '—'}
@@ -178,8 +183,10 @@ export default function WorkOrdersList() {
                         <PriorityBadge priority={wo.priority} />
                       </div>
                       <p className="text-sm font-bold text-[#1a1a2e] mb-1">{wo.model_code}</p>
-                      {wo.model_name && <p className="text-xs text-gray-400 mb-2">{wo.model_name}</p>}
+                      {wo.model_name && <p className="text-xs text-gray-400 mb-1">{wo.model_name}</p>}
+                      {wo.fabric_variant_label && <p className="text-[10px] text-indigo-500 mb-1">{wo.fabric_variant_label}</p>}
                       <StageProgress done={wo.stages_done || 0} total={wo.stages_total || 0} />
+                      {wo.last_active_stage_name && <p className="text-[10px] text-emerald-600 mt-1">▶ {wo.last_active_stage_name}</p>}
                       {wo.due_date && (
                         <p className="text-[10px] text-gray-400 mt-2">التسليم: {new Date(wo.due_date).toLocaleDateString('ar-EG')}</p>
                       )}

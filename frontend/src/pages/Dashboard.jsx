@@ -258,6 +258,50 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* V11 — Top Models & Stage Bottlenecks */}
+      {(data?.top_models?.length > 0 || data?.stage_bottlenecks?.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          {data?.top_models?.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">🏆 أكثر الموديلات إنتاجاً</h3>
+              <div className="space-y-3">
+                {data.top_models.map((m, i) => (
+                  <div key={m.model_code} className="flex items-center gap-3">
+                    <span className="text-sm font-mono font-bold text-[#c9a84c] w-6">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-[#1a1a2e] truncate">{m.model_code} {m.model_name && `— ${m.model_name}`}</p>
+                      <p className="text-[10px] text-gray-400">{m.total_wo} أوامر • {m.completed_wo} مكتمل • {m.total_pieces_completed || 0} قطعة</p>
+                    </div>
+                    {m.avg_cost_per_piece > 0 && (
+                      <span className="text-[10px] font-mono text-gray-500">{Math.round(m.avg_cost_per_piece)} ج.م/قطعة</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {data?.stage_bottlenecks?.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">⚠️ اختناقات المراحل</h3>
+              <div className="space-y-3">
+                {data.stage_bottlenecks.map(s => (
+                  <div key={s.stage_name} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-[#1a1a2e]">{s.stage_name}</p>
+                      <p className="text-[10px] text-gray-400">{s.wo_count} أمر عمل</p>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-mono font-bold text-amber-600">{s.total_wip} قطعة</p>
+                      {s.avg_days_in_stage > 0 && <p className="text-[10px] text-gray-400">{Math.round(s.avg_days_in_stage)} يوم</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

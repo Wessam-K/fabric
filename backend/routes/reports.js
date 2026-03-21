@@ -165,6 +165,43 @@ router.get('/by-model', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/model-detail/:code — full model breakdown
+router.get('/model-detail/:code', (req, res) => {
+  try {
+    const model = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
+    if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
+
+    // Production summary from view (if v11 migration ran)
+    let summary = null;
+    try {
+      summary = db.prepare('SELECT * FROM model_production_summary WHERE model_code=?').get(req.params.code);
+    } catch {}
+
+    // BOM templates with costs
+    const templates = db.prepare('SELECT * FROM bom_templates WHERE model_id=? ORDER BY is_default DESC').all(model.id);
+    const templateDetails = templates.map(t => {
+      const fabrics = db.prepare(`SELECT btf.*, f.name as fabric_name, f.price_per_m FROM bom_template_fabrics btf LEFT JOIN fabrics f ON f.code=btf.fabric_code WHERE btf.template_id=?`).all(t.id);
+      const accessories = db.prepare(`SELECT bta.*, a.name as registry_name FROM bom_template_accessories bta LEFT JOIN accessories a ON a.code=bta.accessory_code WHERE bta.template_id=?`).all(t.id);
+      const sizes = db.prepare('SELECT * FROM bom_template_sizes WHERE template_id=?').all(t.id);
+      const grandTotal = sizes.reduce((s, sz) => s + (sz.qty_s||0) + (sz.qty_m||0) + (sz.qty_l||0) + (sz.qty_xl||0) + (sz.qty_2xl||0) + (sz.qty_3xl||0), 0);
+      return { ...t, fabrics, accessories, sizes, grand_total: grandTotal };
+    });
+
+    // Work orders for this model
+    const workOrders = db.prepare(`SELECT wo.*, 
+      (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id AND status='completed') as stages_done,
+      (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id) as stages_total
+      FROM work_orders wo WHERE wo.model_id=? AND wo.status!='cancelled' ORDER BY wo.created_at DESC`).all(model.id);
+
+    // Cost history from snapshots
+    const costHistory = db.prepare(`SELECT cs.* FROM cost_snapshots cs 
+      INNER JOIN work_orders wo ON wo.id=cs.wo_id WHERE wo.model_id=? 
+      ORDER BY cs.snapshot_date DESC LIMIT 20`).all(model.id);
+
+    res.json({ model, summary, templates: templateDetails, work_orders: workOrders, cost_history: costHistory });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/reports — cost snapshots (paginated)
 router.get('/', (req, res) => {
   try {

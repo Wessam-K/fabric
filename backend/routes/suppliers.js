@@ -83,17 +83,60 @@ router.put('/:id', (req, res) => {
 // POST /api/suppliers/:id/payments
 router.post('/:id/payments', (req, res) => {
   try {
-    const { po_id, amount, payment_method, reference, notes } = req.body;
+    const { po_id, amount, payment_method, payment_type, reference, notes } = req.body;
     if (!amount || amount <= 0) return res.status(400).json({ error: 'المبلغ المطلوب غير صالح' });
-    const r = db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,reference,notes) VALUES (?,?,?,?,?,?)`)
-      .run(parseInt(req.params.id), po_id || null, parseFloat(amount), payment_method || 'cash', reference || null, notes || null);
+    const r = db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,payment_type,reference,notes) VALUES (?,?,?,?,?,?,?)`)
+      .run(parseInt(req.params.id), po_id || null, parseFloat(amount), payment_method || 'cash', payment_type || 'payment', reference || null, notes || null);
     // Update paid_amount on PO if po_id provided
     if (po_id) {
       const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE po_id=?').get(po_id).v;
       db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(totalPaid, po_id);
+      // Update total_outstanding on PO
+      const po = db.prepare('SELECT total_amount, paid_amount FROM purchase_orders WHERE id=?').get(po_id);
+      if (po) {
+        db.prepare('UPDATE purchase_orders SET total_outstanding=? WHERE id=?').run((po.total_amount || 0) - (po.paid_amount || 0), po_id);
+      }
     }
+    // Update total_paid on supplier
+    const suppId = parseInt(req.params.id);
+    const suppTotalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE supplier_id=?').get(suppId).v;
+    db.prepare('UPDATE suppliers SET total_paid=? WHERE id=?').run(suppTotalPaid, suppId);
+
     logAudit(req, 'CREATE', 'supplier_payment', r.lastInsertRowid, `payment ${amount}`);
     res.status(201).json(db.prepare('SELECT * FROM supplier_payments WHERE id=?').get(r.lastInsertRowid));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/suppliers/:id/ledger — full financial ledger
+router.get('/:id/ledger', (req, res) => {
+  try {
+    const supplier = db.prepare('SELECT id, code, name FROM suppliers WHERE id=?').get(req.params.id);
+    if (!supplier) return res.status(404).json({ error: 'غير موجود' });
+    // Get all POs as debits
+    const pos = db.prepare(`SELECT id, po_number, total_amount, paid_amount, status, order_date, received_date
+      FROM purchase_orders WHERE supplier_id=? AND status NOT IN ('cancelled','draft') ORDER BY order_date DESC`).all(supplier.id);
+    // Get all payments as credits
+    const payments = db.prepare(`SELECT id, po_id, amount, payment_method, payment_type, payment_date, reference, notes
+      FROM supplier_payments WHERE supplier_id=? ORDER BY payment_date DESC`).all(supplier.id);
+    // Build ledger entries (chronological)
+    const entries = [];
+    for (const po of pos) {
+      entries.push({ type: 'debit', date: po.order_date || po.received_date, description: `أمر شراء ${po.po_number}`, amount: po.total_amount, reference_id: po.id, reference_type: 'purchase_order' });
+    }
+    for (const p of payments) {
+      entries.push({ type: 'credit', date: p.payment_date, description: p.payment_type === 'advance' ? 'دفعة مقدمة' : `دفعة — ${p.payment_method}`, amount: p.amount, reference: p.reference, reference_id: p.id, reference_type: 'payment', po_id: p.po_id });
+    }
+    entries.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    // Running balance
+    let balance = 0;
+    for (const e of entries) {
+      if (e.type === 'debit') balance += e.amount;
+      else balance -= e.amount;
+      e.running_balance = balance;
+    }
+    const totalOrdered = pos.reduce((s, p) => s + (p.total_amount || 0), 0);
+    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    res.json({ supplier, entries, summary: { total_ordered: totalOrdered, total_paid: totalPaid, balance: totalOrdered - totalPaid } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

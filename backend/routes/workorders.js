@@ -233,6 +233,7 @@ router.get('/', (req, res) => {
   try {
     const { search, status, priority, model_code, date_from, date_to } = req.query;
     let q = `SELECT wo.*, m.model_code, m.model_name,
+      wo.last_active_stage_name, wo.fabric_variant_label,
       (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id AND status='completed') as stages_done,
       (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id) as stages_total
       FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE 1=1`;
@@ -296,8 +297,15 @@ router.post('/', (req, res) => {
     if (!wo_number) return res.status(400).json({ error: 'رقم أمر العمل مطلوب' });
 
     const transaction = db.transaction(() => {
-      const r = db.prepare(`INSERT INTO work_orders (wo_number,model_id,template_id,priority,due_date,assigned_to,masnaiya,masrouf,margin_pct,consumer_price,wholesale_price,notes,quantity,is_size_based) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(wo_number, model_id || null, template_id || null, priority || 'normal', due_date || null, assigned_to || null, masnaiya ?? 90, masrouf ?? 50, margin_pct ?? 25, consumer_price || null, wholesale_price || null, notes || null, quantity || 0, is_size_based ? 1 : 0);
+      // Determine fabric variant label from template
+      let fabricVariantLabel = null;
+      if (template_id) {
+        const tpl = db.prepare('SELECT template_name FROM bom_templates WHERE id=?').get(template_id);
+        if (tpl) fabricVariantLabel = tpl.template_name;
+      }
+
+      const r = db.prepare(`INSERT INTO work_orders (wo_number,model_id,template_id,priority,due_date,assigned_to,masnaiya,masrouf,margin_pct,consumer_price,wholesale_price,notes,quantity,is_size_based,fabric_variant_label) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(wo_number, model_id || null, template_id || null, priority || 'normal', due_date || null, assigned_to || null, masnaiya ?? 90, masrouf ?? 50, margin_pct ?? 25, consumer_price || null, wholesale_price || null, notes || null, quantity || 0, is_size_based ? 1 : 0, fabricVariantLabel);
       const woId = r.lastInsertRowid;
 
       // V3 legacy fabrics
@@ -819,6 +827,12 @@ router.patch('/:id/stage-advance', (req, res) => {
       if (allDone) {
         db.prepare("UPDATE work_orders SET status='completed', completed_date=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=? AND status != 'completed'").run(woId);
       }
+
+      // Track last active stage name
+      const activeStage = db.prepare("SELECT stage_name FROM wo_stages WHERE wo_id=? AND status='in_progress' ORDER BY sort_order DESC LIMIT 1").get(woId);
+      if (activeStage) {
+        db.prepare("UPDATE work_orders SET last_active_stage_name=?, updated_at=datetime('now','localtime') WHERE id=?").run(activeStage.stage_name, woId);
+      }
     });
 
     doAdvance();
@@ -846,8 +860,10 @@ router.patch('/:id/stage-start', (req, res) => {
     db.prepare("UPDATE wo_stages SET status='in_progress', started_at=datetime('now','localtime'), started_by_user_id=?, started_by_name=? WHERE id=?")
       .run(userId, userName, stage_id);
 
-    // Also update WO status
-    db.prepare("UPDATE work_orders SET status='in_progress', start_date=COALESCE(start_date,datetime('now','localtime')), updated_at=datetime('now','localtime') WHERE id=? AND status IN ('draft','pending')").run(woId);
+    // Also update WO status and track last active stage
+    db.prepare("UPDATE work_orders SET status='in_progress', start_date=COALESCE(start_date,datetime('now','localtime')), last_active_stage_name=?, updated_at=datetime('now','localtime') WHERE id=? AND status IN ('draft','pending')").run(stage.stage_name, woId);
+    // If WO already in_progress, just update the stage name
+    db.prepare("UPDATE work_orders SET last_active_stage_name=?, updated_at=datetime('now','localtime') WHERE id=? AND status='in_progress'").run(stage.stage_name, woId);
 
     res.json(getFullWO(woId));
   } catch (err) { res.status(500).json({ error: err.message }); }

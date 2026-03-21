@@ -128,6 +128,67 @@ function getFullTemplate(templateId) {
   return tmpl;
 }
 
+// GET /api/models/:code/bom-matrix — compare all BOM template variants side by side
+router.get('/:code/bom-matrix', (req, res) => {
+  try {
+    const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
+    if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
+    const templates = db.prepare('SELECT * FROM bom_templates WHERE model_id=? ORDER BY is_default DESC, id').all(model.id);
+    const fabricLookup = {};
+    for (const f of db.prepare('SELECT code, name, price_per_m, fabric_type FROM fabrics').all()) {
+      fabricLookup[f.code] = f;
+    }
+    const variants = templates.map(t => {
+      const full = getFullTemplate(t.id);
+      const sizes = full.sizes || [];
+      const grandTotal = sizes.reduce((s, sz) => s + (sz.qty_s||0) + (sz.qty_m||0) + (sz.qty_l||0) + (sz.qty_xl||0) + (sz.qty_2xl||0) + (sz.qty_3xl||0), 0);
+      const calcFabricCost = (fabrics) => (fabrics || []).reduce((sum, f) => {
+        if (!f.fabric_code || !f.meters_per_piece) return sum;
+        const reg = fabricLookup[f.fabric_code];
+        const price = reg?.price_per_m || 0;
+        const mpp = parseFloat(f.meters_per_piece) || 0;
+        const waste = parseFloat(f.waste_pct) || 0;
+        return sum + mpp * (1 + waste / 100) * price * grandTotal;
+      }, 0);
+      const mainFabrics = (full.fabrics || []).filter(f => f.role === 'main');
+      const linings = (full.fabrics || []).filter(f => f.role === 'lining');
+      const mainCost = calcFabricCost(mainFabrics);
+      const liningCost = calcFabricCost(linings);
+      const accCost = (full.accessories || []).reduce((sum, a) => sum + ((parseFloat(a.quantity)||0) * (parseFloat(a.unit_price)||0) * grandTotal), 0);
+      const masCost = (parseFloat(full.masnaiya) || 0) * grandTotal;
+      const masrCost = (parseFloat(full.masrouf) || 0) * grandTotal;
+      const total = mainCost + liningCost + accCost + masCost + masrCost;
+      const perPiece = grandTotal > 0 ? total / grandTotal : 0;
+      const margin = parseFloat(full.margin_pct) || 0;
+      return {
+        id: t.id,
+        template_name: t.template_name,
+        is_default: t.is_default,
+        grand_total: grandTotal,
+        fabric_count: mainFabrics.length + linings.length,
+        accessory_count: (full.accessories || []).length,
+        main_fabric_cost: mainCost,
+        lining_cost: liningCost,
+        accessories_cost: accCost,
+        masnaiya: masCost,
+        masrouf: masrCost,
+        total_cost: total,
+        cost_per_piece: perPiece,
+        margin_pct: margin,
+        suggested_price: perPiece * (1 + margin / 100),
+        fabrics: (full.fabrics || []).map(f => ({
+          fabric_code: f.fabric_code,
+          fabric_name: f.fabric_name || fabricLookup[f.fabric_code]?.name,
+          role: f.role,
+          meters_per_piece: f.meters_per_piece,
+          waste_pct: f.waste_pct,
+        })),
+      };
+    });
+    res.json(variants);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/models/:code/bom-templates — list all BOM templates
 router.get('/:code/bom-templates', (req, res) => {
   try {

@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Printer, Camera, Layers, FileText, ClipboardList, DollarSign } from 'lucide-react';
+import { Save, Printer, Camera, Layers, FileText, ClipboardList, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../utils/api';
 import ImageUpload from '../components/ImageUpload';
 import { useToast } from '../components/Toast';
+
+const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
 
 export default function ModelForm() {
   const { code } = useParams();
@@ -21,8 +23,10 @@ export default function ModelForm() {
   const [imageFile, setImageFile] = useState(null);
   const [bomTemplates, setBomTemplates] = useState([]);
   const [costData, setCostData] = useState(null);
+  const [bomCostData, setBomCostData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [costPanelOpen, setCostPanelOpen] = useState(true);
 
   useEffect(() => {
     const load = async () => {
@@ -43,6 +47,53 @@ export default function ModelForm() {
             const match = (costRes.data || []).find(r => r.model_code === code);
             if (match) setCostData(match);
           } catch {}
+          // Fetch BOM-estimated cost from default template
+          try {
+            const defaultTpl = (data.bom_templates || []).find(t => t.is_default) || (data.bom_templates || [])[0];
+            if (defaultTpl) {
+              const [tplRes, fabricsRes] = await Promise.all([
+                api.get(`/models/${code}/bom-templates/${defaultTpl.id}`),
+                api.get('/fabrics'),
+              ]);
+              const tpl = tplRes.data;
+              const fabricLookup = {};
+              for (const f of fabricsRes.data) fabricLookup[f.code] = f;
+              const allSizes = tpl.sizes || [];
+              const grandTotal = allSizes.reduce((s, sz) => s + (sz.qty_s||0) + (sz.qty_m||0) + (sz.qty_l||0) + (sz.qty_xl||0) + (sz.qty_2xl||0) + (sz.qty_3xl||0), 0);
+              const calcFabricCost = (fabrics) => (fabrics || []).reduce((sum, f) => {
+                if (!f.fabric_code || !f.meters_per_piece) return sum;
+                const reg = fabricLookup[f.fabric_code];
+                const price = reg?.price_per_m || 0;
+                const mpp = parseFloat(f.meters_per_piece) || 0;
+                const waste = parseFloat(f.waste_pct) || 0;
+                return sum + mpp * (1 + waste / 100) * price * grandTotal;
+              }, 0);
+              const mainFabrics = (tpl.fabrics || []).filter(f => f.role === 'main');
+              const linings = (tpl.fabrics || []).filter(f => f.role === 'lining');
+              const mainCost = calcFabricCost(mainFabrics);
+              const liningCost = calcFabricCost(linings);
+              const accCost = (tpl.accessories || []).reduce((sum, a) => sum + ((parseFloat(a.quantity)||0) * (parseFloat(a.unit_price)||0) * grandTotal), 0);
+              const masCost = (parseFloat(tpl.masnaiya) || 0) * grandTotal;
+              const masrCost = (parseFloat(tpl.masrouf) || 0) * grandTotal;
+              const total = mainCost + liningCost + accCost + masCost + masrCost;
+              const perPiece = grandTotal > 0 ? total / grandTotal : 0;
+              const margin = parseFloat(tpl.margin_pct) || 0;
+              const suggested = perPiece * (1 + margin / 100);
+              setBomCostData({
+                template_name: tpl.template_name,
+                grand_total: grandTotal,
+                main_fabric_cost: mainCost,
+                lining_cost: liningCost,
+                accessories_cost: accCost,
+                masnaiya: masCost,
+                masrouf: masrCost,
+                total_cost: total,
+                cost_per_piece: perPiece,
+                margin_pct: margin,
+                suggested_price: suggested,
+              });
+            }
+          } catch {}
         } else {
           const { data } = await api.get('/models/next-serial');
           setSerial(data.next_serial);
@@ -55,6 +106,8 @@ export default function ModelForm() {
     };
     load();
   }, [code, isEdit]);
+
+  const hasCostPanel = isEdit && (costData || bomCostData);
 
   const handleSave = async () => {
     if (!serial.trim() || !modelCode.trim()) {
@@ -130,7 +183,7 @@ export default function ModelForm() {
       </div>
 
       {/* Main content with optional sticky cost panel */}
-      <div className={`${isEdit && costData ? 'lg:grid lg:grid-cols-[1fr_220px] lg:gap-6 lg:items-start' : ''}`}>
+      <div className={`${hasCostPanel ? 'lg:grid lg:grid-cols-[1fr_240px] lg:gap-6 lg:items-start' : ''}`}>
       <div>
       {/* Form */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -232,26 +285,74 @@ export default function ModelForm() {
       </div>{/* end main column */}
 
       {/* Sticky Cost Summary Panel */}
-      {isEdit && costData && (
+      {hasCostPanel && (
+        <>
+        {/* Mobile: collapsible section */}
+        <div className="lg:hidden mt-6">
+          <button onClick={() => setCostPanelOpen(!costPanelOpen)}
+            className="w-full flex items-center justify-between bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
+            <span className="text-sm font-bold text-[#1a1a2e] flex items-center gap-2"><DollarSign size={14} className="text-[#c9a84c]" /> ملخص التكاليف</span>
+            {costPanelOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+          </button>
+          {costPanelOpen && (
+            <div className="bg-white rounded-b-2xl shadow-sm px-4 pb-4 border border-t-0 border-gray-100 -mt-2">
+              <CostPanelContent costData={costData} bomCostData={bomCostData} />
+            </div>
+          )}
+        </div>
+        {/* Desktop: sticky sidebar */}
         <div className="sticky top-4 self-start bg-white rounded-2xl shadow-sm p-4 border border-gray-100 hidden lg:block">
           <h3 className="text-sm font-bold text-[#1a1a2e] mb-3 flex items-center gap-2"><DollarSign size={14} className="text-[#c9a84c]" /> ملخص التكاليف</h3>
-          <div className="space-y-2 text-[11px]">
-            <div className="flex justify-between"><span className="text-gray-500">أوامر العمل</span><span className="font-mono font-bold">{costData.wo_count || 0}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">مكتمل</span><span className="font-mono font-bold text-green-600">{costData.completed_count || 0}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">إجمالي القطع</span><span className="font-mono font-bold">{costData.total_pieces || 0}</span></div>
-            <hr className="border-gray-100" />
-            <div className="flex justify-between"><span className="text-gray-500">قماش رئيسي</span><span className="font-mono">{(costData.main_fabric_cost || 0).toLocaleString('ar-EG')} ج.م</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">بطانة</span><span className="font-mono">{(costData.lining_cost || 0).toLocaleString('ar-EG')} ج.م</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">إكسسوارات</span><span className="font-mono">{(costData.accessories_cost || 0).toLocaleString('ar-EG')} ج.م</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">مصنعية</span><span className="font-mono">{(costData.masnaiya || 0).toLocaleString('ar-EG')} ج.م</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">مصروفات</span><span className="font-mono">{(costData.masrouf || 0).toLocaleString('ar-EG')} ج.م</span></div>
-            <hr className="border-gray-100" />
-            <div className="flex justify-between font-bold"><span className="text-[#1a1a2e]">الإجمالي</span><span className="font-mono text-[#c9a84c]">{(costData.total_cost || 0).toLocaleString('ar-EG')} ج.م</span></div>
-            <div className="flex justify-between font-bold"><span className="text-[#1a1a2e]">تكلفة القطعة</span><span className="font-mono text-[#c9a84c]">{(costData.cost_per_piece || 0).toLocaleString('ar-EG')} ج.م</span></div>
-          </div>
+          <CostPanelContent costData={costData} bomCostData={bomCostData} />
         </div>
+        </>
       )}
       </div>{/* end grid wrapper */}
     </div>
   );
+}
+
+function CostPanelContent({ costData, bomCostData }) {
+  if (costData) {
+    return (
+      <div className="space-y-2 text-[11px]">
+        <div className="flex justify-between"><span className="text-gray-500">أوامر العمل</span><span className="font-mono font-bold">{costData.wo_count || 0}</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">مكتمل</span><span className="font-mono font-bold text-green-600">{costData.completed_count || 0}</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">إجمالي القطع</span><span className="font-mono font-bold">{costData.total_pieces || 0}</span></div>
+        <hr className="border-gray-100" />
+        <div className="flex justify-between"><span className="text-gray-500">قماش رئيسي</span><span className="font-mono">{fmt(costData.main_fabric_cost)} ج.م</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">بطانة</span><span className="font-mono">{fmt(costData.lining_cost)} ج.م</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">إكسسوارات</span><span className="font-mono">{fmt(costData.accessories_cost)} ج.م</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">مصنعية</span><span className="font-mono">{fmt(costData.masnaiya)} ج.م</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">مصروفات</span><span className="font-mono">{fmt(costData.masrouf)} ج.م</span></div>
+        <hr className="border-gray-100" />
+        <div className="flex justify-between font-bold"><span className="text-[#1a1a2e]">الإجمالي</span><span className="font-mono text-[#c9a84c]">{fmt(costData.total_cost)} ج.م</span></div>
+        <div className="flex justify-between font-bold"><span className="text-[#1a1a2e]">تكلفة القطعة</span><span className="font-mono text-[#c9a84c]">{fmt(costData.cost_per_piece)} ج.م</span></div>
+      </div>
+    );
+  }
+  if (bomCostData) {
+    return (
+      <div className="space-y-2 text-[11px]">
+        <div className="text-[10px] text-amber-600 bg-amber-50 rounded-lg px-2 py-1 mb-2">تقدير من قائمة المواد: {bomCostData.template_name}</div>
+        <div className="flex justify-between"><span className="text-gray-500">إجمالي القطع (BOM)</span><span className="font-mono font-bold">{bomCostData.grand_total || 0}</span></div>
+        <hr className="border-gray-100" />
+        <div className="flex justify-between"><span className="text-gray-500">قماش رئيسي</span><span className="font-mono">{fmt(bomCostData.main_fabric_cost)} ج.م</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">بطانة</span><span className="font-mono">{fmt(bomCostData.lining_cost)} ج.م</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">إكسسوارات</span><span className="font-mono">{fmt(bomCostData.accessories_cost)} ج.م</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">مصنعية</span><span className="font-mono">{fmt(bomCostData.masnaiya)} ج.م</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">مصروفات</span><span className="font-mono">{fmt(bomCostData.masrouf)} ج.م</span></div>
+        <hr className="border-gray-100" />
+        <div className="flex justify-between font-bold"><span className="text-[#1a1a2e]">الإجمالي</span><span className="font-mono text-[#c9a84c]">{fmt(bomCostData.total_cost)} ج.م</span></div>
+        <div className="flex justify-between font-bold"><span className="text-[#1a1a2e]">تكلفة القطعة</span><span className="font-mono text-[#c9a84c]">{fmt(bomCostData.cost_per_piece)} ج.م</span></div>
+        {bomCostData.margin_pct > 0 && (
+          <>
+            <hr className="border-gray-100" />
+            <div className="flex justify-between"><span className="text-gray-500">هامش ({bomCostData.margin_pct}%)</span><span className="font-mono">{fmt(bomCostData.suggested_price)} ج.م</span></div>
+          </>
+        )}
+      </div>
+    );
+  }
+  return null;
 }

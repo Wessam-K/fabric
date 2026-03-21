@@ -1321,6 +1321,56 @@ function runMigrations() {
       insRP10.run(role, 'machines', 'manage', 1);
     }
   }
+
+  // ═══════════════════════════════════════════════
+  // V11 — Work order tracking enhancements, model production summary view
+  // ═══════════════════════════════════════════════
+  if (currentVersion < 11) {
+    const addColumnSafe = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch {}
+    };
+
+    // 11.1 Work order stage tracking columns
+    addColumnSafe('work_orders', 'last_active_stage_name', 'TEXT');
+    addColumnSafe('work_orders', 'fabric_variant_label', 'TEXT');
+
+    // 11.2 Purchase order outstanding amount column
+    addColumnSafe('purchase_orders', 'total_outstanding', 'REAL DEFAULT 0');
+
+    // 11.3 Model production summary view
+    db.exec(`DROP VIEW IF EXISTS model_production_summary`);
+    db.exec(`
+      CREATE VIEW IF NOT EXISTS model_production_summary AS
+      SELECT
+        m.id as model_id,
+        m.model_code,
+        m.model_name,
+        m.category,
+        m.gender,
+        COUNT(DISTINCT wo.id) as total_wo,
+        SUM(CASE WHEN wo.status='completed' THEN 1 ELSE 0 END) as completed_wo,
+        SUM(CASE WHEN wo.status='in_progress' THEN 1 ELSE 0 END) as active_wo,
+        SUM(CASE WHEN wo.status='draft' THEN 1 ELSE 0 END) as draft_wo,
+        SUM(wo.quantity) as total_quantity,
+        SUM(wo.pieces_completed) as total_pieces_completed,
+        AVG(wo.cost_per_piece) as avg_cost_per_piece,
+        MIN(wo.start_date) as earliest_wo_date,
+        MAX(wo.completed_date) as latest_completion_date,
+        COUNT(DISTINCT bt.id) as bom_template_count
+      FROM models m
+      LEFT JOIN work_orders wo ON wo.model_id = m.id AND wo.status != 'cancelled'
+      LEFT JOIN bom_templates bt ON bt.model_id = m.id
+      WHERE m.status = 'active'
+      GROUP BY m.id
+    `);
+
+    // 11.4 Supplier ledger / payment tracking enhancements
+    addColumnSafe('suppliers', 'total_paid', 'REAL DEFAULT 0');
+    addColumnSafe('suppliers', 'credit_limit', 'REAL DEFAULT 0');
+    addColumnSafe('supplier_payments', 'payment_type', "TEXT DEFAULT 'payment'");
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (11)`);
+  }
 }
 
 initializeDatabase();
