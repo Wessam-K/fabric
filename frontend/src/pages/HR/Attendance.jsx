@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Clock, Upload, Plus, Download, Search } from 'lucide-react';
+import { Clock, Upload, Plus, Download, Search, Barcode } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
 import api from '../../utils/api';
 import { exportToExcel } from '../../utils/exportExcel';
 import HelpButton from '../../components/HelpButton';
+import { useToast } from '../../components/Toast';
 
 const STATUS_COLORS = {
   present: 'bg-green-200 text-green-800',
@@ -15,6 +16,7 @@ const STATUS_COLORS = {
 };
 
 export default function Attendance() {
+  const toast = useToast();
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [attendance, setAttendance] = useState([]);
   const [summary, setSummary] = useState([]);
@@ -22,9 +24,61 @@ export default function Attendance() {
   const [importStep, setImportStep] = useState(0);
   const [importResult, setImportResult] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [lastScan, setLastScan] = useState(null);
+  const [barcodeInput, setBarcodeInput] = useState('');
   const fileRef = useRef(null);
+  const barcodeBufferRef = useRef('');
+  const barcodeTimerRef = useRef(null);
 
   useEffect(() => { loadSummary(); }, [month]);
+
+  // Listen for rapid barcode scanner input (USB HID mode)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if user is typing in an input field (except barcodeInput)
+      const active = document.activeElement;
+      if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) && active.id !== 'barcode-clock-input') return;
+      
+      if (e.key === 'Enter' && barcodeBufferRef.current.length >= 3) {
+        const code = barcodeBufferRef.current;
+        barcodeBufferRef.current = '';
+        handleBarcodeScan(code);
+      } else if (e.key.length === 1) {
+        barcodeBufferRef.current += e.key;
+        clearTimeout(barcodeTimerRef.current);
+        barcodeTimerRef.current = setTimeout(() => { barcodeBufferRef.current = ''; }, 100);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleBarcodeScan = async (code) => {
+    try {
+      // Try to find employee by barcode/emp_code
+      const { data } = await api.post('/hr/attendance/clock', { barcode: code });
+      setLastScan({
+        success: true,
+        employee: data.employee_name,
+        action: data.action, // 'in' or 'out'
+        time: new Date().toLocaleTimeString('ar-EG')
+      });
+      toast.success(`تم تسجيل ${data.action === 'in' ? 'حضور' : 'انصراف'} ${data.employee_name}`);
+      loadSummary();
+    } catch (err) {
+      setLastScan({
+        success: false,
+        message: err.response?.data?.error || 'موظف غير موجود'
+      });
+      toast.error(err.response?.data?.error || 'فشل تسجيل الحضور - الباركود غير معروف');
+    }
+  };
+
+  const handleManualClock = () => {
+    if (!barcodeInput.trim()) return;
+    handleBarcodeScan(barcodeInput.trim());
+    setBarcodeInput('');
+  };
 
   function loadSummary() {
     api.get(`/hr/attendance/summary/${month}`).then(r => setSummary(r.data)).catch(() => {});
@@ -93,6 +147,40 @@ export default function Attendance() {
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} className="hidden" />
           </label>
         </div>} />
+
+      {/* Barcode Clock-In Section */}
+      <div className="bg-gradient-to-l from-blue-50 to-white rounded-2xl border border-blue-200 p-4 flex items-center gap-4">
+        <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+          <Barcode size={24} className="text-blue-600" />
+        </div>
+        <div className="flex-1">
+          <h3 className="font-bold text-blue-900">تسجيل الحضور بالباركود</h3>
+          <p className="text-xs text-blue-600">امسح باركود الموظف أو أدخل الكود يدوياً</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            id="barcode-clock-input"
+            type="text"
+            value={barcodeInput}
+            onChange={e => setBarcodeInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleManualClock()}
+            placeholder="كود الموظف..."
+            className="w-40 px-3 py-2 border-2 border-blue-200 rounded-lg text-sm focus:border-blue-400 outline-none"
+          />
+          <button onClick={handleManualClock} className="btn btn-gold h-10">
+            <Clock size={16} /> تسجيل
+          </button>
+        </div>
+        {lastScan && (
+          <div className={`px-3 py-2 rounded-lg text-sm ${lastScan.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {lastScan.success ? (
+              <span>✓ {lastScan.employee} - {lastScan.action === 'in' ? 'حضور' : 'انصراف'} {lastScan.time}</span>
+            ) : (
+              <span>✗ {lastScan.message}</span>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Import Result */}
       {importStep === 2 && importResult && (

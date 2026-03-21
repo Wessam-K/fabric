@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Star, Phone, Mail, Building2, DollarSign, X } from 'lucide-react';
+import { Plus, Search, Star, Phone, Mail, Building2, DollarSign, X, Upload, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';
+import PermissionGuard from '../components/PermissionGuard';
 import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 
 const TYPE_MAP = { fabric: 'أقمشة', accessory: 'اكسسوارات', both: 'أقمشة واكسسوارات', other: 'أخرى' };
@@ -81,6 +82,18 @@ export default function Suppliers() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
+  const handleImport = async () => {
+    try {
+      const result = await importFromCSV('/suppliers/import');
+      if (result) { toast.success(`تم استيراد ${result.imported || 0} مورد`); load(); }
+    } catch (err) { toast.error(err.message || 'فشل الاستيراد'); }
+  };
+
+  const handleExport = async () => {
+    try { await exportFromBackend('/suppliers/export', 'suppliers'); toast.success('تم التصدير'); }
+    catch { toast.error('فشل التصدير'); }
+  };
+
   const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
 
   const totalBalance = suppliers.reduce((s, sup) => s + (sup.balance || 0), 0);
@@ -90,8 +103,11 @@ export default function Suppliers() {
       <PageHeader title="الموردين" subtitle="إدارة الموردين والمدفوعات"
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="suppliers" />
-          <ExportButton data={suppliers} filename="suppliers" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'supplier_type',label:'النوع'},{key:'phone',label:'الهاتف'},{key:'balance',label:'المستحقات'},{key:'rating',label:'التقييم'}]} />
-          <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مورد جديد</button>
+          <button onClick={handleImport} className="btn btn-secondary text-xs"><Upload size={14} /> استيراد</button>
+          <button onClick={handleExport} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
+          <PermissionGuard module="suppliers" action="create">
+            <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مورد جديد</button>
+          </PermissionGuard>
         </div>} />
 
       {/* KPI */}

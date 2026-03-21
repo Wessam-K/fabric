@@ -5,6 +5,7 @@ import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
+import PermissionGuard from '../components/PermissionGuard';
 import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 
 const STATUS_MAP = { active: 'نشطة', maintenance: 'صيانة', inactive: 'متوقفة' };
@@ -97,8 +98,10 @@ export default function Machines() {
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="machines" />
           <button onClick={handleExport} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
-          <button onClick={handleImport} className="btn btn-secondary text-xs"><Upload size={14} /> استيراد</button>
-          <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> ماكينة جديدة</button>
+          <PermissionGuard module="machines" action="create">
+            <button onClick={handleImport} className="btn btn-secondary text-xs"><Upload size={14} /> استيراد</button>
+            <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> ماكينة جديدة</button>
+          </PermissionGuard>
         </div>} />
 
       {/* KPIs */}

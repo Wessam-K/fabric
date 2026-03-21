@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon, CheckCircle, Settings, CreditCard, Wrench, Receipt } from 'lucide-react';
+import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon, CheckCircle, Settings, CreditCard, Wrench, Receipt, Activity, Barcode, FileText, Percent } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
-import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
-import { Bar, Pie } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
+import { Bar, Pie, Line } from 'react-chartjs-2';
 import { useToast } from '../components/Toast';
 
-ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
 
 const TABS = [
   { key: 'summary', label: 'ملخص عام', icon: TrendingUp },
@@ -28,11 +28,18 @@ const TABS = [
   { key: 'quality', label: 'تقرير الجودة', icon: CheckCircle },
   { key: 'machines-report', label: 'تقرير الماكينات', icon: Settings },
   { key: 'inventory-status', label: 'حالة المخزون', icon: Warehouse },
-  { key: 'ar-aging', label: 'أعمار الديون', icon: CreditCard },
+  { key: 'ar-aging', label: 'تقادم المدينين', icon: CreditCard },
+  { key: 'ap-aging', label: 'تقادم الدائنين', icon: CreditCard },
   { key: 'inventory-valuation', label: 'تقييم المخزون', icon: Package },
   { key: 'machine-utilization', label: 'استخدام الماكينات', icon: Settings },
   { key: 'maintenance-cost', label: 'تكاليف الصيانة', icon: Wrench },
   { key: 'expense-analysis', label: 'تحليل المصروفات', icon: Receipt },
+  { key: 'pl-monthly', label: 'أرباح وخسائر شهرية', icon: TrendingUp },
+  { key: 'pl-detail', label: 'أرباح وخسائر تفصيلي', icon: FileText },
+  { key: 'cash-flow', label: 'التدفق النقدي', icon: Activity },
+  { key: 'tax-summary', label: 'ضريبة القيمة المضافة', icon: Percent },
+  { key: 'quality-by-model', label: 'جودة النماذج', icon: CheckCircle },
+  { key: 'barcode-activity', label: 'نشاط الباركود', icon: Barcode },
   { key: 'pivot', label: 'جدول محوري', icon: Table2 },
 ];
 
@@ -83,10 +90,17 @@ export default function Reports() {
   const [machinesReport, setMachinesReport] = useState(null);
   const [inventoryStatus, setInventoryStatus] = useState(null);
   const [arAgingData, setArAgingData] = useState(null);
+  const [apAgingData, setApAgingData] = useState(null);
   const [inventoryValuation, setInventoryValuation] = useState(null);
   const [machineUtilization, setMachineUtilization] = useState(null);
   const [maintenanceCost, setMaintenanceCost] = useState(null);
   const [expenseAnalysis, setExpenseAnalysis] = useState(null);
+  const [plMonthly, setPlMonthly] = useState(null);
+  const [plDetail, setPlDetail] = useState(null);
+  const [cashFlow, setCashFlow] = useState(null);
+  const [taxSummary, setTaxSummary] = useState(null);
+  const [qualityByModel, setQualityByModel] = useState(null);
+  const [barcodeActivity, setBarcodeActivity] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -159,6 +173,9 @@ export default function Reports() {
         } else if (tab === 'ar-aging') {
           const { data } = await api.get('/reports/ar-aging');
           setArAgingData(data);
+        } else if (tab === 'ap-aging') {
+          const { data } = await api.get('/reports/ap-aging');
+          setApAgingData(data);
         } else if (tab === 'inventory-valuation') {
           const { data } = await api.get('/reports/inventory-valuation');
           setInventoryValuation(data);
@@ -171,6 +188,24 @@ export default function Reports() {
         } else if (tab === 'expense-analysis') {
           const { data } = await api.get('/reports/expense-analysis', { params: filterParams() });
           setExpenseAnalysis(data);
+        } else if (tab === 'pl-monthly') {
+          const { data } = await api.get('/reports/pl-monthly');
+          setPlMonthly(data);
+        } else if (tab === 'pl-detail') {
+          const { data } = await api.get('/reports/pl-detail');
+          setPlDetail(data);
+        } else if (tab === 'cash-flow') {
+          const { data } = await api.get('/reports/cash-flow');
+          setCashFlow(data);
+        } else if (tab === 'tax-summary') {
+          const { data } = await api.get('/reports/tax-summary');
+          setTaxSummary(data);
+        } else if (tab === 'quality-by-model') {
+          const { data } = await api.get('/reports/quality-by-model');
+          setQualityByModel(data);
+        } else if (tab === 'barcode-activity') {
+          const { data } = await api.get('/reports/barcode-activity');
+          setBarcodeActivity(data);
         } else if (tab === 'pivot') {
           setLoading(false); return; // PivotTable loads its own data
         }
@@ -1384,6 +1419,322 @@ export default function Reports() {
     );
   };
 
+  const renderAPaging = () => {
+    if (!apAgingData) return null;
+    const { buckets, suppliers, summary } = apAgingData;
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(suppliers || [], 'ap-aging.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          {Object.entries(buckets || {}).map(([k, v]) => (
+            <div key={k} className="stat-card">
+              <p className="text-xs text-gray-400">{k}</p>
+              <p className="text-xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(v)} ج</p>
+            </div>
+          ))}
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr>
+              <th className="px-4 py-2 text-right text-xs text-gray-500">المورد</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">0-30 يوم</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">31-60 يوم</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">61-90 يوم</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">+90 يوم</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">الإجمالي</th>
+            </tr></thead>
+            <tbody>
+              {(suppliers || []).map((s, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-2 font-bold">{s.supplier_name || 'غير محدد'}</td>
+                  <td className="px-4 py-2 text-center font-mono">{fmt(s.bucket_0_30)}</td>
+                  <td className="px-4 py-2 text-center font-mono">{fmt(s.bucket_31_60)}</td>
+                  <td className="px-4 py-2 text-center font-mono">{fmt(s.bucket_61_90)}</td>
+                  <td className="px-4 py-2 text-center font-mono text-red-600">{fmt(s.bucket_90_plus)}</td>
+                  <td className="px-4 py-2 text-center font-mono font-bold">{fmt(s.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPlMonthly = () => {
+    if (!plMonthly) return null;
+    const { months, summary } = plMonthly;
+    const chartData = {
+      labels: (months || []).map(m => m.month),
+      datasets: [
+        { label: 'الإيرادات', data: (months || []).map(m => m.revenue), backgroundColor: '#10b981', borderRadius: 4 },
+        { label: 'المصروفات', data: (months || []).map(m => m.expenses), backgroundColor: '#ef4444', borderRadius: 4 },
+        { label: 'صافي الربح', data: (months || []).map(m => m.net_profit), backgroundColor: '#c9a84c', borderRadius: 4 },
+      ],
+    };
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(months || [], 'pl-monthly.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-green-600">{fmt(summary?.total_revenue)} ج</p><p className="text-xs text-gray-400">إجمالي الإيرادات</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-red-600">{fmt(summary?.total_expenses)} ج</p><p className="text-xs text-gray-400">إجمالي المصروفات</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-gold)'}}>{fmt(summary?.total_net_profit)} ج</p><p className="text-xs text-gray-400">إجمالي صافي الربح</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(summary?.avg_monthly_profit)} ج</p><p className="text-xs text-gray-400">متوسط الربح الشهري</p></div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h4 className="text-sm font-bold mb-4" style={{color:'var(--color-navy)'}}>الأرباح والخسائر الشهرية</h4>
+          <div className="h-[300px]"><Bar data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }} /></div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr>
+              <th className="px-4 py-2 text-right text-xs text-gray-500">الشهر</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">الإيرادات</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">المصروفات</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">صافي الربح</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">نسبة الربح</th>
+            </tr></thead>
+            <tbody>
+              {(months || []).map((m, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-2 font-bold">{m.month}</td>
+                  <td className="px-4 py-2 text-center font-mono text-green-600">{fmt(m.revenue)}</td>
+                  <td className="px-4 py-2 text-center font-mono text-red-600">{fmt(m.expenses)}</td>
+                  <td className="px-4 py-2 text-center font-mono font-bold" style={{color: m.net_profit >= 0 ? '#10b981' : '#ef4444'}}>{fmt(m.net_profit)}</td>
+                  <td className="px-4 py-2 text-center font-mono">{m.revenue > 0 ? fmt((m.net_profit / m.revenue) * 100) : 0}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPlDetail = () => {
+    if (!plDetail) return null;
+    const { revenue_breakdown, expense_breakdown, summary } = plDetail;
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-green-600">{fmt(summary?.total_revenue)} ج</p><p className="text-xs text-gray-400">إجمالي الإيرادات</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-red-600">{fmt(summary?.total_expenses)} ج</p><p className="text-xs text-gray-400">إجمالي المصروفات</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-gold)'}}>{fmt(summary?.net_profit)} ج</p><p className="text-xs text-gray-400">صافي الربح</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(summary?.profit_margin)}%</p><p className="text-xs text-gray-400">هامش الربح</p></div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <h4 className="font-bold mb-3 text-sm text-green-600">تفاصيل الإيرادات</h4>
+            {Object.entries(revenue_breakdown || {}).map(([k, v]) => (
+              <div key={k} className="flex justify-between py-1.5 border-b border-gray-100 text-sm">
+                <span>{k}</span>
+                <span className="font-mono text-green-600">{fmt(v)} ج</span>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <h4 className="font-bold mb-3 text-sm text-red-600">تفاصيل المصروفات</h4>
+            {Object.entries(expense_breakdown || {}).map(([k, v]) => (
+              <div key={k} className="flex justify-between py-1.5 border-b border-gray-100 text-sm">
+                <span>{k}</span>
+                <span className="font-mono text-red-600">{fmt(v)} ج</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCashFlow = () => {
+    if (!cashFlow) return null;
+    const { months, summary } = cashFlow;
+    const chartData = {
+      labels: (months || []).map(m => m.month),
+      datasets: [
+        { label: 'التدفقات الداخلة', data: (months || []).map(m => m.inflows), borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.4 },
+        { label: 'التدفقات الخارجة', data: (months || []).map(m => m.outflows), borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.4 },
+      ],
+    };
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(months || [], 'cash-flow.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-green-600">{fmt(summary?.total_inflows)} ج</p><p className="text-xs text-gray-400">إجمالي التدفقات الداخلة</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-red-600">{fmt(summary?.total_outflows)} ج</p><p className="text-xs text-gray-400">إجمالي التدفقات الخارجة</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-gold)'}}>{fmt(summary?.net_cash_flow)} ج</p><p className="text-xs text-gray-400">صافي التدفق النقدي</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(summary?.avg_monthly_flow)} ج</p><p className="text-xs text-gray-400">متوسط التدفق الشهري</p></div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h4 className="text-sm font-bold mb-4" style={{color:'var(--color-navy)'}}>التدفق النقدي الشهري</h4>
+          <div className="h-[300px]"><Line data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }} /></div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr>
+              <th className="px-4 py-2 text-right text-xs text-gray-500">الشهر</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">التدفقات الداخلة</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">التدفقات الخارجة</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">صافي التدفق</th>
+            </tr></thead>
+            <tbody>
+              {(months || []).map((m, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-2 font-bold">{m.month}</td>
+                  <td className="px-4 py-2 text-center font-mono text-green-600">{fmt(m.inflows)}</td>
+                  <td className="px-4 py-2 text-center font-mono text-red-600">{fmt(m.outflows)}</td>
+                  <td className="px-4 py-2 text-center font-mono font-bold" style={{color: m.net >= 0 ? '#10b981' : '#ef4444'}}>{fmt(m.net)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTaxSummary = () => {
+    if (!taxSummary) return null;
+    const { months, summary } = taxSummary;
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(months || [], 'tax-summary.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-green-600">{fmt(summary?.total_output_vat)} ج</p><p className="text-xs text-gray-400">ضريبة المخرجات (محصلة)</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-red-600">{fmt(summary?.total_input_vat)} ج</p><p className="text-xs text-gray-400">ضريبة المدخلات (مدفوعة)</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color: summary?.net_vat >= 0 ? '#c9a84c' : '#10b981'}}>{fmt(Math.abs(summary?.net_vat || 0))} ج</p><p className="text-xs text-gray-400">{summary?.net_vat >= 0 ? 'مستحق للضريبة' : 'مستحق لك'}</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{summary?.tax_rate || 15}%</p><p className="text-xs text-gray-400">نسبة الضريبة</p></div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr>
+              <th className="px-4 py-2 text-right text-xs text-gray-500">الشهر</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">ضريبة المخرجات</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">ضريبة المدخلات</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">صافي الضريبة</th>
+            </tr></thead>
+            <tbody>
+              {(months || []).map((m, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-2 font-bold">{m.month}</td>
+                  <td className="px-4 py-2 text-center font-mono text-green-600">{fmt(m.output_vat)}</td>
+                  <td className="px-4 py-2 text-center font-mono text-red-600">{fmt(m.input_vat)}</td>
+                  <td className="px-4 py-2 text-center font-mono font-bold" style={{color: m.net_vat >= 0 ? '#c9a84c' : '#10b981'}}>{fmt(m.net_vat)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderQualityByModel = () => {
+    if (!qualityByModel) return null;
+    const { models, summary } = qualityByModel;
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(models || [], 'quality-by-model.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{summary?.total_models || 0}</p><p className="text-xs text-gray-400">إجمالي النماذج</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-red-600">{fmt(summary?.avg_rejection_rate)}%</p><p className="text-xs text-gray-400">متوسط نسبة الرفض</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-yellow-600">{fmt(summary?.avg_rework_rate)}%</p><p className="text-xs text-gray-400">متوسط نسبة إعادة العمل</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-green-600">{fmt(summary?.avg_quality_score)}%</p><p className="text-xs text-gray-400">متوسط درجة الجودة</p></div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr>
+              <th className="px-4 py-2 text-right text-xs text-gray-500">الكود</th>
+              <th className="px-4 py-2 text-right text-xs text-gray-500">النموذج</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">إجمالي القطع</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">المرفوضة</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">نسبة الرفض</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">إعادة العمل</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">نسبة إعادة العمل</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">درجة الجودة</th>
+            </tr></thead>
+            <tbody>
+              {(models || []).map((m, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-2 font-mono text-xs">{m.model_code}</td>
+                  <td className="px-4 py-2 font-bold">{m.model_name}</td>
+                  <td className="px-4 py-2 text-center font-mono">{m.total_pieces}</td>
+                  <td className="px-4 py-2 text-center font-mono text-red-600">{m.rejected}</td>
+                  <td className="px-4 py-2 text-center font-mono text-red-600">{fmt(m.rejection_rate)}%</td>
+                  <td className="px-4 py-2 text-center font-mono text-yellow-600">{m.rework}</td>
+                  <td className="px-4 py-2 text-center font-mono text-yellow-600">{fmt(m.rework_rate)}%</td>
+                  <td className="px-4 py-2 text-center font-mono font-bold text-green-600">{fmt(m.quality_score)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderBarcodeActivity = () => {
+    if (!barcodeActivity) return null;
+    const { logs, summary } = barcodeActivity;
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button onClick={() => downloadCSV(logs || [], 'barcode-activity.csv')} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-600">
+            <Download size={14} /> تصدير CSV
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{summary?.total_scans || 0}</p><p className="text-xs text-gray-400">إجمالي المسح</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-blue-600">{summary?.unique_users || 0}</p><p className="text-xs text-gray-400">المستخدمين</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-green-600">{summary?.today_scans || 0}</p><p className="text-xs text-gray-400">مسح اليوم</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-purple-600">{summary?.unique_entities || 0}</p><p className="text-xs text-gray-400">كيانات فريدة</p></div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr>
+              <th className="px-4 py-2 text-right text-xs text-gray-500">التاريخ/الوقت</th>
+              <th className="px-4 py-2 text-right text-xs text-gray-500">المستخدم</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">نوع الكيان</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">الباركود</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">الإجراء</th>
+            </tr></thead>
+            <tbody>
+              {(logs || []).slice(0, 100).map((l, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-2 text-xs">{l.timestamp ? new Date(l.timestamp).toLocaleString('ar-EG') : '—'}</td>
+                  <td className="px-4 py-2 font-bold">{l.username || '—'}</td>
+                  <td className="px-4 py-2 text-center"><span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded-full">{l.entity_type || '—'}</span></td>
+                  <td className="px-4 py-2 text-center font-mono text-xs">{l.barcode || '—'}</td>
+                  <td className="px-4 py-2 text-center"><span className={`px-2 py-0.5 text-[10px] rounded-full ${l.action === 'lookup' ? 'bg-gray-100 text-gray-600' : l.action === 'checkin' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>{l.action || '—'}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="page">
       <PageHeader title="مركز التقارير" subtitle="تحليلات وإحصائيات المصنع — جدول محوري وتقارير متقدمة" action={<HelpButton pageKey="reports" />} />
@@ -1445,10 +1796,17 @@ export default function Reports() {
           {tab === 'machines-report' && renderMachinesReport()}
           {tab === 'inventory-status' && renderInventoryStatus()}
           {tab === 'ar-aging' && renderARaging()}
+          {tab === 'ap-aging' && renderAPaging()}
           {tab === 'inventory-valuation' && renderInventoryValuation()}
           {tab === 'machine-utilization' && renderMachineUtilization()}
           {tab === 'maintenance-cost' && renderMaintenanceCost()}
           {tab === 'expense-analysis' && renderExpenseAnalysis()}
+          {tab === 'pl-monthly' && renderPlMonthly()}
+          {tab === 'pl-detail' && renderPlDetail()}
+          {tab === 'cash-flow' && renderCashFlow()}
+          {tab === 'tax-summary' && renderTaxSummary()}
+          {tab === 'quality-by-model' && renderQualityByModel()}
+          {tab === 'barcode-activity' && renderBarcodeActivity()}
           {tab === 'pivot' && <PivotTable />}
         </>
       )}

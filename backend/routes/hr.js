@@ -215,6 +215,69 @@ function getDayName(dateStr) {
   return ARABIC_DAYS[d.getDay()];
 }
 
+// POST /api/hr/attendance/clock — clock-in/out by barcode scan
+router.post('/attendance/clock', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+  try {
+    const { barcode } = req.body;
+    if (!barcode) return res.status(400).json({ error: 'الباركود مطلوب' });
+    
+    // Find employee by emp_code or barcode field
+    const emp = db.prepare(`
+      SELECT id, emp_code, full_name 
+      FROM employees 
+      WHERE (emp_code = ? OR barcode = ?) AND status = 'active'
+    `).get(barcode, barcode);
+    
+    if (!emp) return res.status(404).json({ error: 'الموظف غير موجود أو غير نشط' });
+    
+    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const currentTime = now.toTimeString().slice(0, 5);
+    
+    // Check if there's already a record for today
+    const existing = db.prepare(`
+      SELECT id, check_in, check_out 
+      FROM attendance 
+      WHERE employee_id = ? AND work_date = ?
+    `).get(emp.id, today);
+    
+    let action;
+    if (existing) {
+      if (existing.check_out) {
+        // Already checked out - create new shift or update
+        return res.status(400).json({ error: 'تم تسجيل الانصراف بالفعل اليوم' });
+      }
+      // Clock out
+      const checkInTime = new Date(`${today}T${existing.check_in}`);
+      const checkOutTime = now;
+      const hoursWorked = Math.round((checkOutTime - checkInTime) / (1000 * 60 * 60) * 10) / 10;
+      
+      db.prepare(`
+        UPDATE attendance 
+        SET check_out = ?, actual_hours = ?, attendance_status = 'present'
+        WHERE id = ?
+      `).run(currentTime, hoursWorked, existing.id);
+      action = 'out';
+    } else {
+      // Clock in
+      db.prepare(`
+        INSERT INTO attendance (employee_id, work_date, day_of_week, check_in, attendance_status)
+        VALUES (?, ?, ?, ?, 'present')
+      `).run(emp.id, today, getDayName(today), currentTime);
+      action = 'in';
+    }
+    
+    logAudit(req, 'CREATE', 'attendance_clock', emp.id, `${emp.full_name} - ${action === 'in' ? 'حضور' : 'انصراف'}`);
+    res.json({ 
+      success: true, 
+      action, 
+      employee_name: emp.full_name,
+      emp_code: emp.emp_code,
+      time: currentTime
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // POST /api/hr/attendance/import — Excel import
 router.post('/attendance/import', requireRole('superadmin', 'hr'), upload.single('file'), (req, res) => {
   try {

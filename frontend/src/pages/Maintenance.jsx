@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Download, Upload, Wrench, AlertTriangle, Clock, CheckCircle, Barcode, X } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
@@ -33,6 +33,56 @@ export default function Maintenance() {
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
   const [barcodeSearch, setBarcodeSearch] = useState('');
+  const barcodeBufferRef = useRef('');
+  const barcodeTimerRef = useRef(null);
+
+  // Listen for rapid barcode scanner input (USB HID mode)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if user is typing in an input field
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+      
+      if (e.key === 'Enter' && barcodeBufferRef.current.length >= 3) {
+        const code = barcodeBufferRef.current;
+        barcodeBufferRef.current = '';
+        handleBarcodeSubmit(code);
+      } else if (e.key.length === 1) {
+        barcodeBufferRef.current += e.key;
+        clearTimeout(barcodeTimerRef.current);
+        barcodeTimerRef.current = setTimeout(() => { barcodeBufferRef.current = ''; }, 100);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleBarcodeSubmit = async (code) => {
+    try {
+      // First try to find a machine by barcode
+      const { data: machine } = await api.get(`/machines/barcode/${code}`);
+      if (machine) {
+        // Pre-fill form with this machine and open modal
+        setEditId(null);
+        setForm({ ...emptyForm, machine_id: machine.id });
+        setShowModal(true);
+        toast.success(`تم العثور على الماكينة: ${machine.name}`);
+        return;
+      }
+    } catch {}
+    
+    // If not a machine, try to find a maintenance order
+    try {
+      const { data } = await api.get(`/maintenance/barcode/${code}`);
+      if (data) {
+        setOrders([data]);
+        setTotal(1);
+        toast.success('تم العثور على أمر الصيانة');
+        return;
+      }
+    } catch {}
+    
+    toast.error('لم يتم العثور على نتائج');
+  };
 
   const emptyForm = { machine_id: '', title: '', description: '', maintenance_type: 'corrective', priority: 'medium', cost: '', performed_by: '' };
   const [form, setForm] = useState(emptyForm);
@@ -101,14 +151,8 @@ export default function Maintenance() {
 
   const handleBarcodeSearch = async () => {
     if (!barcodeSearch.trim()) return;
-    try {
-      const { data } = await api.get(`/maintenance/barcode/${barcodeSearch.trim()}`);
-      if (data) {
-        setOrders([data]);
-        setTotal(1);
-        toast.success('تم العثور على أمر الصيانة');
-      }
-    } catch { toast.error('لم يتم العثور على أمر بهذا الباركود'); }
+    await handleBarcodeSubmit(barcodeSearch.trim());
+    setBarcodeSearch('');
   };
 
   const openEdit = (o) => {

@@ -5,6 +5,7 @@ import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader, KPIStrip, DataTable, StatusBadge, LoadingState, EmptyState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
+import PermissionGuard from '../components/PermissionGuard';
 import { exportFromBackend } from '../utils/exportUtils';
 
 const STATUS_OPTIONS = [
@@ -79,9 +80,11 @@ export default function WorkOrdersList() {
               <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}><ListIcon size={16} /></button>
               <button onClick={() => setViewMode('kanban')} className={`p-1.5 rounded-md ${viewMode === 'kanban' ? 'bg-white shadow-sm' : ''}`}><LayoutGrid size={16} /></button>
             </div>
-            <button onClick={() => navigate('/work-orders/new')} className="btn btn-gold">
-              <Plus size={16} /> أمر إنتاج جديد
-            </button>
+            <PermissionGuard module="workorders" action="create">
+              <button onClick={() => navigate('/work-orders/new')} className="btn btn-gold">
+                <Plus size={16} /> أمر إنتاج جديد
+              </button>
+            </PermissionGuard>
           </div>
         }
       />

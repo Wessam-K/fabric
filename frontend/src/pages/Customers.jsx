@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';
+import PermissionGuard from '../components/PermissionGuard';
 
 export default function Customers() {
   const toast = useToast();
@@ -87,7 +88,9 @@ export default function Customers() {
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="customers" />
           <ExportButton data={customers} filename="customers" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'customer_type',label:'النوع'},{key:'city',label:'المدينة'},{key:'phone',label:'الهاتف'},{key:'balance',label:'الرصيد'}]} />
-          <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> عميل جديد</button>
+          <PermissionGuard module="customers" action="create">
+            <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> عميل جديد</button>
+          </PermissionGuard>
         </div>} />
 
       {/* KPI */}

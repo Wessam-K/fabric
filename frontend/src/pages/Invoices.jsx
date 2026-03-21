@@ -5,6 +5,7 @@ import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
+import PermissionGuard from '../components/PermissionGuard';
 import { exportFromBackend } from '../utils/exportUtils';
 import { useConfirm } from '../components/ConfirmDialog';
 
@@ -81,7 +82,9 @@ export default function Invoices() {
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="invoices" />
           <button onClick={() => exportFromBackend('/invoices/export', 'invoices').catch(() => {})} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
-          <button onClick={() => { setEditInvoice(null); setShowForm(true); }} className="btn btn-gold"><Plus size={16} /> فاتورة جديدة</button>
+          <PermissionGuard module="invoices" action="create">
+            <button onClick={() => { setEditInvoice(null); setShowForm(true); }} className="btn btn-gold"><Plus size={16} /> فاتورة جديدة</button>
+          </PermissionGuard>
         </div>} />
 
       {/* KPI Cards */}

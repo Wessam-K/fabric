@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Users, Plus, Search, Edit2, X, Trash2, Download } from 'lucide-react';
+import { Users, Plus, Search, Edit2, X, Trash2, Download, Upload } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
 import HelpButton from '../../components/HelpButton';
+import PermissionGuard from '../../components/PermissionGuard';
 import api from '../../utils/api';
 import { exportToExcel } from '../../utils/exportExcel';
 import { useConfirm } from '../../components/ConfirmDialog';
@@ -96,7 +97,9 @@ export default function Employees() {
         action={<div className="flex gap-2">
           <HelpButton pageKey="hr" />
           <button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير</button>
-          <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> موظف جديد</button>
+          <PermissionGuard module="hr" action="create">
+            <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> موظف جديد</button>
+          </PermissionGuard>
         </div>} />
 
       {/* KPIs */}

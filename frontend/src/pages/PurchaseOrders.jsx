@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, ShoppingCart, Truck, Clock, CheckCircle, DollarSign, Package } from 'lucide-react';
+import { Plus, Search, ShoppingCart, Truck, Clock, CheckCircle, DollarSign, Package, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
+import PermissionGuard from '../components/PermissionGuard';
 import { exportFromBackend } from '../utils/exportUtils';
 
 const STATUS_MAP = {
@@ -148,7 +149,9 @@ export default function PurchaseOrders() {
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="purchaseorders" />
           <button onClick={() => exportFromBackend('/purchase-orders/export', 'purchase-orders').catch(() => {})} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
-          <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> أمر شراء جديد</button>
+          <PermissionGuard module="purchaseorders" action="create">
+            <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> أمر شراء جديد</button>
+          </PermissionGuard>
         </div>} />
 
       {/* KPI */}
