@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ClipboardList, Clock, CheckCircle, AlertTriangle, LayoutGrid, List as ListIcon } from 'lucide-react';
+import { Plus, ClipboardList, Clock, CheckCircle, AlertTriangle, LayoutGrid, List as ListIcon, Download } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader, KPIStrip, DataTable, StatusBadge, LoadingState, EmptyState } from '../components/ui';
+import HelpButton from '../components/HelpButton';
+import { exportFromBackend } from '../utils/exportUtils';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'كل الحالات' },
@@ -71,6 +73,8 @@ export default function WorkOrdersList() {
       <PageHeader title="أوامر الإنتاج" subtitle="إدارة ومتابعة أوامر الإنتاج — المحرك الأساسي للمصنع"
         actions={
           <div className="flex items-center gap-2">
+            <HelpButton pageKey="workorders" />
+            <button onClick={() => exportFromBackend('/work-orders/export', 'work-orders').catch(() => {})} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
             <div className="flex bg-[var(--color-surface)] rounded-lg p-0.5">
               <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}><ListIcon size={16} /></button>
               <button onClick={() => setViewMode('kanban')} className={`p-1.5 rounded-md ${viewMode === 'kanban' ? 'bg-white shadow-sm' : ''}`}><LayoutGrid size={16} /></button>

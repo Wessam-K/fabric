@@ -28,6 +28,8 @@ const customersRouter = require('./routes/customers');
 const notificationsRouter = require('./routes/notifications');
 const machinesRouter = require('./routes/machines');
 const accountingRouter = require('./routes/accounting');
+const expensesRouter = require('./routes/expenses');
+const maintenanceRouter = require('./routes/maintenance');
 
 const app = express();
 const PORT = process.env.PORT || 9002;
@@ -108,7 +110,7 @@ app.get('/api/health', (req, res) => {
     userCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE status='active'").get().c;
   } catch (e) { dbStatus = 'error: ' + e.message; }
   res.json({
-    status: 'ok', app: 'WK-Hub', version: 'v15',
+    status: 'ok', app: 'WK-Hub', version: 'v16-enterprise',
     timestamp: new Date().toISOString(),
     uptime_seconds: Math.floor(process.uptime()),
     database: { status: dbStatus, schema_version: dbVersion, active_users: userCount },
@@ -162,6 +164,8 @@ app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/notifications', requireAuth, notificationsRouter);
 app.use('/api/machines', requireAuth, machinesRouter);
 app.use('/api/accounting', requireAuth, accountingRouter);
+app.use('/api/expenses', requireAuth, expensesRouter);
+app.use('/api/maintenance', requireAuth, maintenanceRouter);
 
 // Dashboard
 app.get('/api/dashboard', requireAuth, (req, res) => {
@@ -259,6 +263,9 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       quality_rate: qualityRate,
       top_models: topModels,
       stage_bottlenecks: stageBottlenecks,
+      total_expenses_this_month: (() => { try { return db.prepare("SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= date('now','start of month')").get().v; } catch { return 0; } })(),
+      pending_maintenance_count: (() => { try { return db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND status='pending'").get().c; } catch { return 0; } })(),
+      critical_maintenance_count: (() => { try { return db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND priority='critical' AND status NOT IN ('completed','cancelled')").get().c; } catch { return 0; } })(),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -277,7 +284,12 @@ app.get('/api/search', requireAuth, (req, res) => {
     const workOrders = db.prepare(`SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.assigned_to, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ? LIMIT 8`).all(like, like, like, like);
     const purchaseOrders = db.prepare(`SELECT po.id, po.po_number, po.status, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.po_number LIKE ? OR s.name LIKE ? LIMIT 8`).all(like, like);
     const customers = db.prepare(`SELECT id, code, name, phone, city FROM customers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR phone LIKE ?) LIMIT 8`).all(like, like, like);
-    res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers });
+    let maintenanceOrders = [], expensesResults = [];
+    try {
+      maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT 8`).all(like, like, like);
+      expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT 8`).all(like, like);
+    } catch {}
+    res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -300,7 +312,7 @@ app.use((err, req, res, _next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`WK-Hub Factory API v12 running on http://localhost:${PORT}`);
+  console.log(`WK-Hub Factory API v16-enterprise running on http://localhost:${PORT}`);
   // Run notification generation on startup and every 5 minutes
   try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
   setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);

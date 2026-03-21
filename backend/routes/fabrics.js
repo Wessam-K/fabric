@@ -57,6 +57,42 @@ router.post('/', upload.single('image'), (req, res) => {
   }
 });
 
+// GET /api/fabrics/export — CSV export
+router.get('/export', (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT f.*, s.name as supplier_name FROM fabrics f LEFT JOIN suppliers s ON s.id=f.supplier_id ORDER BY f.created_at DESC`).all();
+    const header = 'code,name,fabric_type,color,price_per_m,supplier_name,available_meters,low_stock_threshold,status,notes';
+    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const csv = [header, ...rows.map(r => [r.code,r.name,r.fabric_type,r.color,r.price_per_m,r.supplier_name||r.supplier,r.available_meters,r.low_stock_threshold,r.status,r.notes].map(esc).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=fabrics.csv');
+    res.send('\uFEFF' + csv);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/fabrics/import — bulk import
+router.post('/import', (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
+    let imported = 0, updated = 0, errors = [];
+    const insert = db.prepare(`INSERT INTO fabrics (code,name,fabric_type,price_per_m,color,notes) VALUES (?,?,?,?,?,?)`);
+    const update = db.prepare(`UPDATE fabrics SET name=?,fabric_type=?,price_per_m=?,color=?,notes=? WHERE code=?`);
+    db.transaction(() => {
+      for (const item of items) {
+        try {
+          if (!item.code || !item.name) { errors.push(`سطر بدون كود أو اسم`); continue; }
+          const existing = db.prepare('SELECT id FROM fabrics WHERE code=?').get(item.code);
+          if (existing) { update.run(item.name, item.fabric_type||'main', parseFloat(item.price_per_m)||0, item.color||null, item.notes||null, item.code); updated++; }
+          else { insert.run(item.code, item.name, item.fabric_type||'main', parseFloat(item.price_per_m)||0, item.color||null, item.notes||null); imported++; }
+        } catch (e) { errors.push(`${item.code}: ${e.message}`); }
+      }
+    })();
+    logAudit(req, 'IMPORT', 'fabric', null, `imported:${imported} updated:${updated}`);
+    res.json({ imported, updated, errors });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.put('/:code', upload.single('image'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM fabrics WHERE code=?').get(req.params.code);

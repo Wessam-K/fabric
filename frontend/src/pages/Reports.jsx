@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon, CheckCircle, Settings, CreditCard } from 'lucide-react';
+import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon, CheckCircle, Settings, CreditCard, Wrench, Receipt } from 'lucide-react';
 import { PageHeader } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
@@ -29,6 +30,9 @@ const TABS = [
   { key: 'inventory-status', label: 'حالة المخزون', icon: Warehouse },
   { key: 'ar-aging', label: 'أعمار الديون', icon: CreditCard },
   { key: 'inventory-valuation', label: 'تقييم المخزون', icon: Package },
+  { key: 'machine-utilization', label: 'استخدام الماكينات', icon: Settings },
+  { key: 'maintenance-cost', label: 'تكاليف الصيانة', icon: Wrench },
+  { key: 'expense-analysis', label: 'تحليل المصروفات', icon: Receipt },
   { key: 'pivot', label: 'جدول محوري', icon: Table2 },
 ];
 
@@ -80,6 +84,9 @@ export default function Reports() {
   const [inventoryStatus, setInventoryStatus] = useState(null);
   const [arAgingData, setArAgingData] = useState(null);
   const [inventoryValuation, setInventoryValuation] = useState(null);
+  const [machineUtilization, setMachineUtilization] = useState(null);
+  const [maintenanceCost, setMaintenanceCost] = useState(null);
+  const [expenseAnalysis, setExpenseAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -155,6 +162,15 @@ export default function Reports() {
         } else if (tab === 'inventory-valuation') {
           const { data } = await api.get('/reports/inventory-valuation');
           setInventoryValuation(data);
+        } else if (tab === 'machine-utilization') {
+          const { data } = await api.get('/reports/machine-utilization');
+          setMachineUtilization(data);
+        } else if (tab === 'maintenance-cost') {
+          const { data } = await api.get('/reports/maintenance-cost', { params: filterParams() });
+          setMaintenanceCost(data);
+        } else if (tab === 'expense-analysis') {
+          const { data } = await api.get('/reports/expense-analysis', { params: filterParams() });
+          setExpenseAnalysis(data);
         } else if (tab === 'pivot') {
           setLoading(false); return; // PivotTable loads its own data
         }
@@ -1256,9 +1272,121 @@ export default function Reports() {
     );
   };
 
+  const renderMachineUtilization = () => {
+    if (!machineUtilization) return null;
+    const { machines, summary } = machineUtilization;
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{summary.total_machines}</p><p className="text-xs text-gray-400">إجمالي الماكينات</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(summary.total_maintenance_cost)} ج</p><p className="text-xs text-gray-400">تكلفة الصيانة الكلية</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(summary.avg_maintenance_per_machine)} ج</p><p className="text-xs text-gray-400">متوسط صيانة/ماكينة</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono text-red-600">{summary.needs_maintenance}</p><p className="text-xs text-gray-400">تحتاج صيانة</p></div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr>
+              <th className="px-4 py-2 text-right text-xs text-gray-500">الماكينة</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">النوع</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">عمليات الصيانة</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">مكتملة</th>
+              <th className="px-4 py-2 text-center text-xs text-gray-500">تكلفة الصيانة</th>
+            </tr></thead>
+            <tbody>
+              {(machines || []).map((m, i) => (
+                <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <td className="px-4 py-2 font-bold">{m.name}</td>
+                  <td className="px-4 py-2 text-center text-xs">{m.machine_type}</td>
+                  <td className="px-4 py-2 text-center font-mono">{m.total_maintenance}</td>
+                  <td className="px-4 py-2 text-center font-mono text-green-600">{m.completed_maintenance}</td>
+                  <td className="px-4 py-2 text-center font-mono font-bold">{fmt(m.maintenance_cost)} ج</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMaintenanceCost = () => {
+    if (!maintenanceCost) return null;
+    const { by_type, by_priority, total_cost, total_orders } = maintenanceCost;
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{total_orders}</p><p className="text-xs text-gray-400">إجمالي الأوامر</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(total_cost)} ج</p><p className="text-xs text-gray-400">إجمالي التكلفة</p></div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <h4 className="font-bold mb-3 text-sm" style={{color:'var(--color-navy)'}}>حسب النوع</h4>
+            {Object.entries(by_type || {}).map(([k, v]) => (
+              <div key={k} className="flex justify-between py-1.5 border-b border-gray-100 text-sm">
+                <span>{k}</span>
+                <span className="font-mono">{v.count} أمر — {fmt(v.cost)} ج</span>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <h4 className="font-bold mb-3 text-sm" style={{color:'var(--color-navy)'}}>حسب الأولوية</h4>
+            {Object.entries(by_priority || {}).map(([k, v]) => (
+              <div key={k} className="flex justify-between py-1.5 border-b border-gray-100 text-sm">
+                <span>{k}</span>
+                <span className="font-mono">{v.count} أمر — {fmt(v.cost)} ج</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderExpenseAnalysis = () => {
+    if (!expenseAnalysis) return null;
+    const { by_category, by_status, monthly, total_amount, total_expenses } = expenseAnalysis;
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{total_expenses}</p><p className="text-xs text-gray-400">إجمالي المصروفات</p></div>
+          <div className="stat-card"><p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{fmt(total_amount)} ج</p><p className="text-xs text-gray-400">إجمالي المبالغ</p></div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <h4 className="font-bold mb-3 text-sm" style={{color:'var(--color-navy)'}}>حسب النوع</h4>
+            {Object.entries(by_category || {}).map(([k, v]) => (
+              <div key={k} className="flex justify-between py-1.5 border-b border-gray-100 text-sm">
+                <span>{k}</span>
+                <span className="font-mono">{v.count} — {fmt(v.amount)} ج</span>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <h4 className="font-bold mb-3 text-sm" style={{color:'var(--color-navy)'}}>حسب الحالة</h4>
+            {Object.entries(by_status || {}).map(([k, v]) => (
+              <div key={k} className="flex justify-between py-1.5 border-b border-gray-100 text-sm">
+                <span>{k}</span>
+                <span className="font-mono">{v.count} — {fmt(v.amount)} ج</span>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <h4 className="font-bold mb-3 text-sm" style={{color:'var(--color-navy)'}}>شهري</h4>
+            {Object.entries(monthly || {}).sort().map(([k, v]) => (
+              <div key={k} className="flex justify-between py-1.5 border-b border-gray-100 text-sm">
+                <span>{k}</span>
+                <span className="font-mono">{v.count} — {fmt(v.amount)} ج</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="page">
-      <PageHeader title="مركز التقارير" subtitle="تحليلات وإحصائيات المصنع — جدول محوري وتقارير متقدمة" />
+      <PageHeader title="مركز التقارير" subtitle="تحليلات وإحصائيات المصنع — جدول محوري وتقارير متقدمة" action={<HelpButton pageKey="reports" />} />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto">
@@ -1318,6 +1446,9 @@ export default function Reports() {
           {tab === 'inventory-status' && renderInventoryStatus()}
           {tab === 'ar-aging' && renderARaging()}
           {tab === 'inventory-valuation' && renderInventoryValuation()}
+          {tab === 'machine-utilization' && renderMachineUtilization()}
+          {tab === 'maintenance-cost' && renderMaintenanceCost()}
+          {tab === 'expense-analysis' && renderExpenseAnalysis()}
           {tab === 'pivot' && <PivotTable />}
         </>
       )}

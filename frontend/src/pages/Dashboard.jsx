@@ -4,6 +4,7 @@ import { Scissors, Gem, List, TrendingUp, Factory, Truck, DollarSign, Users, Clo
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, KPIStrip, StatusBadge, MoneyDisplay, LoadingState, EmptyState, Skeleton } from '../components/ui';
+import HelpButton from '../components/HelpButton';
 
 const LazyCharts = lazy(() => import('../components/DashboardCharts'));
 
@@ -37,7 +38,7 @@ export default function Dashboard() {
 
   return (
     <div className="page">
-      <PageHeader title="لوحة التحكم" subtitle={`مرحباً ${user?.full_name} — نظرة عامة على المصنع`} />
+      <PageHeader title="لوحة التحكم" subtitle={`مرحباً ${user?.full_name} — نظرة عامة على المصنع`} action={<HelpButton pageKey="dashboard" />} />
 
       {/* Primary KPIs */}
       <KPIStrip items={[

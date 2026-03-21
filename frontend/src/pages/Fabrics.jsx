@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import { PageHeader, LoadingState, EmptyState } from '../components/ui';
 import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
+import HelpButton from '../components/HelpButton';
 
 const TYPES = [
   { value: '', label: 'الكل' },
@@ -119,6 +120,7 @@ export default function Fabrics() {
       )}
       <PageHeader title="سجل الأقمشة" subtitle={`${total} قماش مسجل`}
         actions={<div className="flex items-center gap-2">
+          <HelpButton pageKey="fabrics" />
           <ExportButton data={fabrics} filename="fabrics" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'fabric_type',label:'النوع'},{key:'price_per_m',label:'سعر المتر'},{key:'supplier',label:'المورد'},{key:'color',label:'اللون'}]} />
           <button onClick={openNew} className="btn btn-gold"><Plus size={16} /> إضافة قماش</button>
         </div>}

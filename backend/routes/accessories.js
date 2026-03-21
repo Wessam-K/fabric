@@ -57,6 +57,42 @@ router.post('/', upload.single('image'), (req, res) => {
   }
 });
 
+// GET /api/accessories/export — CSV export
+router.get('/export', (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT a.*, s.name as supplier_name FROM accessories a LEFT JOIN suppliers s ON s.id=a.supplier_id ORDER BY a.created_at DESC`).all();
+    const header = 'code,acc_type,name,unit_price,unit,supplier_name,quantity_on_hand,low_stock_threshold,reorder_qty,status,notes';
+    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const csv = [header, ...rows.map(r => [r.code,r.acc_type,r.name,r.unit_price,r.unit,r.supplier_name||r.supplier,r.quantity_on_hand,r.low_stock_threshold,r.reorder_qty,r.status,r.notes].map(esc).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=accessories.csv');
+    res.send('\uFEFF' + csv);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/accessories/import — bulk import
+router.post('/import', (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
+    let imported = 0, updated = 0, errors = [];
+    const insert = db.prepare(`INSERT INTO accessories (code,acc_type,name,unit_price,unit,quantity_on_hand,low_stock_threshold,reorder_qty,notes) VALUES (?,?,?,?,?,?,?,?,?)`);
+    const update = db.prepare(`UPDATE accessories SET acc_type=?,name=?,unit_price=?,unit=?,low_stock_threshold=?,reorder_qty=?,notes=? WHERE code=?`);
+    db.transaction(() => {
+      for (const item of items) {
+        try {
+          if (!item.code || !item.name) { errors.push(`سطر بدون كود أو اسم`); continue; }
+          const existing = db.prepare('SELECT id FROM accessories WHERE code=?').get(item.code);
+          if (existing) { update.run(item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.low_stock_threshold)||10, parseInt(item.reorder_qty)||50, item.notes||null, item.code); updated++; }
+          else { insert.run(item.code, item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.quantity_on_hand)||0, parseInt(item.low_stock_threshold)||10, parseInt(item.reorder_qty)||50, item.notes||null); imported++; }
+        } catch (e) { errors.push(`${item.code}: ${e.message}`); }
+      }
+    })();
+    logAudit(req, 'IMPORT', 'accessory', null, `imported:${imported} updated:${updated}`);
+    res.json({ imported, updated, errors });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.put('/:code', upload.single('image'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);

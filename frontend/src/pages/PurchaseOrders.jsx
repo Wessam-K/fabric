@@ -3,6 +3,8 @@ import { Plus, Search, ShoppingCart, Truck, Clock, CheckCircle, DollarSign, Pack
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import HelpButton from '../components/HelpButton';
+import { exportFromBackend } from '../utils/exportUtils';
 
 const STATUS_MAP = {
   draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-600' },
@@ -143,7 +145,11 @@ export default function PurchaseOrders() {
   return (
     <div className="page">
       <PageHeader title="أوامر الشراء" subtitle="إدارة مشتريات الخامات والاكسسوارات"
-        action={<button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> أمر شراء جديد</button>} />
+        action={<div className="flex items-center gap-2">
+          <HelpButton pageKey="purchaseorders" />
+          <button onClick={() => exportFromBackend('/purchase-orders/export', 'purchase-orders').catch(() => {})} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
+          <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> أمر شراء جديد</button>
+        </div>} />
 
       {/* KPI */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

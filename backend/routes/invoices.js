@@ -52,6 +52,19 @@ router.get('/next-number', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/invoices/export — CSV export
+router.get('/export', (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT i.*, c.name as customer_name_linked FROM invoices i LEFT JOIN customers c ON c.id=i.customer_id ORDER BY i.created_at DESC`).all();
+    const header = 'invoice_number,customer_name,status,subtotal,discount,tax,total,due_date,notes,created_at';
+    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const csv = [header, ...rows.map(r => [r.invoice_number,r.customer_name_linked||r.customer_name,r.status,r.subtotal,r.discount,r.tax,r.total,r.due_date,r.notes,r.created_at].map(esc).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=invoices.csv');
+    res.send('\uFEFF' + csv);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/invoices/:id — single invoice with items
 router.get('/:id', (req, res) => {
   try {

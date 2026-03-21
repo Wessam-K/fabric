@@ -41,6 +41,43 @@ router.get('/next-number', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/purchase-orders/export — CSV export
+router.get('/export', (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id ORDER BY po.created_at DESC`).all();
+    const header = 'po_number,supplier_name,po_type,status,order_date,delivery_date,total_amount,paid_amount,notes';
+    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const csv = [header, ...rows.map(r => [r.po_number,r.supplier_name,r.po_type,r.status,r.order_date,r.delivery_date,r.total_amount,r.paid_amount,r.notes].map(esc).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=purchase-orders.csv');
+    res.send('\uFEFF' + csv);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/purchase-orders/import — bulk import
+router.post('/import', (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
+    let imported = 0, errors = [];
+    const insert = db.prepare(`INSERT INTO purchase_orders (po_number,supplier_id,po_type,order_date,notes,total_amount) VALUES (?,?,?,?,?,?)`);
+    db.transaction(() => {
+      for (const item of items) {
+        try {
+          if (!item.po_number) { errors.push(`سطر بدون رقم أمر شراء`); continue; }
+          const existing = db.prepare('SELECT id FROM purchase_orders WHERE po_number=?').get(item.po_number);
+          if (existing) { errors.push(`${item.po_number}: موجود بالفعل`); continue; }
+          const supplier = item.supplier_id ? db.prepare('SELECT id FROM suppliers WHERE id=?').get(item.supplier_id) : null;
+          insert.run(item.po_number, supplier ? supplier.id : null, item.po_type||'fabric', item.order_date||new Date().toISOString().slice(0,10), item.notes||null, parseFloat(item.total_amount)||0);
+          imported++;
+        } catch (e) { errors.push(`${item.po_number}: ${e.message}`); }
+      }
+    })();
+    logAudit(req, 'IMPORT', 'purchase_order', null, `imported:${imported}`);
+    res.json({ imported, errors });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/purchase-orders/:id — full PO
 router.get('/:id', (req, res) => {
   try {

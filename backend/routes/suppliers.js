@@ -49,6 +49,42 @@ router.get('/', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/suppliers/export — CSV export
+router.get('/export', (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT * FROM suppliers ORDER BY created_at DESC`).all();
+    const header = 'code,name,supplier_type,phone,email,address,contact_name,payment_terms,rating,status,notes';
+    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const csv = [header, ...rows.map(r => [r.code,r.name,r.supplier_type,r.phone,r.email,r.address,r.contact_name,r.payment_terms,r.rating,r.status,r.notes].map(esc).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=suppliers.csv');
+    res.send('\uFEFF' + csv);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/suppliers/import — bulk import
+router.post('/import', (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
+    let imported = 0, updated = 0, errors = [];
+    const insert = db.prepare(`INSERT INTO suppliers (code,name,supplier_type,phone,email,address,contact_name,payment_terms,rating,notes) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+    const update = db.prepare(`UPDATE suppliers SET name=?,supplier_type=?,phone=?,email=?,address=?,contact_name=?,payment_terms=?,rating=?,notes=? WHERE code=?`);
+    db.transaction(() => {
+      for (const item of items) {
+        try {
+          if (!item.code || !item.name) { errors.push(`سطر بدون كود أو اسم`); continue; }
+          const existing = db.prepare('SELECT id FROM suppliers WHERE code=?').get(item.code);
+          if (existing) { update.run(item.name, item.supplier_type||'both', item.phone||null, item.email||null, item.address||null, item.contact_name||null, item.payment_terms||null, parseInt(item.rating)||3, item.notes||null, item.code); updated++; }
+          else { insert.run(item.code, item.name, item.supplier_type||'both', item.phone||null, item.email||null, item.address||null, item.contact_name||null, item.payment_terms||null, parseInt(item.rating)||3, item.notes||null); imported++; }
+        } catch (e) { errors.push(`${item.code}: ${e.message}`); }
+      }
+    })();
+    logAudit(req, 'IMPORT', 'supplier', null, `imported:${imported} updated:${updated}`);
+    res.json({ imported, updated, errors });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/suppliers/:id — single with stats
 router.get('/:id', (req, res) => {
   try {

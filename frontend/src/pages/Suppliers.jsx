@@ -6,6 +6,8 @@ import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
+import HelpButton from '../components/HelpButton';
+import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 
 const TYPE_MAP = { fabric: 'أقمشة', accessory: 'اكسسوارات', both: 'أقمشة واكسسوارات', other: 'أخرى' };
 
@@ -87,6 +89,7 @@ export default function Suppliers() {
     <div className="page">
       <PageHeader title="الموردين" subtitle="إدارة الموردين والمدفوعات"
         action={<div className="flex items-center gap-2">
+          <HelpButton pageKey="suppliers" />
           <ExportButton data={suppliers} filename="suppliers" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'supplier_type',label:'النوع'},{key:'phone',label:'الهاتف'},{key:'balance',label:'المستحقات'},{key:'rating',label:'التقييم'}]} />
           <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مورد جديد</button>
         </div>} />

@@ -1535,6 +1535,115 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (15)`);
   }
+
+  // ──── V16 — Expenses, Maintenance Orders, Machine enhancements ────
+  const v16 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 16').get();
+  if (!v16) {
+    // 16.1 — Machine columns
+    try { db.exec("ALTER TABLE machines ADD COLUMN barcode TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN purchase_date TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN last_maintenance_date TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN next_maintenance_date TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN total_expenses REAL DEFAULT 0"); } catch(e) {}
+    try { db.exec("ALTER TABLE machines ADD COLUMN machine_value REAL DEFAULT 0"); } catch(e) {}
+    // Auto-generate barcodes for machines missing them
+    db.exec(`UPDATE machines SET barcode = 'MCH-' || id || '-' || CAST(id*1000+100 AS TEXT) WHERE barcode IS NULL OR barcode = ''`);
+
+    // 16.2 — machine_maintenance enhancements
+    try { db.exec("ALTER TABLE machine_maintenance ADD COLUMN title TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machine_maintenance ADD COLUMN status TEXT DEFAULT 'completed'"); } catch(e) {}
+    try { db.exec("ALTER TABLE machine_maintenance ADD COLUMN parts_used TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machine_maintenance ADD COLUMN barcode TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE machine_maintenance ADD COLUMN created_by INTEGER"); } catch(e) {}
+    try { db.exec("ALTER TABLE machine_maintenance ADD COLUMN is_deleted INTEGER DEFAULT 0"); } catch(e) {}
+
+    // 16.3 — expenses table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        expense_type TEXT NOT NULL DEFAULT 'other'
+          CHECK(expense_type IN ('machine','maintenance','salary','utilities','raw_material','production','transport','other')),
+        reference_id INTEGER,
+        reference_type TEXT,
+        amount REAL NOT NULL DEFAULT 0,
+        description TEXT NOT NULL,
+        expense_date TEXT NOT NULL DEFAULT (date('now')),
+        created_by INTEGER REFERENCES users(id),
+        approved_by INTEGER REFERENCES users(id),
+        status TEXT DEFAULT 'pending'
+          CHECK(status IN ('pending','approved','rejected')),
+        receipt_url TEXT,
+        notes TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `);
+
+    // 16.4 — maintenance_orders table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS maintenance_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        machine_id INTEGER REFERENCES machines(id),
+        maintenance_type TEXT NOT NULL DEFAULT 'preventive'
+          CHECK(maintenance_type IN ('preventive','corrective','emergency','routine')),
+        title TEXT NOT NULL,
+        description TEXT,
+        priority TEXT DEFAULT 'medium'
+          CHECK(priority IN ('low','medium','high','critical')),
+        status TEXT DEFAULT 'pending'
+          CHECK(status IN ('pending','in_progress','completed','cancelled')),
+        scheduled_date TEXT,
+        completed_date TEXT,
+        performed_by TEXT,
+        cost REAL DEFAULT 0,
+        parts_used TEXT,
+        notes TEXT,
+        barcode TEXT UNIQUE,
+        created_by INTEGER REFERENCES users(id),
+        is_deleted INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `);
+
+    // 16.5 — permissions for new modules
+    try {
+      const insPD16 = db.prepare('INSERT OR IGNORE INTO permission_definitions (module, action, label_ar, description_ar, sort_order) VALUES (?,?,?,?,?)');
+      const newPerms16 = [
+        ['expenses', 'view',    'عرض المصاريف',     'عرض قائمة المصاريف',      80],
+        ['expenses', 'create',  'إضافة مصروف',      'إضافة مصاريف جديدة',      81],
+        ['expenses', 'edit',    'تعديل المصاريف',    'تعديل بيانات المصاريف',    82],
+        ['expenses', 'delete',  'حذف المصاريف',      'حذف المصاريف',            83],
+        ['expenses', 'approve', 'اعتماد المصاريف',    'اعتماد أو رفض المصاريف',   84],
+        ['maintenance', 'view',   'عرض الصيانة',      'عرض أوامر الصيانة',       90],
+        ['maintenance', 'create', 'إضافة أمر صيانة',   'إضافة أوامر صيانة جديدة', 91],
+        ['maintenance', 'edit',   'تعديل الصيانة',    'تعديل أوامر الصيانة',      92],
+        ['maintenance', 'delete', 'حذف الصيانة',      'حذف أوامر الصيانة',       93],
+      ];
+      for (const p of newPerms16) insPD16.run(...p);
+
+      // Grant to relevant roles
+      const insRP16 = db.prepare('INSERT OR IGNORE INTO role_permissions (role, module, action, allowed) VALUES (?,?,?,?)');
+      for (const role of ['superadmin','manager']) {
+        for (const mod of ['expenses','maintenance']) {
+          for (const act of ['view','create','edit','delete']) {
+            insRP16.run(role, mod, act, 1);
+          }
+        }
+        insRP16.run(role, 'expenses', 'approve', 1);
+      }
+      insRP16.run('accountant', 'expenses', 'view', 1);
+      insRP16.run('accountant', 'expenses', 'create', 1);
+      insRP16.run('accountant', 'expenses', 'edit', 1);
+      insRP16.run('accountant', 'expenses', 'approve', 1);
+      insRP16.run('production', 'maintenance', 'view', 1);
+      insRP16.run('production', 'maintenance', 'create', 1);
+      insRP16.run('production', 'expenses', 'view', 1);
+      insRP16.run('viewer', 'expenses', 'view', 1);
+      insRP16.run('viewer', 'maintenance', 'view', 1);
+    } catch {} // permission_definitions may not exist on fresh DB
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (16)`);
+  }
 }
 
 initializeDatabase();

@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import { PageHeader } from '../components/ui';
 import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
+import HelpButton from '../components/HelpButton';
 
 const ACC_TYPES = [
   { value: '', label: 'الكل', icon: null },
@@ -138,6 +139,7 @@ export default function Accessories() {
       )}
       <PageHeader title="سجل الاكسسوارات" subtitle={`${total} اكسسوار مسجل`}
         actions={<div className="flex items-center gap-2">
+          <HelpButton pageKey="accessories" />
           <ExportButton data={list} filename="accessories" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'acc_type',label:'النوع'},{key:'unit_price',label:'سعر الوحدة'},{key:'unit',label:'الوحدة'},{key:'quantity_on_hand',label:'المخزون'},{key:'supplier',label:'المورد'}]} />
           <button onClick={openNew} className="btn btn-gold"><Plus size={16} /> إضافة اكسسوار</button>
         </div>}

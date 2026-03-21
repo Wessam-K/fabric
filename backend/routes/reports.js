@@ -735,4 +735,86 @@ router.get('/inventory-valuation', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/machine-utilization — machine usage statistics
+router.get('/machine-utilization', (req, res) => {
+  try {
+    const machines = db.prepare(`SELECT m.*, 
+      (SELECT COUNT(*) FROM machine_maintenance mm WHERE mm.machine_id=m.id) as total_maintenance,
+      (SELECT COUNT(*) FROM machine_maintenance mm WHERE mm.machine_id=m.id AND mm.status='completed') as completed_maintenance,
+      (SELECT COALESCE(SUM(cost),0) FROM machine_maintenance mm WHERE mm.machine_id=m.id) as maintenance_cost
+      FROM machines m WHERE m.status='active' ORDER BY maintenance_cost DESC`).all();
+    const totalMachines = machines.length;
+    const totalMaintenanceCost = machines.reduce((s, m) => s + (m.maintenance_cost || 0), 0);
+    const avgMaintenancePerMachine = totalMachines ? Math.round(totalMaintenanceCost / totalMachines * 100) / 100 : 0;
+    const needsMaintenance = machines.filter(m => m.next_maintenance_date && m.next_maintenance_date <= new Date().toISOString().slice(0, 10)).length;
+    res.json({ machines, summary: { total_machines: totalMachines, total_maintenance_cost: totalMaintenanceCost, avg_maintenance_per_machine: avgMaintenancePerMachine, needs_maintenance: needsMaintenance } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/maintenance-cost — maintenance cost analysis
+router.get('/maintenance-cost', (req, res) => {
+  try {
+    const { date_from, date_to } = req.query;
+    let q = `SELECT mo.*, m.name as machine_name, m.machine_type, u.full_name as created_by_name
+      FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id LEFT JOIN users u ON u.id=mo.created_by WHERE mo.is_deleted=0`;
+    const p = [];
+    if (date_from) { q += ' AND mo.created_at >= ?'; p.push(date_from); }
+    if (date_to) { q += ' AND mo.created_at <= ?'; p.push(date_to + 'T23:59:59'); }
+    q += ' ORDER BY mo.estimated_cost DESC';
+    const orders = db.prepare(q).all(...p);
+    const byType = {};
+    for (const o of orders) {
+      const t = o.order_type || 'other';
+      if (!byType[t]) byType[t] = { count: 0, cost: 0 };
+      byType[t].count++;
+      byType[t].cost += o.estimated_cost || 0;
+    }
+    const byPriority = {};
+    for (const o of orders) {
+      const pr = o.priority || 'medium';
+      if (!byPriority[pr]) byPriority[pr] = { count: 0, cost: 0 };
+      byPriority[pr].count++;
+      byPriority[pr].cost += o.estimated_cost || 0;
+    }
+    const totalCost = orders.reduce((s, o) => s + (o.estimated_cost || 0), 0);
+    res.json({ orders, by_type: byType, by_priority: byPriority, total_cost: totalCost, total_orders: orders.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/reports/expense-analysis — expense breakdown
+router.get('/expense-analysis', (req, res) => {
+  try {
+    const { date_from, date_to } = req.query;
+    let q = `SELECT e.*, u.full_name as created_by_name FROM expenses e LEFT JOIN users u ON u.id=e.created_by WHERE e.is_deleted=0`;
+    const p = [];
+    if (date_from) { q += ' AND e.expense_date >= ?'; p.push(date_from); }
+    if (date_to) { q += ' AND e.expense_date <= ?'; p.push(date_to); }
+    q += ' ORDER BY e.expense_date DESC';
+    const expenses = db.prepare(q).all(...p);
+    const byCategory = {};
+    for (const e of expenses) {
+      const cat = e.expense_type || 'other';
+      if (!byCategory[cat]) byCategory[cat] = { count: 0, amount: 0 };
+      byCategory[cat].count++;
+      byCategory[cat].amount += e.amount || 0;
+    }
+    const byStatus = {};
+    for (const e of expenses) {
+      const st = e.status || 'pending';
+      if (!byStatus[st]) byStatus[st] = { count: 0, amount: 0 };
+      byStatus[st].count++;
+      byStatus[st].amount += e.amount || 0;
+    }
+    const monthlyData = {};
+    for (const e of expenses) {
+      const m = (e.expense_date || '').slice(0, 7);
+      if (!monthlyData[m]) monthlyData[m] = { count: 0, amount: 0 };
+      monthlyData[m].count++;
+      monthlyData[m].amount += e.amount || 0;
+    }
+    const totalAmount = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+    res.json({ expenses, by_category: byCategory, by_status: byStatus, monthly: monthlyData, total_amount: totalAmount, total_expenses: expenses.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

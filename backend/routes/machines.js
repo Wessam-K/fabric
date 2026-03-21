@@ -2,6 +2,61 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { notFound, validationError, dbError, serverError, sanitize } = require('../utils/errors');
+const { logAudit, requirePermission } = require('../middleware/auth');
+
+function toCSV(rows, columns) {
+  if (!rows || rows.length === 0) return columns.join(',') + '\n';
+  const header = columns.join(',');
+  const lines = rows.map(row =>
+    columns.map(col => {
+      const val = row[col] == null ? '' : String(row[col]);
+      return '"' + val.replace(/"/g, '""') + '"';
+    }).join(',')
+  );
+  return header + '\n' + lines.join('\n');
+}
+
+// ═══════════════════════════════════════════════
+// GET /api/machines/stats
+// ═══════════════════════════════════════════════
+router.get('/stats', (req, res) => {
+  try {
+    const total = db.prepare("SELECT COUNT(*) as c FROM machines").get().c;
+    const active = db.prepare("SELECT COUNT(*) as c FROM machines WHERE status='active'").get().c;
+    const under_maintenance = db.prepare("SELECT COUNT(*) as c FROM machines WHERE status='maintenance'").get().c;
+    const inactive = db.prepare("SELECT COUNT(*) as c FROM machines WHERE status='inactive'").get().c;
+    const machines_in_use = db.prepare("SELECT COUNT(DISTINCT machine_id) as c FROM wo_stages WHERE status='in_progress' AND machine_id IS NOT NULL").get().c;
+    const total_maintenance_cost_this_month = db.prepare("SELECT COALESCE(SUM(cost),0) as v FROM machine_maintenance WHERE performed_at >= date('now','start of month')").get().v;
+    let upcoming_maintenance_count = 0;
+    try { upcoming_maintenance_count = db.prepare("SELECT COUNT(*) as c FROM machines WHERE next_maintenance_date IS NOT NULL AND next_maintenance_date <= date('now','+7 days') AND status='active'").get().c; } catch {}
+    res.json({ total, active, under_maintenance, inactive, machines_in_use, total_maintenance_cost_this_month, upcoming_maintenance_count });
+  } catch (err) { serverError(res, err); }
+});
+
+// ═══════════════════════════════════════════════
+// GET /api/machines/export
+// ═══════════════════════════════════════════════
+router.get('/export', (req, res) => {
+  try {
+    const rows = db.prepare("SELECT * FROM machines WHERE status != 'inactive' ORDER BY sort_order, name").all();
+    const columns = ['barcode','code','name','machine_type','status','location','purchase_date','machine_value','last_maintenance_date','next_maintenance_date','notes'];
+    const csv = toCSV(rows, columns);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="machines.csv"');
+    res.send('\uFEFF' + csv);
+  } catch (err) { serverError(res, err); }
+});
+
+// ═══════════════════════════════════════════════
+// GET /api/machines/barcode/:barcode
+// ═══════════════════════════════════════════════
+router.get('/barcode/:barcode', (req, res) => {
+  try {
+    const machine = db.prepare('SELECT * FROM machines WHERE barcode = ?').get(req.params.barcode);
+    if (!machine) return notFound(res, 'الماكينة');
+    res.json(machine);
+  } catch (err) { serverError(res, err); }
+});
 
 // ═══════════════════════════════════════════════
 // GET /api/machines — list with search & filter
@@ -88,6 +143,12 @@ router.post('/', (req, res) => {
       capacity_per_hour || null, cost_per_hour || null, notes || null, sort_order || 0);
 
     const machine = db.prepare('SELECT * FROM machines WHERE id = ?').get(result.lastInsertRowid);
+    // Auto-generate barcode
+    if (!machine.barcode) {
+      const barcode = 'MCH-' + result.lastInsertRowid + '-' + Date.now().toString().slice(-6);
+      db.prepare('UPDATE machines SET barcode=? WHERE id=?').run(barcode, result.lastInsertRowid);
+      machine.barcode = barcode;
+    }
     res.status(201).json(machine);
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
@@ -174,20 +235,96 @@ router.post('/:id/maintenance', (req, res) => {
     const machine = db.prepare('SELECT id FROM machines WHERE id = ?').get(req.params.id);
     if (!machine) return res.status(404).json({ error: 'الماكينة غير موجودة' });
 
-    const { maintenance_type, description, cost, performed_by, performed_at, next_due, notes } = req.body;
+    const { maintenance_type, description, cost, performed_by, performed_at, next_due, notes, title } = req.body;
     if (!maintenance_type) return res.status(400).json({ error: 'نوع الصيانة مطلوب' });
 
-    const validTypes = ['routine', 'repair', 'emergency', 'calibration'];
+    const validTypes = ['routine', 'repair', 'emergency', 'calibration', 'preventive', 'corrective'];
     if (!validTypes.includes(maintenance_type)) return res.status(400).json({ error: 'نوع الصيانة غير صالح' });
 
+    const barcode = 'MCH-MNT-' + Date.now().toString().slice(-8);
     const result = db.prepare(`
-      INSERT INTO machine_maintenance (machine_id, maintenance_type, description, cost, performed_by, performed_at, next_due, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO machine_maintenance (machine_id, maintenance_type, description, cost, performed_by, performed_at, next_due, notes, title, barcode, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.params.id, maintenance_type, description || null, cost || 0, performed_by || null,
-      performed_at || new Date().toISOString(), next_due || null, notes || null);
+      performed_at || new Date().toISOString(), next_due || null, notes || null, title || null, barcode, req.user?.id || null);
 
     res.status(201).json(db.prepare('SELECT * FROM machine_maintenance WHERE id = ?').get(result.lastInsertRowid));
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/machines/:id/maintenance/:mid
+router.put('/:id/maintenance/:mid', (req, res) => {
+  try {
+    const record = db.prepare('SELECT * FROM machine_maintenance WHERE id=? AND machine_id=?').get(req.params.mid, req.params.id);
+    if (!record) return notFound(res, 'سجل الصيانة');
+    const { maintenance_type, description, cost, performed_by, performed_at, next_due, notes, title, status } = req.body;
+    db.prepare(`UPDATE machine_maintenance SET
+      maintenance_type=COALESCE(?,maintenance_type), description=COALESCE(?,description),
+      cost=COALESCE(?,cost), performed_by=COALESCE(?,performed_by),
+      performed_at=COALESCE(?,performed_at), next_due=COALESCE(?,next_due),
+      notes=COALESCE(?,notes), title=COALESCE(?,title), status=COALESCE(?,status)
+      WHERE id=?`).run(maintenance_type||null, description!==undefined?description:null,
+      cost!==undefined?cost:null, performed_by!==undefined?performed_by:null,
+      performed_at||null, next_due!==undefined?next_due:null,
+      notes!==undefined?notes:null, title!==undefined?title:null, status||null, req.params.mid);
+    res.json(db.prepare('SELECT * FROM machine_maintenance WHERE id=?').get(req.params.mid));
+  } catch (err) { serverError(res, err); }
+});
+
+// ═══════════════════════════════════════════════
+// GET /api/machines/:id/expenses
+// ═══════════════════════════════════════════════
+router.get('/:id/expenses', (req, res) => {
+  try {
+    const rows = db.prepare("SELECT * FROM expenses WHERE reference_type='machine' AND reference_id=? AND is_deleted=0 ORDER BY expense_date DESC").all(req.params.id);
+    res.json(rows);
+  } catch (err) { serverError(res, err); }
+});
+
+// ═══════════════════════════════════════════════
+// POST /api/machines/:id/expenses
+// ═══════════════════════════════════════════════
+router.post('/:id/expenses', (req, res) => {
+  try {
+    const machine = db.prepare('SELECT id FROM machines WHERE id = ?').get(req.params.id);
+    if (!machine) return notFound(res, 'الماكينة');
+    const { amount, description, expense_date, notes } = req.body;
+    if (!amount || !description) return validationError(res, 'المبلغ والوصف مطلوبان');
+    const result = db.prepare(`INSERT INTO expenses (expense_type, reference_id, reference_type, amount, description, expense_date, created_by, status, notes)
+      VALUES ('machine', ?, 'machine', ?, ?, ?, ?, 'pending', ?)`).run(req.params.id, amount, description, expense_date || new Date().toISOString().slice(0,10), req.user?.id || null, notes || null);
+    res.status(201).json(db.prepare('SELECT * FROM expenses WHERE id = ?').get(result.lastInsertRowid));
+  } catch (err) { serverError(res, err); }
+});
+
+// ═══════════════════════════════════════════════
+// POST /api/machines/import
+// ═══════════════════════════════════════════════
+router.post('/import', (req, res) => {
+  try {
+    const items = req.body;
+    if (!Array.isArray(items)) return validationError(res, 'يجب إرسال مصفوفة من الماكينات');
+    let inserted = 0, updated = 0, errors = [];
+    for (let i = 0; i < items.length; i++) {
+      try {
+        const item = items[i];
+        if (!item.name) { errors.push({ row: i+1, error: 'الاسم مطلوب' }); continue; }
+        const existing = item.barcode ? db.prepare('SELECT id FROM machines WHERE barcode = ?').get(item.barcode) : null;
+        if (existing) {
+          db.prepare('UPDATE machines SET name=?, machine_type=?, location=?, status=?, notes=?, updated_at=datetime(\'now\') WHERE id=?')
+            .run(item.name, item.machine_type || 'other', item.location || null, item.status || 'active', item.notes || null, existing.id);
+          updated++;
+        } else {
+          const code = item.code || ('MCH-IMP-' + Date.now().toString().slice(-6) + '-' + i);
+          const result = db.prepare('INSERT INTO machines (code, name, machine_type, location, status, notes) VALUES (?,?,?,?,?,?)')
+            .run(code, item.name, item.machine_type || 'other', item.location || null, item.status || 'active', item.notes || null);
+          const barcode = item.barcode || ('MCH-' + result.lastInsertRowid + '-' + Date.now().toString().slice(-6));
+          db.prepare('UPDATE machines SET barcode=? WHERE id=?').run(barcode, result.lastInsertRowid);
+          inserted++;
+        }
+      } catch (e) { errors.push({ row: i+1, error: e.message }); }
+    }
+    res.json({ inserted, updated, errors });
+  } catch (err) { serverError(res, err); }
 });
 
 module.exports = router;

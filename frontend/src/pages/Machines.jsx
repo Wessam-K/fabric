@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Settings, Clock, Wrench, X, MapPin, Activity } from 'lucide-react';
+import { Plus, Search, Settings, Clock, Wrench, X, MapPin, Activity, Download, Upload, Barcode } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import HelpButton from '../components/HelpButton';
+import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 
 const STATUS_MAP = { active: 'نشطة', maintenance: 'صيانة', inactive: 'متوقفة' };
 const STATUS_COLOR = { active: 'bg-green-100 text-green-700', maintenance: 'bg-yellow-100 text-yellow-700', inactive: 'bg-gray-200 text-gray-500' };
@@ -16,6 +18,7 @@ export default function Machines() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
+  const [barcodeSearch, setBarcodeSearch] = useState('');
 
   const emptyForm = { name: '', machine_type: '', location: '', capacity_per_hour: '', cost_per_hour: '', notes: '', sort_order: '' };
   const [form, setForm] = useState(emptyForm);
@@ -68,10 +71,35 @@ export default function Machines() {
   const active = machines.filter(m => m.status === 'active').length;
   const maintenance = machines.filter(m => m.status === 'maintenance').length;
 
+  const handleExport = async () => {
+    try { await exportFromBackend('/machines/export', 'machines'); toast.success('تم التصدير'); }
+    catch { toast.error('فشل التصدير'); }
+  };
+
+  const handleImport = async () => {
+    try {
+      const result = await importFromCSV('/machines/import');
+      if (result) { toast.success(`تم استيراد ${result.imported || 0} ماكينة`); load(); }
+    } catch (err) { toast.error(err.message || 'فشل الاستيراد'); }
+  };
+
+  const handleBarcodeSearch = async () => {
+    if (!barcodeSearch.trim()) return;
+    try {
+      const { data } = await api.get(`/machines/barcode/${barcodeSearch.trim()}`);
+      if (data) { setMachines([data]); toast.success('تم العثور على الماكينة'); }
+    } catch { toast.error('لم يتم العثور على ماكينة بهذا الباركود'); }
+  };
+
   return (
     <div className="page">
       <PageHeader title="الماكينات" subtitle="إدارة ماكينات ومراكز الإنتاج"
-        action={<button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> ماكينة جديدة</button>} />
+        action={<div className="flex items-center gap-2">
+          <HelpButton pageKey="machines" />
+          <button onClick={handleExport} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
+          <button onClick={handleImport} className="btn btn-secondary text-xs"><Upload size={14} /> استيراد</button>
+          <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> ماكينة جديدة</button>
+        </div>} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -99,9 +127,16 @@ export default function Machines() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex items-center gap-1">
+          <Barcode size={15} className="text-gray-400" />
+          <input type="text" value={barcodeSearch} onChange={e => setBarcodeSearch(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleBarcodeSearch()}
+            placeholder="باركود..."
+            className="w-32 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
+        </div>
         <div className="relative flex-1 min-w-[200px]">
           <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم أو الكود أو الموقع..."
+          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setBarcodeSearch(''); }} placeholder="بحث بالاسم أو الكود أو الموقع..."
             className="w-full pr-9 pl-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-[#c9a84c] outline-none" />
         </div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
@@ -126,6 +161,7 @@ export default function Machines() {
                 <div>
                   <Link to={`/machines/${m.id}`} className="font-bold text-[#1a1a2e] hover:text-[#c9a84c] transition-colors block">{m.name}</Link>
                   <p className="text-xs text-gray-400 font-mono">{m.code}</p>
+                  {m.barcode && <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1"><Barcode size={10} /> {m.barcode}</p>}
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${STATUS_COLOR[m.status] || STATUS_COLOR.inactive}`}>{STATUS_MAP[m.status] || m.status}</span>
               </div>
