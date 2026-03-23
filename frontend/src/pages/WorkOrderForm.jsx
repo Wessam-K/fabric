@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Save, ArrowRight, Plus, Scissors, Package, Layers, DollarSign, Factory, Download, X } from 'lucide-react';
 import api from '../utils/api';
@@ -11,8 +11,16 @@ import useCostCalc from '../hooks/useCostCalc';
 import { useToast } from '../components/Toast';
 import { PageHeader, LoadingState } from '../components/ui';
 
-const emptyFabric = (role, wastePct = 5) => ({ fabric_code: '', role, meters_per_piece: '', waste_pct: wastePct, color_note: '' });
+const emptyFabric = (role, wastePct = 5) => ({ fabric_code: '', role, meters_per_piece: '', waste_pct: wastePct, color_note: '', po_batch_id: null, po_batch_price: null, po_number: null, custom_price: null });
 const emptySize = () => ({ color_label: '', qty_s: 0, qty_m: 0, qty_l: 0, qty_xl: 0, qty_2xl: 0, qty_3xl: 0 });
+const DEFAULT_SIZE_CONFIG = [
+  { key: 'qty_s', label: 'S' },
+  { key: 'qty_m', label: 'M' },
+  { key: 'qty_l', label: 'L' },
+  { key: 'qty_xl', label: 'XL' },
+  { key: 'qty_2xl', label: '2XL' },
+  { key: 'qty_3xl', label: '3XL' },
+];
 const SIZES_KEYS = ['qty_s', 'qty_m', 'qty_l', 'qty_xl', 'qty_2xl', 'qty_3xl'];
 
 export default function WorkOrderForm() {
@@ -40,9 +48,9 @@ export default function WorkOrderForm() {
   // V4 fields
   const [quantity, setQuantity] = useState('');
   const [isSizeBased, setIsSizeBased] = useState(true);
-  const [fabricBatches, setFabricBatches] = useState([]);
-  const [batchOptions, setBatchOptions] = useState({});
   const [extraExpenses, setExtraExpenses] = useState([]);
+  const [sizeConfig, setSizeConfig] = useState(DEFAULT_SIZE_CONFIG);
+  const [sizeMode, setSizeMode] = useState('standard');
 
   // Cost
   const [masnaiya, setMasnaiya] = useState('90');
@@ -61,15 +69,23 @@ export default function WorkOrderForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const sizeTotal = sizes.reduce((sum, row) =>
-    sum + SIZES_KEYS.reduce((s, k) => s + (parseInt(row[k]) || 0), 0), 0);
+  const sizeTotal = sizes.reduce((sum, row) => {
+    if (sizeMode === 'free') return sum + (parseInt(row.qty_free) || 0);
+    return sum + sizeConfig.reduce((s, sc) => s + (parseInt(row[sc.key]) || 0), 0);
+  }, 0);
   const grandTotal = isSizeBased ? sizeTotal : (parseInt(quantity) || 0);
 
-  const allFabrics = [...mainFabrics, ...linings].map(f => ({
-    ...f,
-    price_per_meter: fabricsList.find(x => x.code === f.fabric_code)?.price_per_m || 0,
-    meters: (parseFloat(f.meters_per_piece) || 0) * grandTotal,
-  }));
+  const allFabrics = useMemo(() => [...mainFabrics, ...linings].map(f => {
+    const reg = fabricsList.find(x => x.code === f.fabric_code);
+    const effectivePrice = (f.custom_price != null && f.custom_price !== '') ? parseFloat(f.custom_price)
+      : (f.po_batch_price != null) ? parseFloat(f.po_batch_price)
+      : (reg?.price_per_m || 0);
+    return {
+      ...f,
+      price_per_meter: effectivePrice,
+      meters: (parseFloat(f.meters_per_piece) || 0) * grandTotal,
+    };
+  }), [mainFabrics, linings, fabricsList, grandTotal]);
 
   const cost = useCostCalc({
     fabrics: allFabrics,
@@ -77,6 +93,8 @@ export default function WorkOrderForm() {
     masnaiya,
     masrouf,
     grandTotalPieces: grandTotal,
+    extraExpenses,
+    marginPct,
   });
 
   useEffect(() => {
@@ -125,8 +143,9 @@ export default function WorkOrderForm() {
           setAccessories(data.accessories?.length > 0 ? data.accessories : []);
 
           // V4 data
-          if (data.fabric_batches?.length > 0) setFabricBatches(data.fabric_batches);
           if (data.extra_expenses?.length > 0) setExtraExpenses(data.extra_expenses);
+          if (data.size_config) try { setSizeConfig(JSON.parse(data.size_config)); } catch {}
+          if (data.size_mode) setSizeMode(data.size_mode);
 
           // Load BOM templates for selected model
           if (data.model_id) {
@@ -193,29 +212,6 @@ export default function WorkOrderForm() {
   const mainFabricOptions = fabricsList.filter(f => f.fabric_type === 'main' || f.fabric_type === 'both');
   const liningOptions = fabricsList.filter(f => f.fabric_type === 'lining' || f.fabric_type === 'both');
 
-  // Batch loading for v4
-  const loadBatches = async (fabricCode) => {
-    if (batchOptions[fabricCode]) return;
-    try {
-      const { data } = await api.get(`/fabrics/${encodeURIComponent(fabricCode)}/batches`);
-      setBatchOptions(prev => ({ ...prev, [fabricCode]: data }));
-    } catch {}
-  };
-
-  const addFabricBatch = () => setFabricBatches(prev => [...prev, { batch_id: '', fabric_code: '', role: 'main', planned_meters_per_piece: '', waste_pct: defaultWaste, color_note: '' }]);
-  const removeFabricBatch = (i) => setFabricBatches(prev => prev.filter((_, idx) => idx !== i));
-  const updateFabricBatch = (i, field, val) => {
-    setFabricBatches(prev => prev.map((fb, idx) => {
-      if (idx !== i) return fb;
-      const updated = { ...fb, [field]: val };
-      if (field === 'fabric_code') {
-        updated.batch_id = '';
-        loadBatches(val);
-      }
-      return updated;
-    }));
-  };
-
   const addExpense = () => setExtraExpenses(prev => [...prev, { description: '', amount: '' }]);
   const removeExpense = (i) => setExtraExpenses(prev => prev.filter((_, idx) => idx !== i));
   const updateExpense = (i, field, val) => setExtraExpenses(prev => prev.map((e, idx) => idx === i ? { ...e, [field]: val } : e));
@@ -246,14 +242,8 @@ export default function WorkOrderForm() {
         fabrics: [...mainFabrics, ...linings].filter(f => f.fabric_code && f.meters_per_piece),
         accessories: accessories.filter(a => (a.accessory_code || a.accessory_name) && a.quantity),
         sizes: sizes.filter(s => s.color_label),
-        fabric_batches: fabricBatches.filter(fb => fb.batch_id && fb.fabric_code).map(fb => ({
-          batch_id: parseInt(fb.batch_id),
-          fabric_code: fb.fabric_code,
-          role: fb.role || 'main',
-          planned_meters_per_piece: parseFloat(fb.planned_meters_per_piece) || 1,
-          waste_pct: parseFloat(fb.waste_pct) || 0,
-          color_note: fb.color_note || null,
-        })),
+        size_config: JSON.stringify(sizeConfig),
+        size_mode: sizeMode,
         extra_expenses: extraExpenses.filter(e => e.description && e.amount).map(e => ({
           description: e.description,
           amount: parseFloat(e.amount) || 0,
@@ -293,9 +283,9 @@ export default function WorkOrderForm() {
         }
       />
 
-      <div className="flex gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6">
         {/* ======= LEFT: Main content ======= */}
-        <div className="flex-1 min-w-0 space-y-6">
+        <div className="min-w-0 space-y-6">
           {/* WO Header */}
           <div className="card">
             <div className="card-header"><h3 className="section-title flex items-center gap-2"><Factory size={16} className="text-orange-500" /> بيانات أمر الإنتاج</h3></div>
@@ -428,7 +418,7 @@ export default function WorkOrderForm() {
               <Layers size={16} className="text-purple-500" /> جدول المقاسات والألوان
               <span className="text-[10px] font-normal text-gray-400">إجمالي القطع: <span className="font-mono font-bold text-[#1a1a2e]">{grandTotal}</span></span>
             </h3>
-            <SizeGrid sizes={sizes} onChange={setSizes} />
+            <SizeGrid sizes={sizes} onChange={setSizes} sizeConfig={sizeConfig} onSizeConfigChange={setSizeConfig} mode={sizeMode} onModeChange={setSizeMode} />
           </div>
 
           {/* Accessories */}
@@ -437,68 +427,6 @@ export default function WorkOrderForm() {
               <Package size={16} className="text-amber-500" /> الاكسسوارات
             </h3>
             <AccessoryTable accessories={accessories} accessoriesList={accessoriesList} onChange={setAccessories} />
-          </div>
-
-          {/* V4: Fabric Batches (from PO) */}
-          <div className="card card-body">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-[#1a1a2e] flex items-center gap-2">
-                <Layers size={16} className="text-teal-500" /> دفعات الأقمشة (من أوامر الشراء)
-                <span className="text-[10px] font-normal bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full">{fabricBatches.length}</span>
-              </h3>
-              <button onClick={addFabricBatch} className="flex items-center gap-1 text-xs text-[#c9a84c] hover:text-[#a88a3a] bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors">
-                <Plus size={14} /> إضافة دفعة
-              </button>
-            </div>
-            {fabricBatches.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">اختياري — اختر دفعات أقمشة من المخزون لحساب التكلفة الفعلية</p>
-            ) : (
-              <div className="space-y-3">
-                {fabricBatches.map((fb, i) => (
-                  <div key={i} className="border border-teal-200 rounded-xl p-3 bg-teal-50/30 space-y-2">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      <div>
-                        <label className="text-[10px] text-gray-500">القماش</label>
-                        <select value={fb.fabric_code || ''} onChange={e => updateFabricBatch(i, 'fabric_code', e.target.value)}
-                          className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:border-[#c9a84c] outline-none">
-                          <option value="">اختر القماش</option>
-                          {fabricsList.map(f => <option key={f.code} value={f.code}>[{f.code}] {f.name}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-gray-500">الدفعة (Batch)</label>
-                        <select value={fb.batch_id || ''} onChange={e => updateFabricBatch(i, 'batch_id', e.target.value)}
-                          className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-mono focus:border-[#c9a84c] outline-none">
-                          <option value="">اختر الدفعة</option>
-                          {(batchOptions[fb.fabric_code] || []).map(b => (
-                            <option key={b.id} value={b.id}>{b.batch_code} — {b.available_meters}م @ {b.price_per_meter}ج</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-gray-500">الدور</label>
-                        <select value={fb.role || 'main'} onChange={e => updateFabricBatch(i, 'role', e.target.value)}
-                          className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:border-[#c9a84c] outline-none">
-                          <option value="main">أساسي</option>
-                          <option value="lining">بطانة</option>
-                        </select>
-                      </div>
-                      <div className="flex items-end gap-1">
-                        <div className="flex-1">
-                          <label className="text-[10px] text-gray-500">م/قطعة</label>
-                          <input type="number" min="0" step="0.01" value={fb.planned_meters_per_piece || ''}
-                            onChange={e => updateFabricBatch(i, 'planned_meters_per_piece', e.target.value)}
-                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-mono focus:border-[#c9a84c] outline-none" placeholder="1.5" />
-                        </div>
-                        <button onClick={() => removeFabricBatch(i)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* V4: Extra Expenses */}
@@ -529,7 +457,7 @@ export default function WorkOrderForm() {
           </div>
 
           {/* Cost Panel Mobile */}
-          <div className="lg:hidden card card-body">
+          <div className="xl:hidden card card-body">
             <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2">
               <DollarSign size={16} className="text-[#c9a84c]" /> التكلفة والتسعير
             </h3>
@@ -539,12 +467,13 @@ export default function WorkOrderForm() {
               consumerPrice={consumerPrice} wholesalePrice={wholesalePrice}
               onChangeMasnaiya={setMasnaiya} onChangeMasrouf={setMasrouf} onChangeMargin={setMarginPct}
               onChangeConsumer={setConsumerPrice} onChangeWholesale={setWholesalePrice}
+              summary={{ grandTotal, fabricCount: mainFabrics.filter(f=>f.fabric_code).length + linings.filter(f=>f.fabric_code).length, accessoryCount: accessories.filter(a=>a.accessory_code).length, colorCount: sizes.filter(s=>s.color_label).length, costPerPiece: Math.round(cost.cost_per_piece * 100) / 100 }}
             />
           </div>
         </div>
 
         {/* ======= RIGHT: Sticky Cost Sidebar (desktop) ======= */}
-        <div className="hidden lg:block w-[320px] shrink-0">
+        <div className="hidden xl:block">
           <div className="sticky top-6 space-y-4">
             <div className="card card-body">
               <h3 className="section-title flex items-center gap-2 mb-4">
@@ -556,35 +485,8 @@ export default function WorkOrderForm() {
                 consumerPrice={consumerPrice} wholesalePrice={wholesalePrice}
                 onChangeMasnaiya={setMasnaiya} onChangeMasrouf={setMasrouf} onChangeMargin={setMarginPct}
                 onChangeConsumer={setConsumerPrice} onChangeWholesale={setWholesalePrice}
+                summary={{ grandTotal, fabricCount: mainFabrics.filter(f=>f.fabric_code).length + linings.filter(f=>f.fabric_code).length, accessoryCount: accessories.filter(a=>a.accessory_code).length, colorCount: sizes.filter(s=>s.color_label).length, costPerPiece: Math.round(cost.cost_per_piece * 100) / 100 }}
               />
-            </div>
-
-            {/* Quick Stats */}
-            <div className="bg-gradient-to-br from-[var(--color-navy)] to-[var(--color-navy-light)] rounded-xl p-5 text-white">
-              <h4 className="text-xs text-gray-300 mb-3">ملخص سريع</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">القطع</span>
-                  <span className="font-mono font-bold">{grandTotal}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">الأقمشة</span>
-                  <span className="font-mono font-bold">{mainFabrics.filter(f=>f.fabric_code).length + linings.filter(f=>f.fabric_code).length}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">الاكسسوارات</span>
-                  <span className="font-mono font-bold">{accessories.filter(a=>a.accessory_code).length}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">الألوان</span>
-                  <span className="font-mono font-bold">{sizes.filter(s=>s.color_label).length}</span>
-                </div>
-                <hr className="border-white/10" />
-                <div className="flex justify-between">
-                  <span className="text-gray-300 text-sm">تكلفة القطعة</span>
-                  <span className="font-mono font-bold text-[#c9a84c] text-lg">{(Math.round(cost.cost_per_piece * 100) / 100).toLocaleString('ar-EG')} ج</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>

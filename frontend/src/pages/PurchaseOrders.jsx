@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, ShoppingCart, Truck, Clock, CheckCircle, DollarSign, Package, Download } from 'lucide-react';
+import { Plus, Search, ShoppingCart, Clock, CheckCircle, DollarSign, Package, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';

@@ -31,6 +31,16 @@ const accountingRouter = require('./routes/accounting');
 const expensesRouter = require('./routes/expenses');
 const maintenanceRouter = require('./routes/maintenance');
 const barcodeRouter = require('./routes/barcode');
+const mrpRouter = require('./routes/mrp');
+const shippingRouter = require('./routes/shipping');
+const schedulingRouter = require('./routes/scheduling');
+const qualityRouter = require('./routes/quality');
+const quotationsRouter = require('./routes/quotations');
+const samplesRouter = require('./routes/samples');
+const returnsRouter = require('./routes/returns');
+const documentsRouter = require('./routes/documents');
+const backupsRouter = require('./routes/backups');
+const autojournalRouter = require('./routes/autojournal');
 
 const app = express();
 const PORT = process.env.PORT || 9002;
@@ -111,7 +121,7 @@ app.get('/api/health', (req, res) => {
     userCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE status='active'").get().c;
   } catch (e) { dbStatus = 'error: ' + e.message; }
   res.json({
-    status: 'ok', app: 'WK-Hub', version: 'v17-enterprise',
+    status: 'ok', app: 'WK-Hub', version: 'v20-enterprise',
     timestamp: new Date().toISOString(),
     uptime_seconds: Math.floor(process.uptime()),
     database: { status: dbStatus, schema_version: dbVersion, active_users: userCount },
@@ -168,6 +178,16 @@ app.use('/api/accounting', requireAuth, accountingRouter);
 app.use('/api/expenses', requireAuth, expensesRouter);
 app.use('/api/maintenance', requireAuth, maintenanceRouter);
 app.use('/api/barcode', requireAuth, barcodeRouter);
+app.use('/api/mrp', requireAuth, mrpRouter);
+app.use('/api/shipping', requireAuth, shippingRouter);
+app.use('/api/scheduling', requireAuth, schedulingRouter);
+app.use('/api/quality', requireAuth, qualityRouter);
+app.use('/api/quotations', requireAuth, quotationsRouter);
+app.use('/api/samples', requireAuth, samplesRouter);
+app.use('/api/returns', requireAuth, returnsRouter);
+app.use('/api/documents', requireAuth, documentsRouter);
+app.use('/api/backups', requireAuth, backupsRouter);
+app.use('/api/auto-journal', requireAuth, autojournalRouter);
 
 // Dashboard
 app.get('/api/dashboard', requireAuth, (req, res) => {
@@ -195,21 +215,22 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id
       ORDER BY po.created_at DESC LIMIT 5`).all();
 
-    // V9 — production pipeline
-    const productionPipeline = db.prepare(`
-      SELECT ws.stage_name, SUM(ws.quantity_in_stage) as pieces_in_stage,
-        COUNT(DISTINCT ws.wo_id) as wo_count
-      FROM wo_stages ws
-      JOIN work_orders wo ON wo.id = ws.wo_id
-      WHERE wo.status = 'in_progress' AND ws.status = 'in_progress'
-      GROUP BY ws.stage_name
-      ORDER BY SUM(ws.quantity_in_stage) DESC
-    `).all();
+    // V9 — production pipeline (WO status counts for dashboard chart)
+    const pipelineRows = db.prepare(`SELECT status, COUNT(*) as count FROM work_orders WHERE status NOT IN ('cancelled') GROUP BY status`).all();
+    const productionPipeline = { draft: 0, pending: 0, in_progress: 0, completed: 0, cancelled: 0 };
+    try {
+      const cancelledCount = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE status='cancelled'`).get().c;
+      productionPipeline.cancelled = cancelledCount;
+    } catch {}
+    pipelineRows.forEach(r => { if (productionPipeline.hasOwnProperty(r.status)) productionPipeline[r.status] = r.count; });
 
-    // V9 — low stock alerts
-    const lowStockFabrics = db.prepare(`SELECT COUNT(*) as c FROM fabrics WHERE status='active' AND available_meters < low_stock_threshold AND low_stock_threshold > 0`).get().c;
-    const lowStockAccessories = db.prepare(`SELECT COUNT(*) as c FROM accessories WHERE status='active' AND quantity_on_hand < low_stock_threshold AND low_stock_threshold > 0`).get().c;
-    const overdueWorkOrders = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE due_date < date('now') AND status NOT IN ('completed','cancelled')`).get().c;
+    // V9 — low stock alerts (return arrays for frontend iteration)
+    const lowStockFabrics = db.prepare(`SELECT code, name, available_meters, low_stock_threshold FROM fabrics WHERE status='active' AND available_meters < COALESCE(low_stock_threshold, 10) AND COALESCE(low_stock_threshold, 10) > 0`).all();
+    const lowStockAccessories = db.prepare(`SELECT code, name, quantity_on_hand, unit, low_stock_threshold FROM accessories WHERE status='active' AND quantity_on_hand < COALESCE(low_stock_threshold, 10) AND COALESCE(low_stock_threshold, 10) > 0`).all();
+    const overdueWorkOrdersCount = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE due_date < date('now') AND status NOT IN ('completed','cancelled')`).get().c;
+
+    // Recent models
+    const recentModels = db.prepare(`SELECT model_code, model_name, model_image, category, created_at FROM models WHERE status='active' ORDER BY created_at DESC LIMIT 5`).all();
 
     // V9 — monthly financials
     const monthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status='paid' AND created_at >= date('now','start of month')`).get().r;
@@ -221,7 +242,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
 
     // V10 — customer outstanding
     const totalCustomers = db.prepare("SELECT COUNT(*) as c FROM customers WHERE status='active'").get().c;
-    const customerOutstanding = db.prepare(`SELECT COALESCE(SUM(total),0) - COALESCE(SUM(CASE WHEN status='paid' THEN total ELSE 0 END),0) as v FROM invoices WHERE customer_id IS NOT NULL`).get().v;
+    const customerOutstanding = db.prepare(`SELECT COALESCE(SUM(total),0) - COALESCE(SUM(CASE WHEN status='paid' THEN total ELSE 0 END),0) as v FROM invoices WHERE customer_id IS NOT NULL AND status NOT IN ('cancelled','draft')`).get().v;
 
     // V10 — overall quality (rejection rate)
     const totalPassed = db.prepare(`SELECT COALESCE(SUM(quantity_completed),0) as v FROM wo_stages`).get().v;
@@ -255,9 +276,9 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     let todaySummary = {};
     try {
-      const todayAttendance = db.prepare("SELECT COUNT(*) as c FROM attendance WHERE date=? AND check_in IS NOT NULL").get(today)?.c || 0;
+      const todayAttendance = db.prepare("SELECT COUNT(*) as c FROM attendance WHERE work_date=? AND attendance_status != 'absent'").get(today)?.c || 0;
       const todayDeliveries = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND completed_date=?").get(today)?.c || 0;
-      const dueTodayWO = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE due_date=? AND status NOT IN ('completed','cancelled','delivered')").get(today)?.c || 0;
+      const dueTodayWO = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE due_date=? AND status NOT IN ('completed','cancelled')").get(today)?.c || 0;
       const todayExpenses = db.prepare("SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND expense_date=?").get(today)?.v || 0;
       const todayInvoices = db.prepare("SELECT COUNT(*) as c FROM invoices WHERE DATE(created_at)=?").get(today)?.c || 0;
       todaySummary = { attendance: todayAttendance, deliveries: todayDeliveries, due_today: dueTodayWO, expenses: Math.round(todayExpenses * 100) / 100, invoices: todayInvoices };
@@ -274,7 +295,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     try {
       overdueWOList = db.prepare(`SELECT wo.id, wo.wo_number, wo.due_date, wo.status, m.model_code, m.model_name
         FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id
-        WHERE wo.due_date < date('now') AND wo.status NOT IN ('completed','cancelled','delivered')
+        WHERE wo.due_date < date('now') AND wo.status NOT IN ('completed','cancelled')
         ORDER BY wo.due_date ASC LIMIT 5`).all();
     } catch {}
 
@@ -285,10 +306,11 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       pending_invoices: pendingInvoices, outstanding_payables: Math.round(outstandingPayables * 100) / 100,
       total_suppliers: totalSuppliers,
       recent_work_orders: recentWorkOrders, recent_pos: recentPOs,
+      recent_models: recentModels,
       production_pipeline: productionPipeline,
       low_stock_fabrics: lowStockFabrics,
       low_stock_accessories: lowStockAccessories,
-      overdue_work_orders: overdueWorkOrders,
+      overdue_work_orders_count: overdueWorkOrdersCount,
       monthly_revenue: Math.round(monthlyRevenue * 100) / 100,
       monthly_cost: Math.round(monthlyCost * 100) / 100,
       total_machines: totalMachines,
@@ -324,11 +346,15 @@ app.get('/api/search', requireAuth, (req, res) => {
     const purchaseOrders = db.prepare(`SELECT po.id, po.po_number, po.status, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.po_number LIKE ? OR s.name LIKE ? LIMIT 8`).all(like, like);
     const customers = db.prepare(`SELECT id, code, name, phone, city FROM customers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR phone LIKE ?) LIMIT 8`).all(like, like, like);
     let maintenanceOrders = [], expensesResults = [];
+    let machines = [];
+    try {
+      machines = db.prepare(`SELECT id, code, name, barcode, machine_type, status FROM machines WHERE status != 'inactive' AND (code LIKE ? OR name LIKE ? OR barcode LIKE ?) LIMIT 8`).all(like, like, like);
+    } catch {}
     try {
       maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT 8`).all(like, like, like);
       expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT 8`).all(like, like);
     } catch {}
-    res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults });
+    res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults, machines });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -337,10 +363,11 @@ const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
 const fs = require('fs');
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
-      res.sendFile(path.join(frontendDist, 'index.html'));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+      return next();
     }
+    res.sendFile(path.join(frontendDist, 'index.html'));
   });
 }
 
@@ -351,7 +378,7 @@ app.use((err, req, res, _next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`WK-Hub Factory API v18-enterprise running on http://localhost:${PORT}`);
+  console.log(`WK-Hub Factory API v20-enterprise running on http://localhost:${PORT}`);
   // Run notification generation on startup and every 5 minutes
   try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
   setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);

@@ -5,10 +5,10 @@ const COLORS = ['#c9a84c', '#3b82f6', '#22c55e', '#ef4444', '#94a3b8', '#8b5cf6'
 export default function DashboardCharts({ data }) {
   // Production Pipeline chart data
   const pipelineData = data?.production_pipeline ? [
+    { name: 'مسودة', value: data.production_pipeline.draft || 0, fill: '#cbd5e1' },
     { name: 'معلق', value: data.production_pipeline.pending || 0, fill: '#94a3b8' },
     { name: 'جاري', value: data.production_pipeline.in_progress || 0, fill: '#3b82f6' },
     { name: 'مكتمل', value: data.production_pipeline.completed || 0, fill: '#22c55e' },
-    { name: 'مُسلّم', value: data.production_pipeline.delivered || 0, fill: '#10b981' },
     { name: 'ملغي', value: data.production_pipeline.cancelled || 0, fill: '#ef4444' },
   ].filter(d => d.value > 0) : [];
 

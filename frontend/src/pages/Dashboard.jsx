@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scissors, Gem, List, TrendingUp, Factory, Truck, DollarSign, Users, Clock, AlertTriangle, CheckCircle, Activity, CalendarDays, FileText, Receipt } from 'lucide-react';
+import { Scissors, Gem, List, TrendingUp, Factory, Truck, DollarSign, Users, Clock, AlertTriangle, CheckCircle, Activity, CalendarDays } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, KPIStrip, StatusBadge, MoneyDisplay, LoadingState, EmptyState, Skeleton } from '../components/ui';
@@ -24,7 +24,7 @@ export default function Dashboard() {
           const { data: hr } = await api.get('/reports/hr-summary');
           setHrData(hr);
         }
-      } catch {}
+      } catch (e) { console.error('Dashboard load failed:', e); }
       finally { setLoading(false); }
     };
     load();
@@ -34,7 +34,7 @@ export default function Dashboard() {
 
   const net = (data?.monthly_revenue || 0) - (data?.monthly_cost || 0);
   const lowStockCount = (data?.low_stock_fabrics?.length || 0) + (data?.low_stock_accessories?.length || 0);
-  const pipelineTotal = data?.production_pipeline ? Object.values(data.production_pipeline).reduce((a, b) => a + b, 0) : 0;
+  const pipelineTotal = data?.production_pipeline ? Object.values(data.production_pipeline).reduce((a, b) => a + (b || 0), 0) : 0;
 
   return (
     <div className="page">
@@ -146,7 +146,7 @@ export default function Dashboard() {
                   <tr key={wo.id} onClick={() => navigate(`/work-orders/${wo.id}`)} className="cursor-pointer">
                     <td><span className="font-mono text-xs">{wo.wo_number}</span></td>
                     <td>{wo.model_name || wo.model_code}</td>
-                    <td className="text-[var(--color-danger)]">{wo.deadline ? new Date(wo.deadline).toLocaleDateString('ar-EG') : '—'}</td>
+                    <td className="text-[var(--color-danger)]">{wo.due_date ? new Date(wo.due_date).toLocaleDateString('ar-EG') : '—'}</td>
                     <td><StatusBadge status="overdue" /></td>
                   </tr>
                 ))}
@@ -224,10 +224,10 @@ export default function Dashboard() {
             <div className="card-header"><h3 className="section-title">خط الإنتاج</h3></div>
             <div className="card-body space-y-3">
               {[
+                { key: 'draft', label: 'مسودة', color: '#cbd5e1' },
                 { key: 'pending', label: 'معلق', color: '#94a3b8' },
                 { key: 'in_progress', label: 'جاري', color: '#3b82f6' },
                 { key: 'completed', label: 'مكتمل', color: '#22c55e' },
-                { key: 'delivered', label: 'مُسلّم', color: '#10b981' },
                 { key: 'cancelled', label: 'ملغي', color: '#ef4444' },
               ].map(s => {
                 const count = data.production_pipeline[s.key] || 0;

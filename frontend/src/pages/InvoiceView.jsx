@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Printer, ArrowRight, Send, CheckCircle, Download, Share2, Copy, Check } from 'lucide-react';
+import { Printer, ArrowRight, Download, Copy, Check } from 'lucide-react';
 import api from '../utils/api';
 import HelpButton from '../components/HelpButton';
 

@@ -7,6 +7,9 @@ const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+db.pragma('synchronous = NORMAL');
+db.pragma('cache_size = -32000');
+db.pragma('temp_store = MEMORY');
 
 function initializeDatabase() {
   // ═══════════════════════════════════════════════
@@ -429,6 +432,10 @@ function initializeDatabase() {
     INSERT OR IGNORE INTO settings (key, value) VALUES ('default_masrouf', '50');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('default_margin', '25');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('low_stock_threshold', '20');
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('tax_rate', '14');
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('working_hours_per_day', '8');
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('working_days_per_month', '26');
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('default_overtime_multiplier', '1.5');
   `);
 
   // Seed default stage templates
@@ -1690,11 +1697,577 @@ function runMigrations() {
     // Ensure index on work_orders.due_date
     try { db.exec("CREATE INDEX IF NOT EXISTS idx_wo_due_date ON work_orders(due_date)"); } catch(e) {}
     // Index on attendance.date for dashboard today queries
-    try { db.exec("CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date)"); } catch(e) {}
+    try { db.exec("CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(work_date)"); } catch(e) {}
     // Index on expenses.expense_date
     try { db.exec("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date)"); } catch(e) {}
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (18)`);
+  }
+
+  // ──── V19 — size_config / size_mode on work_orders ────
+  const v19 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 19').get();
+  if (!v19) {
+    try { db.exec("ALTER TABLE work_orders ADD COLUMN size_config TEXT"); } catch(e) {}
+    try { db.exec("ALTER TABLE work_orders ADD COLUMN size_mode TEXT DEFAULT 'standard'"); } catch(e) {}
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (19)`);
+  }
+
+  // ──── V20 — Performance indexes ────
+  const v20 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 20').get();
+  if (!v20) {
+    const indexes = [
+      'CREATE INDEX IF NOT EXISTS idx_wo_status ON work_orders(status)',
+      'CREATE INDEX IF NOT EXISTS idx_wo_model_id ON work_orders(model_id)',
+      'CREATE INDEX IF NOT EXISTS idx_wo_priority ON work_orders(priority)',
+      'CREATE INDEX IF NOT EXISTS idx_wo_stages_wo_id ON wo_stages(wo_id)',
+      'CREATE INDEX IF NOT EXISTS idx_wo_stages_status ON wo_stages(status)',
+      'CREATE INDEX IF NOT EXISTS idx_wo_stages_machine ON wo_stages(machine_id)',
+      'CREATE INDEX IF NOT EXISTS idx_fabrics_code ON fabrics(code)',
+      'CREATE INDEX IF NOT EXISTS idx_fabrics_status ON fabrics(status)',
+      'CREATE INDEX IF NOT EXISTS idx_accessories_code ON accessories(code)',
+      'CREATE INDEX IF NOT EXISTS idx_accessories_status ON accessories(status)',
+      'CREATE INDEX IF NOT EXISTS idx_machines_barcode ON machines(barcode)',
+      'CREATE INDEX IF NOT EXISTS idx_machines_code ON machines(code)',
+      'CREATE INDEX IF NOT EXISTS idx_machines_status ON machines(status)',
+      'CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status)',
+      'CREATE INDEX IF NOT EXISTS idx_invoices_customer_id ON invoices(customer_id)',
+      'CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number)',
+      'CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status)',
+      'CREATE INDEX IF NOT EXISTS idx_po_supplier_id ON purchase_orders(supplier_id)',
+      'CREATE INDEX IF NOT EXISTS idx_po_number ON purchase_orders(po_number)',
+      'CREATE INDEX IF NOT EXISTS idx_po_items_po_id ON po_items(po_id)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, is_read)',
+    ];
+    for (const sql of indexes) {
+      try { db.exec(sql); } catch(e) {}
+    }
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (20)`);
+  }
+
+  // ──── V21 — PO tax_pct and discount columns ────
+  const v21 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 21').get();
+  if (!v21) {
+    const addColumnSafe = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch(e) {}
+    };
+    addColumnSafe('purchase_orders', 'tax_pct', 'REAL DEFAULT 0');
+    addColumnSafe('purchase_orders', 'discount', 'REAL DEFAULT 0');
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (21)`);
+  }
+
+  // ──── V22 — Fix in_progress WOs with uninitialized first-stage quantities ────
+  const v22 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 22').get();
+  if (!v22) {
+    // Find all in_progress WOs whose first stage has quantity_in_stage = 0
+    const brokenWOs = db.prepare(`
+      SELECT wo.id, wo.quantity, wo.is_size_based
+      FROM work_orders wo
+      WHERE wo.status = 'in_progress'
+        AND EXISTS (
+          SELECT 1 FROM wo_stages ws
+          WHERE ws.wo_id = wo.id
+            AND ws.sort_order = (SELECT MIN(sort_order) FROM wo_stages WHERE wo_id = wo.id)
+            AND COALESCE(ws.quantity_in_stage, 0) = 0
+            AND COALESCE(ws.quantity_completed, 0) = 0
+        )
+    `).all();
+
+    for (const wo of brokenWOs) {
+      let initQty = wo.quantity || 0;
+      if (wo.is_size_based) {
+        const szRows = db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(wo.id);
+        if (szRows.length) {
+          initQty = szRows.reduce((s, r) => s + (r.qty_s||0) + (r.qty_m||0) + (r.qty_l||0) + (r.qty_xl||0) + (r.qty_2xl||0) + (r.qty_3xl||0), 0);
+        }
+      }
+      if (initQty > 0) {
+        const firstStage = db.prepare('SELECT id FROM wo_stages WHERE wo_id=? ORDER BY sort_order LIMIT 1').get(wo.id);
+        if (firstStage) {
+          db.prepare("UPDATE wo_stages SET quantity_in_stage=?, status='in_progress', started_at=COALESCE(started_at, datetime('now','localtime')) WHERE id=?")
+            .run(initQty, firstStage.id);
+        }
+      }
+    }
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (22)`);
+  }
+
+  // ──── V23 — Phase 1-4: MRP, Shipping, Scheduling, QC, Quotations, Samples, Returns, Documents, Backup ────
+  const v23 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 23').get();
+  if (!v23) {
+    const addColumnSafe = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch(e) {}
+    };
+
+    // ═══ MRP Tables ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS mrp_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_date TEXT DEFAULT (datetime('now','localtime')),
+        status TEXT DEFAULT 'draft' CHECK(status IN ('draft','confirmed','cancelled')),
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS mrp_suggestions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mrp_run_id INTEGER REFERENCES mrp_runs(id) ON DELETE CASCADE,
+        item_type TEXT NOT NULL CHECK(item_type IN ('fabric','accessory')),
+        item_id INTEGER NOT NULL,
+        item_code TEXT,
+        item_name TEXT,
+        required_qty REAL NOT NULL DEFAULT 0,
+        on_hand_qty REAL NOT NULL DEFAULT 0,
+        on_order_qty REAL NOT NULL DEFAULT 0,
+        shortage_qty REAL NOT NULL DEFAULT 0,
+        suggested_qty REAL NOT NULL DEFAULT 0,
+        supplier_id INTEGER REFERENCES suppliers(id),
+        supplier_name TEXT,
+        unit_price REAL DEFAULT 0,
+        total_cost REAL DEFAULT 0,
+        po_created INTEGER DEFAULT 0,
+        po_id INTEGER REFERENCES purchase_orders(id),
+        work_order_ids TEXT
+      );
+    `);
+
+    // ═══ Shipping & Logistics ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS shipments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shipment_number TEXT UNIQUE,
+        shipment_type TEXT DEFAULT 'outbound' CHECK(shipment_type IN ('outbound','inbound','return')),
+        status TEXT DEFAULT 'draft' CHECK(status IN ('draft','ready','shipped','in_transit','delivered','cancelled')),
+        customer_id INTEGER REFERENCES customers(id),
+        supplier_id INTEGER REFERENCES suppliers(id),
+        work_order_id INTEGER REFERENCES work_orders(id),
+        invoice_id INTEGER REFERENCES invoices(id),
+        carrier_name TEXT,
+        tracking_number TEXT,
+        shipping_method TEXT,
+        shipping_cost REAL DEFAULT 0,
+        weight REAL DEFAULT 0,
+        packages_count INTEGER DEFAULT 1,
+        ship_date TEXT,
+        expected_delivery TEXT,
+        actual_delivery TEXT,
+        shipping_address TEXT,
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS shipment_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+        description TEXT,
+        model_code TEXT,
+        variant TEXT,
+        quantity REAL NOT NULL DEFAULT 0,
+        unit TEXT DEFAULT 'pcs',
+        weight REAL DEFAULT 0,
+        notes TEXT
+      );
+      CREATE TABLE IF NOT EXISTS packing_lists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+        box_number INTEGER DEFAULT 1,
+        contents TEXT,
+        quantity REAL DEFAULT 0,
+        weight REAL DEFAULT 0,
+        dimensions TEXT,
+        notes TEXT
+      );
+    `);
+
+    // ═══ Production Scheduling ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS production_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        capacity_per_day REAL DEFAULT 0,
+        status TEXT DEFAULT 'active' CHECK(status IN ('active','inactive','maintenance')),
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS production_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_order_id INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+        production_line_id INTEGER REFERENCES production_lines(id),
+        machine_id INTEGER REFERENCES machines(id),
+        stage_id INTEGER REFERENCES wo_stages(id),
+        planned_start TEXT NOT NULL,
+        planned_end TEXT NOT NULL,
+        actual_start TEXT,
+        actual_end TEXT,
+        priority INTEGER DEFAULT 5,
+        status TEXT DEFAULT 'planned' CHECK(status IN ('planned','in_progress','completed','delayed','cancelled')),
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // ═══ Advanced QC ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS qc_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        model_code TEXT,
+        description TEXT,
+        aql_level TEXT DEFAULT 'II',
+        inspection_type TEXT DEFAULT 'normal' CHECK(inspection_type IN ('normal','tightened','reduced')),
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS qc_template_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_id INTEGER NOT NULL REFERENCES qc_templates(id) ON DELETE CASCADE,
+        check_point TEXT NOT NULL,
+        category TEXT DEFAULT 'visual',
+        severity TEXT DEFAULT 'minor' CHECK(severity IN ('critical','major','minor')),
+        accept_criteria TEXT,
+        sort_order INTEGER DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS qc_inspections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_order_id INTEGER REFERENCES work_orders(id),
+        stage_id INTEGER REFERENCES wo_stages(id),
+        template_id INTEGER REFERENCES qc_templates(id),
+        inspection_number TEXT,
+        inspector_id INTEGER REFERENCES users(id),
+        inspection_date TEXT DEFAULT (datetime('now','localtime')),
+        lot_size INTEGER DEFAULT 0,
+        sample_size INTEGER DEFAULT 0,
+        passed INTEGER DEFAULT 0,
+        failed INTEGER DEFAULT 0,
+        result TEXT DEFAULT 'pending' CHECK(result IN ('pending','pass','fail','conditional')),
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS qc_inspection_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        inspection_id INTEGER NOT NULL REFERENCES qc_inspections(id) ON DELETE CASCADE,
+        check_point TEXT NOT NULL,
+        result TEXT DEFAULT 'pass' CHECK(result IN ('pass','fail','na')),
+        defect_code TEXT,
+        defect_count INTEGER DEFAULT 0,
+        notes TEXT,
+        image_url TEXT
+      );
+      CREATE TABLE IF NOT EXISTS qc_defect_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        name_ar TEXT NOT NULL,
+        category TEXT,
+        severity TEXT DEFAULT 'minor' CHECK(severity IN ('critical','major','minor')),
+        is_active INTEGER DEFAULT 1
+      );
+      CREATE TABLE IF NOT EXISTS qc_ncr (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ncr_number TEXT UNIQUE,
+        inspection_id INTEGER REFERENCES qc_inspections(id),
+        work_order_id INTEGER REFERENCES work_orders(id),
+        severity TEXT DEFAULT 'minor' CHECK(severity IN ('critical','major','minor')),
+        description TEXT NOT NULL,
+        root_cause TEXT,
+        corrective_action TEXT,
+        preventive_action TEXT,
+        status TEXT DEFAULT 'open' CHECK(status IN ('open','investigating','resolved','closed','cancelled')),
+        assigned_to INTEGER REFERENCES users(id),
+        due_date TEXT,
+        closed_date TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // ═══ Quotations & Sales Orders ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS quotations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        quotation_number TEXT UNIQUE,
+        customer_id INTEGER REFERENCES customers(id),
+        status TEXT DEFAULT 'draft' CHECK(status IN ('draft','sent','accepted','rejected','expired','converted')),
+        valid_until TEXT,
+        subtotal REAL DEFAULT 0,
+        tax_rate REAL DEFAULT 0,
+        tax_amount REAL DEFAULT 0,
+        discount REAL DEFAULT 0,
+        total REAL DEFAULT 0,
+        notes TEXT,
+        terms TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS quotation_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+        model_code TEXT,
+        description TEXT,
+        variant TEXT,
+        quantity REAL NOT NULL DEFAULT 0,
+        unit_price REAL NOT NULL DEFAULT 0,
+        total REAL NOT NULL DEFAULT 0,
+        notes TEXT
+      );
+      CREATE TABLE IF NOT EXISTS sales_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        so_number TEXT UNIQUE,
+        quotation_id INTEGER REFERENCES quotations(id),
+        customer_id INTEGER NOT NULL REFERENCES customers(id),
+        status TEXT DEFAULT 'draft' CHECK(status IN ('draft','confirmed','in_production','partially_shipped','shipped','completed','cancelled')),
+        order_date TEXT DEFAULT (datetime('now','localtime')),
+        delivery_date TEXT,
+        subtotal REAL DEFAULT 0,
+        tax_rate REAL DEFAULT 0,
+        tax_amount REAL DEFAULT 0,
+        discount REAL DEFAULT 0,
+        total REAL DEFAULT 0,
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS sales_order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sales_order_id INTEGER NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE,
+        model_code TEXT,
+        description TEXT,
+        variant TEXT,
+        quantity REAL NOT NULL DEFAULT 0,
+        produced_qty REAL DEFAULT 0,
+        shipped_qty REAL DEFAULT 0,
+        unit_price REAL NOT NULL DEFAULT 0,
+        total REAL NOT NULL DEFAULT 0,
+        work_order_id INTEGER REFERENCES work_orders(id),
+        notes TEXT
+      );
+    `);
+
+    // ═══ Sample Management ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS samples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sample_number TEXT UNIQUE,
+        model_code TEXT,
+        customer_id INTEGER REFERENCES customers(id),
+        status TEXT DEFAULT 'requested' CHECK(status IN ('requested','in_progress','completed','sent','approved','rejected','converted')),
+        description TEXT,
+        fabrics_used TEXT,
+        accessories_used TEXT,
+        cost REAL DEFAULT 0,
+        requested_date TEXT DEFAULT (datetime('now','localtime')),
+        completion_date TEXT,
+        customer_feedback TEXT,
+        work_order_id INTEGER REFERENCES work_orders(id),
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // ═══ Returns Management ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sales_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_number TEXT UNIQUE,
+        invoice_id INTEGER REFERENCES invoices(id),
+        customer_id INTEGER REFERENCES customers(id),
+        return_date TEXT DEFAULT (datetime('now','localtime')),
+        reason TEXT,
+        status TEXT DEFAULT 'draft' CHECK(status IN ('draft','approved','completed','cancelled')),
+        subtotal REAL DEFAULT 0,
+        tax_amount REAL DEFAULT 0,
+        total REAL DEFAULT 0,
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS sales_return_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_id INTEGER NOT NULL REFERENCES sales_returns(id) ON DELETE CASCADE,
+        description TEXT,
+        model_code TEXT,
+        quantity REAL NOT NULL DEFAULT 0,
+        unit_price REAL NOT NULL DEFAULT 0,
+        total REAL NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS purchase_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_number TEXT UNIQUE,
+        purchase_order_id INTEGER REFERENCES purchase_orders(id),
+        supplier_id INTEGER REFERENCES suppliers(id),
+        return_date TEXT DEFAULT (datetime('now','localtime')),
+        reason TEXT,
+        status TEXT DEFAULT 'draft' CHECK(status IN ('draft','approved','completed','cancelled')),
+        subtotal REAL DEFAULT 0,
+        total REAL DEFAULT 0,
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+      CREATE TABLE IF NOT EXISTS purchase_return_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_id INTEGER NOT NULL REFERENCES purchase_returns(id) ON DELETE CASCADE,
+        item_type TEXT DEFAULT 'fabric' CHECK(item_type IN ('fabric','accessory','other')),
+        item_code TEXT,
+        description TEXT,
+        quantity REAL NOT NULL DEFAULT 0,
+        unit_price REAL NOT NULL DEFAULT 0,
+        total REAL NOT NULL DEFAULT 0
+      );
+    `);
+
+    // ═══ Document Management ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        file_name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_type TEXT,
+        file_size INTEGER DEFAULT 0,
+        category TEXT DEFAULT 'general',
+        description TEXT,
+        uploaded_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // ═══ Backup Management ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS backups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER DEFAULT 0,
+        backup_type TEXT DEFAULT 'manual' CHECK(backup_type IN ('manual','scheduled','auto')),
+        status TEXT DEFAULT 'completed' CHECK(status IN ('completed','failed','in_progress')),
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // ═══ Dynamic Sizes ═══
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS size_grids (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        sizes TEXT NOT NULL,
+        is_default INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now','localtime'))
+      );
+    `);
+
+    // Seed default size grid
+    try {
+      db.prepare(`INSERT OR IGNORE INTO size_grids (id, name, sizes, is_default) VALUES (1, 'قياسي', '["S","M","L","XL","2XL","3XL"]', 1)`).run();
+    } catch(e) {}
+
+    // Seed default defect codes
+    try {
+      const insDefect = db.prepare('INSERT OR IGNORE INTO qc_defect_codes (code, name_ar, category, severity) VALUES (?,?,?,?)');
+      insDefect.run('D001', 'خياطة غير منتظمة', 'خياطة', 'minor');
+      insDefect.run('D002', 'بقعة على القماش', 'قماش', 'minor');
+      insDefect.run('D003', 'ثقب في القماش', 'قماش', 'major');
+      insDefect.run('D004', 'اختلاف لون', 'قماش', 'major');
+      insDefect.run('D005', 'مقاس خاطئ', 'قياس', 'critical');
+      insDefect.run('D006', 'زرار مفقود', 'إكسسوار', 'minor');
+      insDefect.run('D007', 'سحاب معطل', 'إكسسوار', 'major');
+      insDefect.run('D008', 'تلف في الكي', 'تشطيب', 'minor');
+      insDefect.run('D009', 'خيط ظاهر', 'خياطة', 'minor');
+      insDefect.run('D010', 'عدم تماثل', 'قص', 'major');
+    } catch(e) {}
+
+    // Seed default production line
+    try {
+      db.prepare(`INSERT OR IGNORE INTO production_lines (id, name, description, capacity_per_day) VALUES (1, 'خط الإنتاج الرئيسي', 'خط الإنتاج الأساسي', 500)`).run();
+    } catch(e) {}
+
+    // ═══ Permissions for new modules ═══
+    try {
+      const insPD = db.prepare('INSERT OR IGNORE INTO permission_definitions (module, action, label_ar, description_ar, sort_order) VALUES (?,?,?,?,?)');
+      const insRP = db.prepare('INSERT OR IGNORE INTO role_permissions (role, module, action, allowed) VALUES (?,?,?,?)');
+
+      const newModules = [
+        { mod: 'mrp', label: 'تخطيط المواد', sort: 200 },
+        { mod: 'shipping', label: 'الشحن', sort: 210 },
+        { mod: 'scheduling', label: 'الجدولة', sort: 220 },
+        { mod: 'quality', label: 'الجودة', sort: 230 },
+        { mod: 'quotations', label: 'عروض الأسعار', sort: 240 },
+        { mod: 'sales_orders', label: 'أوامر البيع', sort: 250 },
+        { mod: 'samples', label: 'العينات', sort: 260 },
+        { mod: 'returns', label: 'المرتجعات', sort: 270 },
+        { mod: 'documents', label: 'المستندات', sort: 280 },
+        { mod: 'backups', label: 'النسخ الاحتياطي', sort: 290 },
+      ];
+
+      const actions = ['view', 'create', 'edit', 'delete'];
+      const roleDefaults = {
+        superadmin: 1, manager: 1, accountant: 0, production: 0, hr: 0, viewer: 0
+      };
+      // Special overrides
+      const roleOverrides = {
+        quality: { production: 1 },
+        scheduling: { production: 1 },
+        mrp: { production: 1 },
+        shipping: { accountant: 1 },
+        quotations: { accountant: 1 },
+        sales_orders: { accountant: 1 },
+        returns: { accountant: 1 },
+        samples: { production: 1 },
+      };
+
+      for (const { mod, label, sort } of newModules) {
+        for (let i = 0; i < actions.length; i++) {
+          const act = actions[i];
+          const labelAr = act === 'view' ? `عرض ${label}` : act === 'create' ? `إنشاء ${label}` : act === 'edit' ? `تعديل ${label}` : `حذف ${label}`;
+          insPD.run(mod, act, labelAr, labelAr, sort + i);
+
+          for (const [role, defVal] of Object.entries(roleDefaults)) {
+            let allowed = defVal;
+            if (roleOverrides[mod]?.[role] !== undefined) allowed = roleOverrides[mod][role];
+            if (act !== 'view' && role === 'viewer') allowed = 0;
+            if (act === 'view' && role === 'viewer') allowed = 1;
+            insRP.run(role, mod, act, allowed);
+          }
+        }
+      }
+    } catch(e) {}
+
+    // Add auto-journal settings
+    try {
+      const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)');
+      insSetting.run('auto_journal_invoice', '1');
+      insSetting.run('auto_journal_po_receipt', '1');
+      insSetting.run('auto_journal_expense', '1');
+      insSetting.run('auto_journal_payroll', '1');
+      insSetting.run('auto_journal_payment', '1');
+      insSetting.run('shipment_number_prefix', 'SHP');
+      insSetting.run('quotation_number_prefix', 'QTN');
+      insSetting.run('so_number_prefix', 'SO');
+      insSetting.run('sample_number_prefix', 'SMP');
+      insSetting.run('sr_number_prefix', 'SR');
+      insSetting.run('pr_number_prefix', 'PR');
+      insSetting.run('ncr_number_prefix', 'NCR');
+      insSetting.run('qc_number_prefix', 'QC');
+      insSetting.run('backup_auto_enabled', '0');
+      insSetting.run('backup_retention_days', '30');
+    } catch(e) {}
+
+    // Add new setting prefixes
+    // (settings.js ALLOWED_PREFIXES will be updated separately)
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (23)`);
   }
 }
 

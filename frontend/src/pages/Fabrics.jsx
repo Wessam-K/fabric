@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Camera, ArrowUpDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Camera } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
-import { PageHeader, LoadingState, EmptyState } from '../components/ui';
+import { PageHeader } from '../components/ui';
 import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';

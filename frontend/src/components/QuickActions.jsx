@@ -14,20 +14,18 @@ export default function QuickActions() {
   const navigate = useNavigate();
 
   return (
-    <div className="fixed bottom-6 left-6 z-40 flex flex-col-reverse items-center gap-2">
+    <div className="fixed bottom-6 right-6 z-40 flex flex-col-reverse items-end gap-2">
       {open && ACTIONS.map((a, i) => (
-        <button key={i} onClick={() => { navigate(a.path); setOpen(false); }}
-          className={`${a.color} text-white rounded-full w-11 h-11 flex items-center justify-center shadow-lg hover:scale-110 transition-all`}
-          title={a.label}
-          style={{ animationDelay: `${i * 50}ms` }}>
-          <a.icon size={18} />
-        </button>
-      ))}
-      {open && (
-        <div className="absolute bottom-14 left-0 bg-white rounded-lg shadow-xl border p-2 whitespace-nowrap text-xs text-gray-500 pointer-events-none">
-          إجراءات سريعة
+        <div key={i} className="flex items-center gap-2 justify-end" style={{ animationDelay: `${i * 50}ms` }}>
+          <span className="bg-white text-gray-700 text-xs font-bold px-2.5 py-1.5 rounded-lg shadow border whitespace-nowrap">
+            {a.label}
+          </span>
+          <button onClick={() => { navigate(a.path); setOpen(false); }}
+            className={`${a.color} text-white rounded-full w-11 h-11 flex items-center justify-center shadow-lg hover:scale-110 transition-all`}>
+            <a.icon size={18} />
+          </button>
         </div>
-      )}
+      ))}
       <button onClick={() => setOpen(!open)}
         className={`w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-200 ${open ? 'bg-red-500 rotate-45' : 'bg-[#c9a84c] hover:bg-[#b8973e]'} text-white`}>
         {open ? <X size={24} /> : <Plus size={24} />}

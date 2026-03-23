@@ -1,9 +1,11 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, Menu, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
 let mainWindow;
 let backendProcess;
+let backendRestarts = 0;
+const MAX_RESTARTS = 3;
 
 const isDev = !app.isPackaged;
 const BACKEND_PORT = 9002;
@@ -46,6 +48,16 @@ function startBackend() {
 
     backendProcess.on('error', reject);
 
+    backendProcess.on('exit', (code) => {
+      if (code !== null && code !== 0 && backendRestarts < MAX_RESTARTS) {
+        backendRestarts++;
+        console.log(`[backend] crashed (exit ${code}), restarting (${backendRestarts}/${MAX_RESTARTS})...`);
+        startBackend().catch(() => {});
+      } else if (code !== null && code !== 0) {
+        dialog.showErrorBox('خطأ في الخادم', 'تعطل الخادم الخلفي بشكل متكرر. يرجى إعادة تشغيل التطبيق.');
+      }
+    });
+
     // Fallback: resolve after 3s even if no message
     setTimeout(resolve, 3000);
   });
@@ -82,6 +94,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null);
   try {
     await startBackend();
   } catch (err) {
@@ -90,19 +103,21 @@ app.whenReady().then(async () => {
   createWindow();
 });
 
-app.on('window-all-closed', () => {
+function stopBackend() {
   if (backendProcess) {
-    backendProcess.kill();
+    backendRestarts = MAX_RESTARTS; // prevent restart on intentional shutdown
+    try { backendProcess.kill('SIGTERM'); } catch {}
     backendProcess = null;
   }
+}
+
+app.on('window-all-closed', () => {
+  stopBackend();
   app.quit();
 });
 
 app.on('before-quit', () => {
-  if (backendProcess) {
-    backendProcess.kill();
-    backendProcess = null;
-  }
+  stopBackend();
 });
 
 app.on('activate', () => {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Phone, Mail, MapPin, DollarSign, ShoppingCart, Star, Truck, CreditCard } from 'lucide-react';
+import { ArrowRight, Phone, Mail, MapPin, DollarSign, ShoppingCart, Star, CreditCard } from 'lucide-react';
 import { PageHeader, LoadingState, Tabs } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';

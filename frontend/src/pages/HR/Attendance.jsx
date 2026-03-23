@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Clock, Upload, Plus, Download, Search, Barcode } from 'lucide-react';
+import { Clock, Upload, Download, Barcode } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
 import api from '../../utils/api';
-import { exportToExcel } from '../../utils/exportExcel';
+import * as XLSX from 'xlsx';
 import HelpButton from '../../components/HelpButton';
 import { useToast } from '../../components/Toast';
 
@@ -112,15 +112,34 @@ export default function Attendance() {
   }
 
   function handleExport() {
-    exportToExcel(summary, [
-      { key: 'emp_code', header: 'الكود', width: 10 },
-      { key: 'full_name', header: 'الاسم', width: 25 },
-      { key: 'department', header: 'القسم', width: 15 },
-      { key: 'days_worked', header: 'أيام العمل', width: 12 },
-      { key: 'total_hours', header: 'إجمالي الساعات', width: 12 },
-      { key: 'overtime_hours', header: 'ساعات إضافية', width: 12 },
-      { key: 'absent_days', header: 'أيام الغياب', width: 12 },
-    ], `حضور-${month}`);
+    // Build full attendance grid export (employee rows × day columns + totals)
+    const headers = ['الكود', 'الاسم', 'القسم'];
+    for (let d = 1; d <= daysInMonth; d++) headers.push(String(d));
+    headers.push('أيام', 'ساعات', 'إضافي', 'غياب');
+
+    const rows = summary.map(emp => {
+      const empAtt = attByEmp[emp.employee_id] || {};
+      const row = [emp.emp_code, emp.full_name, emp.department || ''];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const a = empAtt[d];
+        if (!a) { row.push('-'); }
+        else if (a.attendance_status === 'absent') { row.push(0); }
+        else if (a.attendance_status === 'holiday' || a.attendance_status === 'leave') { row.push('-'); }
+        else { row.push(a.actual_hours != null ? Number(Number(a.actual_hours).toFixed(2)) : 8); }
+      }
+      row.push(emp.days_worked || 0, Number(Number(emp.total_hours || 0).toFixed(1)), emp.overtime_hours || 0, emp.absent_days || 0);
+      return row;
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 25 }, { wch: 15 },
+      ...Array(daysInMonth).fill({ wch: 5 }),
+      { wch: 6 }, { wch: 8 }, { wch: 8 }, { wch: 6 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `حضور ${month}`);
+    XLSX.writeFile(wb, `حضور-${month}.xlsx`);
   }
 
   // Build grid data — employees as rows, days as columns

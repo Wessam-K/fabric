@@ -17,7 +17,7 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilt
   else cb(new Error('Only images allowed'));
 }});
 
-router.get('/', (req, res) => {
+router.get('/', requirePermission('fabrics', 'view'), (req, res) => {
   try {
     const { type, status, search, supplier_id, page, limit } = req.query;
     let q = 'SELECT f.*, s.name as supplier_name FROM fabrics f LEFT JOIN suppliers s ON s.id=f.supplier_id WHERE 1=1';
@@ -123,6 +123,36 @@ router.delete('/:code', requirePermission('fabrics', 'delete'), (req, res) => {
     db.prepare("UPDATE fabrics SET status='inactive' WHERE code=?").run(req.params.code);
     logAudit(req, 'DELETE', 'fabric', req.params.code, existing.name);
     res.json({ message: 'تم التعطيل', code: req.params.code });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/fabrics/:code/po-batches — PO line items for this fabric
+router.get('/:code/po-batches', (req, res) => {
+  try {
+    const fabricCode = req.params.code;
+    const batches = db.prepare(`
+      SELECT 
+        pi.id as item_id,
+        pi.fabric_code,
+        pi.quantity as quantity_ordered,
+        pi.received_qty as quantity_received,
+        pi.unit_price,
+        (pi.quantity * pi.unit_price) as total_price,
+        po.po_number,
+        po.order_date,
+        po.status as po_status,
+        po.expected_date as delivery_date,
+        s.name as supplier_name,
+        s.code as supplier_code,
+        COALESCE(pi.received_qty, pi.quantity) as received_meters,
+        pi.unit_price as price_per_meter
+      FROM purchase_order_items pi
+      JOIN purchase_orders po ON po.id = pi.po_id
+      LEFT JOIN suppliers s ON s.id = po.supplier_id
+      WHERE pi.fabric_code = ? AND po.status != 'cancelled'
+      ORDER BY po.order_date DESC
+    `).all(fabricCode);
+    res.json({ batches, latest_price: batches[0]?.price_per_meter || 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

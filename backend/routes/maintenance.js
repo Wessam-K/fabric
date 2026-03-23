@@ -2,18 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
-
-function toCSV(rows, columns) {
-  if (!rows || rows.length === 0) return columns.join(',') + '\n';
-  const header = columns.join(',');
-  const lines = rows.map(row =>
-    columns.map(col => {
-      const val = row[col] == null ? '' : String(row[col]);
-      return '"' + val.replace(/"/g, '""') + '"';
-    }).join(',')
-  );
-  return header + '\n' + lines.join('\n');
-}
+const { toCSV } = require('../utils/csv');
 
 // ═══════════════════════════════════════════════
 // GET /api/maintenance/stats
@@ -27,14 +16,15 @@ router.get('/stats', requirePermission('maintenance', 'view'), (req, res) => {
     const total_cost_this_month = db.prepare("SELECT COALESCE(SUM(cost),0) as v FROM maintenance_orders WHERE is_deleted=0 AND status='completed' AND completed_date >= date('now','start of month')").get().v;
     const avg_resolution_days = db.prepare("SELECT AVG(JULIANDAY(completed_date) - JULIANDAY(scheduled_date)) as v FROM maintenance_orders WHERE is_deleted=0 AND status='completed' AND scheduled_date IS NOT NULL AND completed_date IS NOT NULL").get().v || 0;
     const overdue_count = db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND scheduled_date < date('now') AND status='pending'").get().c;
-    res.json({ pending_count, in_progress_count, completed_this_month, critical_count, total_cost_this_month, avg_resolution_days: Math.round(avg_resolution_days * 10) / 10, overdue_count });
+    const total_orders = db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0").get().c;
+    res.json({ pending_count, in_progress_count, completed_this_month, critical_count, total_cost_this_month, avg_resolution_days: Math.round(avg_resolution_days * 10) / 10, overdue_count, total_orders });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ═══════════════════════════════════════════════
 // GET /api/maintenance/export
 // ═══════════════════════════════════════════════
-router.get('/export', requirePermission('maintenance', 'export'), (req, res) => {
+router.get('/export', requirePermission('maintenance', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT mo.*, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 ORDER BY mo.created_at DESC`).all();
     const columns = ['barcode','title','maintenance_type','priority','status','machine_name','scheduled_date','completed_date','performed_by','cost','description','notes'];

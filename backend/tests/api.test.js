@@ -2,7 +2,7 @@ const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 
-const BASE = 'http://localhost:9002';
+const BASE = process.env.TEST_BASE || 'http://localhost:9002';
 const UID = Date.now().toString(36).slice(-4);
 let TOKEN = '';
 
@@ -263,10 +263,10 @@ describe('Suppliers API', () => {
 
 // ============ Customers API ============
 describe('Customers API', () => {
-  it('GET /api/customers returns array', async () => {
+  it('GET /api/customers returns customers', async () => {
     const res = await req('GET', '/api/customers');
     assert.equal(res.status, 200);
-    assert.ok(Array.isArray(res.body));
+    assert.ok(Array.isArray(res.body.customers) || Array.isArray(res.body));
   });
 });
 
@@ -386,5 +386,142 @@ describe('Search API', () => {
     assert.ok(res.body.models !== undefined);
     assert.ok(res.body.fabrics !== undefined);
     assert.ok(res.body.accessories !== undefined);
+  });
+});
+
+// ════════════════════════════════════════════════════
+//  V23 Module Endpoint Tests
+// ════════════════════════════════════════════════════
+
+describe('Quotations API', () => {
+  it('GET /api/quotations returns array', async () => {
+    const res = await req('GET', '/api/quotations');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+  it('GET /api/quotations/:id returns quotation', async () => {
+    // Get a valid ID from the list first
+    const listRes = await req('GET', '/api/quotations');
+    const items = listRes.body.data || listRes.body;
+    if (items.length > 0) {
+      const res = await req('GET', `/api/quotations/${items[0].id}`);
+      assert.equal(res.status, 200);
+      assert.ok(res.body.quotation_number || res.body.id);
+    }
+  });
+});
+
+describe('Sales Orders API', () => {
+  it('GET /api/quotations/sales-orders/list returns array', async () => {
+    const res = await req('GET', '/api/quotations/sales-orders/list');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+});
+
+describe('Samples API', () => {
+  it('GET /api/samples returns array', async () => {
+    const res = await req('GET', '/api/samples');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+});
+
+describe('Shipping API', () => {
+  it('GET /api/shipping returns array', async () => {
+    const res = await req('GET', '/api/shipping');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+  it('GET /api/shipping/:id returns shipment', async () => {
+    // Get a valid ID from the list first
+    const listRes = await req('GET', '/api/shipping');
+    const items = listRes.body.data || listRes.body;
+    if (items.length > 0) {
+      const res = await req('GET', `/api/shipping/${items[0].id}`);
+      assert.equal(res.status, 200);
+      assert.ok(res.body.shipment_number || res.body.id);
+    }
+  });
+});
+
+describe('Returns API', () => {
+  it('GET /api/returns/sales returns array', async () => {
+    const res = await req('GET', '/api/returns/sales');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+  it('GET /api/returns/purchases returns array', async () => {
+    const res = await req('GET', '/api/returns/purchases');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+});
+
+describe('Quality API', () => {
+  it('GET /api/quality/inspections returns array', async () => {
+    const res = await req('GET', '/api/quality/inspections');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+  it('GET /api/quality/templates returns array', async () => {
+    const res = await req('GET', '/api/quality/templates');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+  it('GET /api/quality/defect-codes returns array', async () => {
+    const res = await req('GET', '/api/quality/defect-codes');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+  it('GET /api/quality/ncr returns array', async () => {
+    const res = await req('GET', '/api/quality/ncr');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+});
+
+describe('MRP API', () => {
+  it('GET /api/mrp returns array', async () => {
+    const res = await req('GET', '/api/mrp');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+});
+
+describe('Scheduling API', () => {
+  it('GET /api/scheduling returns array', async () => {
+    const res = await req('GET', '/api/scheduling');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+  it('GET /api/scheduling/lines returns production lines', async () => {
+    const res = await req('GET', '/api/scheduling/lines');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+});
+
+describe('Expenses API', () => {
+  it('GET /api/expenses returns array', async () => {
+    const res = await req('GET', '/api/expenses');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+});
+
+describe('Documents API', () => {
+  it('GET /api/documents returns array', async () => {
+    const res = await req('GET', '/api/documents');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
+  });
+});
+
+describe('Backups API', () => {
+  it('GET /api/backups returns array', async () => {
+    const res = await req('GET', '/api/backups');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.data || res.body));
   });
 });

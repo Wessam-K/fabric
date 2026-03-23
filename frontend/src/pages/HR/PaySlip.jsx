@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Printer, Download } from 'lucide-react';
+import { ArrowRight, Printer } from 'lucide-react';
 import api from '../../utils/api';
 
 export default function PaySlip() {

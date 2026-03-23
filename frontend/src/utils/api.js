@@ -2,7 +2,40 @@ import axios from 'axios';
 
 const api = axios.create({ baseURL: '/api' });
 
-api.interceptors.request.use(config => {
+let isRefreshing = false;
+let refreshPromise = null;
+
+function parseJwtExp(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp || 0;
+  } catch { return 0; }
+}
+
+async function refreshTokenIfNeeded() {
+  const token = localStorage.getItem('wk_token');
+  if (!token) return;
+  const exp = parseJwtExp(token);
+  const now = Math.floor(Date.now() / 1000);
+  // Refresh if less than 2 hours remaining
+  if (exp - now > 7200) return;
+  if (isRefreshing) return refreshPromise;
+  isRefreshing = true;
+  refreshPromise = axios.post('/api/auth/refresh', null, {
+    headers: { Authorization: `Bearer ${token}` }
+  }).then(res => {
+    localStorage.setItem('wk_token', res.data.token);
+  }).catch(() => {
+    // refresh failed — let the 401 interceptor handle it
+  }).finally(() => {
+    isRefreshing = false;
+    refreshPromise = null;
+  });
+  return refreshPromise;
+}
+
+api.interceptors.request.use(async config => {
+  await refreshTokenIfNeeded();
   const token = localStorage.getItem('wk_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;

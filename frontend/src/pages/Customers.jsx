@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Phone, Mail, MapPin, DollarSign, X, FileText, Users } from 'lucide-react';
+import { Plus, Search, DollarSign, X, FileText, Users } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -33,9 +33,9 @@ export default function Customers() {
       if (search) params.search = search;
       if (cityFilter) params.city = cityFilter;
       const { data } = await api.get('/customers', { params });
-      const list = data.customers || data.data || data;
+      const list = data.customers || data;
       setCustomers(Array.isArray(list) ? list : []);
-      setTotal(data.total || (Array.isArray(list) ? list.length : 0));
+      setTotal(data.total ?? (Array.isArray(list) ? list.length : 0));
     } catch { toast.error('فشل تحميل العملاء'); }
     finally { setLoading(false); }
   };
@@ -94,7 +94,7 @@ export default function Customers() {
         </div>} />
 
       {/* KPI */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="stat-card">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50 text-blue-600 mb-2"><Users size={18} /></div>
           <p className="text-2xl font-bold font-mono" style={{color:'var(--color-navy)'}}>{customers.length}</p>

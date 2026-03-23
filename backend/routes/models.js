@@ -15,7 +15,7 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilt
 }});
 
 // GET /api/models — list all
-router.get('/', (req, res) => {
+router.get('/', requirePermission('models', 'view'), (req, res) => {
   try {
     const { search, status, category, gender } = req.query;
     let q = 'SELECT * FROM models WHERE 1=1';

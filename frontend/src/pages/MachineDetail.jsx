@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Settings, Activity, Clock, MapPin, Wrench, Factory } from 'lucide-react';
+import { ArrowRight, Settings, Activity, Clock, MapPin, Factory } from 'lucide-react';
 import { PageHeader, LoadingState, Tabs } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';

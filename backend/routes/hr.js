@@ -59,6 +59,11 @@ router.post('/employees', requireRole('superadmin', 'hr'), (req, res) => {
     const existing = db.prepare('SELECT id FROM employees WHERE emp_code = ?').get(d.emp_code);
     if (existing) return res.status(400).json({ error: 'كود الموظف مستخدم بالفعل' });
 
+    // Read system defaults from settings
+    const defHours = parseFloat(db.prepare("SELECT value FROM settings WHERE key='working_hours_per_day'").get()?.value) || 8;
+    const defDays = parseFloat(db.prepare("SELECT value FROM settings WHERE key='working_days_per_month'").get()?.value) || 26;
+    const defOT = parseFloat(db.prepare("SELECT value FROM settings WHERE key='default_overtime_multiplier'").get()?.value) || 1.5;
+
     const result = db.prepare(`
       INSERT INTO employees (emp_code, full_name, national_id, department, job_title, employment_type,
         salary_type, base_salary, standard_hours_per_day, standard_days_per_month,
@@ -69,10 +74,10 @@ router.post('/employees', requireRole('superadmin', 'hr'), (req, res) => {
     `).run(
       d.emp_code, d.full_name, d.national_id || null, d.department || null, d.job_title || null,
       d.employment_type || 'full_time', d.salary_type || 'monthly', d.base_salary || 0,
-      d.standard_hours_per_day || 8, d.standard_days_per_month || 26,
+      d.standard_hours_per_day || defHours, d.standard_days_per_month || defDays,
       d.housing_allowance || 0, d.transport_allowance || 0, d.food_allowance || 0, d.other_allowances || 0,
       d.social_insurance || 0, d.tax_deduction || 0, d.other_deductions_fixed || 0,
-      d.overtime_rate_multiplier || 1.5,
+      d.overtime_rate_multiplier || defOT,
       d.hire_date || null, d.phone || null, d.address || null, d.bank_account || null, d.notes || null
     );
 
@@ -225,8 +230,8 @@ router.post('/attendance/clock', requireRole('superadmin', 'hr', 'manager'), (re
     const emp = db.prepare(`
       SELECT id, emp_code, full_name 
       FROM employees 
-      WHERE (emp_code = ? OR barcode = ?) AND status = 'active'
-    `).get(barcode, barcode);
+WHERE emp_code = ? AND status = 'active'
+  `).get(barcode);
     
     if (!emp) return res.status(404).json({ error: 'الموظف غير موجود أو غير نشط' });
     
@@ -621,20 +626,22 @@ router.post('/payroll/:periodId/calculate', requireRole('superadmin', 'hr'), (re
 
 function calculateEmployeePay(employee, attendanceSummary, adjustments) {
   let base_pay = 0, daily_rate = 0, hourly_rate = 0;
+  const stdDays = employee.standard_days_per_month || 26;
+  const stdHours = employee.standard_hours_per_day || 8;
 
+  const salary = employee.base_salary || 0;
   if (employee.salary_type === 'monthly') {
-    daily_rate = employee.base_salary / employee.standard_days_per_month;
-    hourly_rate = daily_rate / employee.standard_hours_per_day;
-    base_pay = daily_rate * attendanceSummary.days_worked;
-    if (attendanceSummary.absent_days === 0) base_pay = employee.base_salary;
+    daily_rate = stdDays > 0 ? salary / stdDays : 0;
+    hourly_rate = stdHours > 0 ? daily_rate / stdHours : 0;
+    base_pay = salary;
   } else if (employee.salary_type === 'daily') {
-    daily_rate = employee.base_salary;
-    hourly_rate = daily_rate / employee.standard_hours_per_day;
-    base_pay = employee.base_salary * attendanceSummary.days_worked;
+    daily_rate = salary;
+    hourly_rate = stdHours > 0 ? daily_rate / stdHours : 0;
+    base_pay = salary * (attendanceSummary.days_worked || 0);
   } else if (employee.salary_type === 'hourly') {
-    hourly_rate = employee.base_salary;
-    daily_rate = hourly_rate * employee.standard_hours_per_day;
-    base_pay = employee.base_salary * attendanceSummary.total_hours;
+    hourly_rate = salary;
+    daily_rate = hourly_rate * stdHours;
+    base_pay = salary * (attendanceSummary.total_hours || 0);
   } else if (employee.salary_type === 'piece_work') {
     base_pay = 0; // added as adjustment
   }
@@ -658,7 +665,7 @@ function calculateEmployeePay(employee, attendanceSummary, adjustments) {
   const loan_repayments = adjustments.filter(a => a.adj_type === 'loan_repayment').reduce((s, a) => s + a.amount, 0);
 
   const total_deductions = absence_deduction + late_deduction + social + tax + extra_deductions + loan_repayments + employee.other_deductions_fixed;
-  const net_pay = (gross_pay + bonuses) - total_deductions;
+  const net_pay = Math.max(0, (gross_pay + bonuses) - total_deductions);
 
   return {
     base_pay: Math.round(base_pay * 100) / 100,
@@ -780,7 +787,7 @@ router.get('/adjustments/:employeeId', requireRole('superadmin', 'hr', 'manager'
 router.get('/leaves', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
   try {
     const leaves = db.prepare(`
-      SELECT lr.*, e.name as employee_name, e.code as employee_code
+      SELECT lr.*, e.full_name as employee_name, e.emp_code as employee_code
       FROM leave_requests lr
       LEFT JOIN employees e ON e.id = lr.employee_id
       ORDER BY lr.created_at DESC
@@ -803,7 +810,7 @@ router.post('/leaves', requireRole('superadmin', 'hr', 'manager'), (req, res) =>
     `).run(employee_id, leave_type || 'annual', start_date, end_date, reason || null);
 
     const leave = db.prepare(`
-      SELECT lr.*, e.name as employee_name FROM leave_requests lr
+      SELECT lr.*, e.full_name as employee_name FROM leave_requests lr
       LEFT JOIN employees e ON e.id = lr.employee_id WHERE lr.id = ?
     `).get(result.lastInsertRowid);
     res.status(201).json(leave);
@@ -821,6 +828,19 @@ router.patch('/leaves/:id', requireRole('superadmin', 'hr', 'manager'), (req, re
 
     db.prepare(`UPDATE leave_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?`)
       .run(status, req.user?.id || null, req.params.id);
+
+    // If approved, mark attendance as 'leave' for the date range
+    if (status === 'approved') {
+      const start = new Date(leave.start_date);
+      const end = new Date(leave.end_date);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().slice(0, 10);
+        const dayNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+        db.prepare(`INSERT INTO attendance (employee_id, work_date, day_of_week, actual_hours, attendance_status)
+          VALUES (?,?,?,0,'leave') ON CONFLICT(employee_id, work_date) DO UPDATE SET attendance_status='leave', actual_hours=0`)
+          .run(leave.employee_id, dateStr, dayNames[d.getDay()]);
+      }
+    }
 
     res.json({ message: status === 'approved' ? 'تم قبول الطلب' : 'تم رفض الطلب' });
   } catch (err) { res.status(500).json({ error: err.message }); }

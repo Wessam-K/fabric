@@ -244,6 +244,28 @@ router.get('/production-by-stage', requirePermission('reports', 'view'), (req, r
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/reports/costs — cost breakdown from cost_snapshots
+router.get('/costs', requirePermission('reports', 'view'), (req, res) => {
+  try {
+    const totals = db.prepare(`SELECT
+      COALESCE(SUM(main_fabric_cost),0) as main_fabric_cost,
+      COALESCE(SUM(lining_cost),0) as lining_cost,
+      COALESCE(SUM(accessories_cost),0) as accessories_cost,
+      COALESCE(SUM(masnaiya),0) as masnaiya,
+      COALESCE(SUM(masrouf),0) as masrouf,
+      COALESCE(SUM(total_cost),0) as total_cost,
+      COALESCE(SUM(total_pieces),0) as total_pieces
+      FROM cost_snapshots WHERE wo_id IS NOT NULL`).get();
+    const snapshots = db.prepare(`SELECT cs.*, wo.wo_number, m.model_code, m.model_name
+      FROM cost_snapshots cs
+      LEFT JOIN work_orders wo ON wo.id=cs.wo_id
+      LEFT JOIN models m ON m.id=cs.model_id
+      WHERE cs.wo_id IS NOT NULL
+      ORDER BY cs.snapshot_date DESC`).all();
+    res.json({ totals, snapshots });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/reports/fabric-consumption — fabric usage from batches
 router.get('/fabric-consumption', requirePermission('reports', 'view'), (req, res) => {
   try {
@@ -383,7 +405,7 @@ router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
         SELECT po.po_number, s.name as supplier_name, s.supplier_type, po.status,
           po.total_amount, po.paid_amount, (po.total_amount - po.paid_amount) as balance,
           po.order_date, po.delivery_date,
-          (SELECT COUNT(*) FROM po_items WHERE po_id=po.id) as item_count
+          (SELECT COUNT(*) FROM purchase_order_items WHERE po_id=po.id) as item_count
         FROM purchase_orders po
         LEFT JOIN suppliers s ON s.id=po.supplier_id
         WHERE po.status != 'cancelled'
@@ -396,7 +418,7 @@ router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
           (SELECT COUNT(*) FROM attendance a WHERE a.employee_id=e.id AND a.attendance_status='present') as present_days,
           (SELECT COUNT(*) FROM attendance a WHERE a.employee_id=e.id AND a.attendance_status='absent') as absent_days,
           (SELECT COALESCE(SUM(a.overtime_hours),0) FROM attendance a WHERE a.employee_id=e.id) as total_overtime,
-          (SELECT pr.net_salary FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pr.employee_id=e.id ORDER BY pp.period_month DESC LIMIT 1) as last_net_salary
+          (SELECT pr.net_pay FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pr.employee_id=e.id ORDER BY pp.period_month DESC LIMIT 1) as last_net_salary
         FROM employees e
         WHERE e.status != 'terminated'
         ORDER BY e.emp_code
@@ -404,15 +426,15 @@ router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
     } else if (source === 'inventory') {
       rows = db.prepare(`
         SELECT f.code, f.name, f.fabric_type, f.color, f.supplier,
-          f.price_per_m, f.available_meters, f.min_stock,
-          CASE WHEN f.available_meters < f.min_stock THEN 'low' ELSE 'ok' END as stock_status,
+          f.price_per_m, f.available_meters, f.low_stock_threshold as min_stock,
+          CASE WHEN f.available_meters < f.low_stock_threshold THEN 'low' ELSE 'ok' END as stock_status,
           (f.available_meters * f.price_per_m) as stock_value
         FROM fabrics f WHERE f.status='active'
         UNION ALL
         SELECT a.code, a.name, a.acc_type as fabric_type, '' as color, a.supplier,
-          a.unit_price as price_per_m, a.available_quantity as available_meters, a.min_stock,
-          CASE WHEN a.available_quantity < a.min_stock THEN 'low' ELSE 'ok' END as stock_status,
-          (a.available_quantity * a.unit_price) as stock_value
+          a.unit_price as price_per_m, a.quantity_on_hand as available_meters, a.low_stock_threshold as min_stock,
+          CASE WHEN a.quantity_on_hand < a.low_stock_threshold THEN 'low' ELSE 'ok' END as stock_status,
+          (a.quantity_on_hand * a.unit_price) as stock_value
         FROM accessories a WHERE a.status='active'
         ORDER BY name
       `).all();
@@ -575,19 +597,21 @@ router.get('/customer-summary', requirePermission('reports', 'view'), (req, res)
 // GET /api/reports/inventory-status — fabric + accessory stock overview
 router.get('/inventory-status', requirePermission('reports', 'view'), (req, res) => {
   try {
+    const threshold = parseFloat(db.prepare("SELECT value FROM settings WHERE key='low_stock_threshold'").get()?.value) || 20;
+
     const fabrics = db.prepare(`
       SELECT f.id, f.code, f.name, f.color, f.available_meters, f.low_stock_threshold,
-        CASE WHEN COALESCE(f.available_meters,0) <= COALESCE(f.low_stock_threshold,10) THEN 1 ELSE 0 END as is_low_stock,
+        CASE WHEN COALESCE(f.available_meters,0) <= COALESCE(f.low_stock_threshold,?) THEN 1 ELSE 0 END as is_low_stock,
         (SELECT COUNT(*) FROM fabric_inventory_batches b WHERE b.fabric_code=f.code AND b.batch_status='available') as available_batches,
         (SELECT COALESCE(SUM(b.received_meters - b.used_meters - b.wasted_meters),0) FROM fabric_inventory_batches b WHERE b.fabric_code=f.code AND b.batch_status='available') as batch_available_meters
       FROM fabrics f WHERE f.status='active' ORDER BY is_low_stock DESC, f.name
-    `).all();
+    `).all(threshold);
 
     const accessories = db.prepare(`
       SELECT a.id, a.code, a.name, a.acc_type, a.quantity_on_hand, a.low_stock_threshold, a.reorder_qty, a.unit,
-        CASE WHEN COALESCE(a.quantity_on_hand,0) <= COALESCE(a.low_stock_threshold,10) THEN 1 ELSE 0 END as is_low_stock
+        CASE WHEN COALESCE(a.quantity_on_hand,0) <= COALESCE(a.low_stock_threshold,?) THEN 1 ELSE 0 END as is_low_stock
       FROM accessories a WHERE a.status='active' ORDER BY is_low_stock DESC, a.name
-    `).all();
+    `).all(threshold);
 
     res.json({
       fabrics,
@@ -711,9 +735,9 @@ router.get('/ar-aging', requirePermission('reports', 'view'), (req, res) => {
 router.get('/inventory-valuation', requirePermission('reports', 'view'), (req, res) => {
   try {
     const fabrics = db.prepare(`
-      SELECT f.code, f.name, f.color, f.unit_price,
+      SELECT f.code, f.name, f.color, f.price_per_m as unit_price,
         COALESCE(f.available_meters, 0) AS qty,
-        COALESCE(f.available_meters, 0) * COALESCE(f.unit_price, 0) AS value
+        COALESCE(f.available_meters, 0) * COALESCE(f.price_per_m, 0) AS value
       FROM fabrics f WHERE f.status='active' ORDER BY value DESC
     `).all();
 
@@ -740,9 +764,9 @@ router.get('/inventory-valuation', requirePermission('reports', 'view'), (req, r
 router.get('/machine-utilization', requirePermission('reports', 'view'), (req, res) => {
   try {
     const machines = db.prepare(`SELECT m.*, 
-      (SELECT COUNT(*) FROM machine_maintenance mm WHERE mm.machine_id=m.id) as total_maintenance,
-      (SELECT COUNT(*) FROM machine_maintenance mm WHERE mm.machine_id=m.id AND mm.status='completed') as completed_maintenance,
-      (SELECT COALESCE(SUM(cost),0) FROM machine_maintenance mm WHERE mm.machine_id=m.id) as maintenance_cost
+      (SELECT COUNT(*) FROM maintenance_orders mo WHERE mo.machine_id=m.id AND mo.is_deleted=0) as total_maintenance,
+      (SELECT COUNT(*) FROM maintenance_orders mo WHERE mo.machine_id=m.id AND mo.is_deleted=0 AND mo.status='completed') as completed_maintenance,
+      (SELECT COALESCE(SUM(cost),0) FROM maintenance_orders mo WHERE mo.machine_id=m.id AND mo.is_deleted=0) as maintenance_cost
       FROM machines m WHERE m.status='active' ORDER BY maintenance_cost DESC`).all();
     const totalMachines = machines.length;
     const totalMaintenanceCost = machines.reduce((s, m) => s + (m.maintenance_cost || 0), 0);
@@ -761,23 +785,23 @@ router.get('/maintenance-cost', requirePermission('reports', 'view'), (req, res)
     const p = [];
     if (date_from) { q += ' AND mo.created_at >= ?'; p.push(date_from); }
     if (date_to) { q += ' AND mo.created_at <= ?'; p.push(date_to + 'T23:59:59'); }
-    q += ' ORDER BY mo.estimated_cost DESC';
+    q += ' ORDER BY mo.cost DESC';
     const orders = db.prepare(q).all(...p);
     const byType = {};
     for (const o of orders) {
-      const t = o.order_type || 'other';
+      const t = o.maintenance_type || 'other';
       if (!byType[t]) byType[t] = { count: 0, cost: 0 };
       byType[t].count++;
-      byType[t].cost += o.estimated_cost || 0;
+      byType[t].cost += o.cost || 0;
     }
     const byPriority = {};
     for (const o of orders) {
       const pr = o.priority || 'medium';
       if (!byPriority[pr]) byPriority[pr] = { count: 0, cost: 0 };
       byPriority[pr].count++;
-      byPriority[pr].cost += o.estimated_cost || 0;
+      byPriority[pr].cost += o.cost || 0;
     }
-    const totalCost = orders.reduce((s, o) => s + (o.estimated_cost || 0), 0);
+    const totalCost = orders.reduce((s, o) => s + (o.cost || 0), 0);
     res.json({ orders, by_type: byType, by_priority: byPriority, total_cost: totalCost, total_orders: orders.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -957,15 +981,15 @@ router.get('/cash-flow', requirePermission('reports', 'view'), (req, res) => {
     const months = parseInt(req.query.months) || 12;
     const data = [];
     for (let i = months - 1; i >= 0; i--) {
-      const start = `date('now','start of month','-${i} months')`;
-      const end = `date('now','start of month','-${i - 1} months')`;
+      const { sd, ed } = db.prepare(`SELECT date('now','start of month','-' || ? || ' months') as sd, date('now','start of month','-' || ? || ' months') as ed`).get(i, i - 1);
 
-      const inflows = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM customer_payments WHERE payment_date >= ${start} AND payment_date < ${end}`).get().v;
-      const poPayments = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE payment_date >= ${start} AND payment_date < ${end}`).get().v;
-      const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status!='rejected' AND expense_date >= ${start} AND expense_date < ${end}`).get().v;
-      const payroll = db.prepare(`SELECT COALESCE(SUM(net_salary),0) as v FROM payroll WHERE pay_date >= ${start} AND pay_date < ${end}`).get().v;
+      const inflows = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM customer_payments WHERE payment_date >= ? AND payment_date < ?`).get(sd, ed).v;
+      const poPayments = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE payment_date >= ? AND payment_date < ?`).get(sd, ed).v;
+      const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status!='rejected' AND expense_date >= ? AND expense_date < ?`).get(sd, ed).v;
+      let payroll = 0;
+      try { payroll = db.prepare(`SELECT COALESCE(SUM(pr.net_pay),0) as v FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pp.period_month >= strftime('%Y-%m',?) AND pp.period_month < strftime('%Y-%m',?)`).get(sd, ed).v; } catch {}
 
-      const label = db.prepare(`SELECT strftime('%Y-%m', ${start}) as m`).get().m;
+      const label = sd.slice(0, 7);
       data.push({
         month: label,
         inflows: Math.round(inflows * 100) / 100,
@@ -981,17 +1005,20 @@ router.get('/cash-flow', requirePermission('reports', 'view'), (req, res) => {
 router.get('/tax-summary', requirePermission('reports', 'view'), (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
+    const vatSetting = db.prepare("SELECT value FROM settings WHERE key='tax_rate'").get();
+    const taxRate = parseFloat(vatSetting?.value) || 14;
+    const vr = taxRate / 100;
     const months = [];
     for (let m = 1; m <= 12; m++) {
       const mm = String(m).padStart(2, '0');
       const ms = `${year}-${mm}-01`;
       const me = m < 12 ? `${year}-${String(m + 1).padStart(2, '0')}-01` : `${year + 1}-01-01`;
       const collected = db.prepare(`SELECT COALESCE(SUM(total - subtotal),0) as v FROM invoices WHERE status IN ('paid','partial','sent') AND created_at >= ? AND created_at < ?`).get(ms, me).v;
-      const paid = db.prepare(`SELECT COALESCE(SUM(total_amount * 0.15),0) as v FROM purchase_orders WHERE status NOT IN ('cancelled','draft') AND order_date >= ? AND order_date < ?`).get(ms, me).v;
+      const paid = db.prepare(`SELECT COALESCE(SUM(total_amount * ? / (1 + ?)),0) as v FROM purchase_orders WHERE status NOT IN ('cancelled','draft') AND order_date >= ? AND order_date < ?`).get(vr, vr, ms, me).v;
       months.push({ month: `${year}-${mm}`, vat_collected: Math.round(collected * 100) / 100, vat_paid: Math.round(paid * 100) / 100, net_vat: Math.round((collected - paid) * 100) / 100 });
     }
     const totals = months.reduce((a, m) => ({ vat_collected: a.vat_collected + m.vat_collected, vat_paid: a.vat_paid + m.vat_paid, net_vat: a.net_vat + m.net_vat }), { vat_collected: 0, vat_paid: 0, net_vat: 0 });
-    res.json({ year, months, totals });
+    res.json({ year, months, summary: { total_output_vat: totals.vat_collected, total_input_vat: totals.vat_paid, net_vat: totals.net_vat, tax_rate: taxRate } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1020,14 +1047,14 @@ router.get('/employee-productivity', requirePermission('reports', 'view'), (req,
     const { date_from, date_to } = req.query;
     let dateFilter = '';
     const p = [];
-    if (date_from) { dateFilter += ' AND a.date >= ?'; p.push(date_from); }
-    if (date_to) { dateFilter += ' AND a.date <= ?'; p.push(date_to); }
+    if (date_from) { dateFilter += ' AND a.work_date >= ?'; p.push(date_from); }
+    if (date_to) { dateFilter += ' AND a.work_date <= ?'; p.push(date_to); }
 
-    const employees = db.prepare(`SELECT e.id, e.name, e.employee_code, e.department, e.position,
-      (SELECT COUNT(*) FROM attendance a WHERE a.employee_id=e.id AND a.status='present' ${dateFilter}) as days_present,
+    const employees = db.prepare(`SELECT e.id, e.full_name as name, e.emp_code as employee_code, e.department, e.job_title as position,
+      (SELECT COUNT(*) FROM attendance a WHERE a.employee_id=e.id AND a.attendance_status='present' ${dateFilter}) as days_present,
       (SELECT COUNT(*) FROM attendance a WHERE a.employee_id=e.id ${dateFilter}) as total_days,
       (SELECT COALESCE(SUM(a.overtime_hours),0) FROM attendance a WHERE a.employee_id=e.id ${dateFilter}) as overtime_hours,
-      (SELECT COALESCE(SUM(p2.net_salary),0) FROM payroll p2 WHERE p2.employee_id=e.id) as total_salary
+      (SELECT COALESCE(SUM(p2.net_pay),0) FROM payroll_records p2 WHERE p2.employee_id=e.id) as total_salary
       FROM employees e WHERE e.status='active'`).all(...p, ...p, ...p);
 
     const result = employees.map(emp => ({
@@ -1055,15 +1082,14 @@ router.get('/pl-monthly', requirePermission('reports', 'view'), (req, res) => {
     const months = parseInt(req.query.months) || 12;
     const data = [];
     for (let i = 0; i < months; i++) {
-      const monthStart = `date('now','start of month','-${i} months')`;
-      const monthEnd = `date('now','start of month','-${i - 1} months')`;
-      const monthLabel = db.prepare(`SELECT strftime('%Y-%m', ${monthStart}) as label`).get()?.label || '';
+      const { sd, ed } = db.prepare(`SELECT date('now','start of month','-' || ? || ' months') as sd, date('now','start of month','-' || ? || ' months') as ed`).get(i, i - 1);
+      const monthLabel = sd.slice(0, 7);
       
-      const revenue = db.prepare(`SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='paid' AND created_at >= ${monthStart} AND created_at < ${monthEnd}`).get()?.v || 0;
-      const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= ${monthStart} AND expense_date < ${monthEnd}`).get()?.v || 0;
-      const maintenance = db.prepare(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_orders WHERE is_deleted=0 AND status='completed' AND completed_date >= ${monthStart} AND completed_date < ${monthEnd}`).get()?.v || 0;
+      const revenue = db.prepare(`SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='paid' AND created_at >= ? AND created_at < ?`).get(sd, ed)?.v || 0;
+      const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= ? AND expense_date < ?`).get(sd, ed)?.v || 0;
+      const maintenance = db.prepare(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_orders WHERE is_deleted=0 AND status='completed' AND completed_date >= ? AND completed_date < ?`).get(sd, ed)?.v || 0;
       let payroll = 0;
-      try { payroll = db.prepare(`SELECT COALESCE(SUM(net_salary),0) as v FROM payroll WHERE period_start >= ${monthStart} AND period_start < ${monthEnd}`).get()?.v || 0; } catch {}
+      try { payroll = db.prepare(`SELECT COALESCE(SUM(pr.net_pay),0) as v FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pp.period_month >= strftime('%Y-%m',?) AND pp.period_month < strftime('%Y-%m',?)`).get(sd, ed)?.v || 0; } catch {}
       
       const totalCost = expenses + maintenance + payroll;
       data.push({ month: monthLabel, revenue, expenses, maintenance, payroll, total_cost: totalCost, net_profit: revenue - totalCost });
@@ -1092,7 +1118,7 @@ router.get('/pl-detail', requirePermission('reports', 'view'), (req, res) => {
     
     // Payroll cost
     let payrollCost = 0;
-    try { payrollCost = db.prepare(`SELECT COALESCE(SUM(net_salary),0) as v FROM payroll WHERE period_start >= ? AND period_start <= ?`).get(from, to)?.v || 0; } catch {}
+    try { payrollCost = db.prepare(`SELECT COALESCE(SUM(pr.net_pay),0) as v FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pp.period_month >= strftime('%Y-%m',?) AND pp.period_month <= strftime('%Y-%m',?)`).get(from, to)?.v || 0; } catch {}
     
     const totalCost = totalExpenses + maintenanceCost + payrollCost;
     

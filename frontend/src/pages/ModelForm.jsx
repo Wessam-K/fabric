@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Printer, Camera, Layers, FileText, ClipboardList, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, Printer, Layers, ClipboardList, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';

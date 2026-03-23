@@ -1,37 +1,75 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell } from 'lucide-react';
+import { Bell, X, RefreshCw } from 'lucide-react';
 import api from '../utils/api';
 
 const NAV_MAP = {
-  fabric: '/inventory',
+  fabric: '/fabrics',
   accessory: '/accessories',
   work_order: '/work-orders',
   invoice: '/invoices',
   purchase_order: '/purchase-orders',
   customer: '/customers',
+  maintenance: '/maintenance',
+  machine: '/machines',
+  expense: '/expenses',
+};
+
+const TYPE_ICONS = {
+  overdue_invoice: '📄',
+  low_stock_fabric: '🧵',
+  low_stock: '📦',
+  overdue_work_order: '⚙️',
+  overdue: '⏰',
+  maintenance_upcoming: '🔧',
+  maintenance_stale: '🔧',
+  overdue_maintenance: '🔧',
+  overdue_po: '🛒',
+  expense_pending: '💸',
+  machine_idle: '🤖',
+  machine_broken: '🤖',
 };
 
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const ref = useRef(null);
+  const intervalRef = useRef(null);
   const navigate = useNavigate();
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
+      setError(false);
       const { data } = await api.get('/notifications', { params: { limit: 20 } });
       setNotifications(data.notifications || []);
       setUnreadCount(data.unread_count || 0);
-    } catch {}
-  };
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    const startPolling = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(load, 30000);
+    };
+    const stopPolling = () => {
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    };
+    startPolling();
+    const handleVisibility = () => {
+      if (document.hidden) stopPolling();
+      else { load(); startPolling(); }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => { stopPolling(); document.removeEventListener('visibilitychange', handleVisibility); };
+  }, [load]);
 
   useEffect(() => {
     const handleClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -40,17 +78,16 @@ export default function NotificationBell() {
   }, []);
 
   const markRead = async (id) => {
-    try {
-      await api.patch(`/notifications/${id}/read`);
-      load();
-    } catch {}
+    try { await api.patch(`/notifications/${id}/read`); load(); } catch {}
   };
 
   const markAllRead = async () => {
-    try {
-      await api.patch('/notifications/read-all');
-      load();
-    } catch {}
+    try { await api.patch('/notifications/read-all'); load(); } catch {}
+  };
+
+  const dismiss = async (e, id) => {
+    e.stopPropagation();
+    try { await api.delete(`/notifications/${id}`); load(); } catch {}
   };
 
   const handleNotificationClick = (n) => {
@@ -66,6 +103,8 @@ export default function NotificationBell() {
     }
   };
 
+  const getIcon = (type) => TYPE_ICONS[type] || '🔔';
+
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(!open)} className="relative p-2 text-gray-400 hover:text-[#c9a84c] transition-colors">
@@ -78,26 +117,56 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-200 z-50 max-h-96 overflow-hidden flex flex-col" style={{ minWidth: 300 }}>
+        <div className="absolute left-0 top-full mt-2 w-[22rem] sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 z-[100] max-h-[32rem] overflow-hidden flex flex-col" dir="rtl">
           <div className="flex items-center justify-between p-3 border-b border-gray-100">
             <span className="text-sm font-bold text-[#1a1a2e]">الإشعارات</span>
             {unreadCount > 0 && (
-              <button onClick={markAllRead} className="text-[10px] text-[#c9a84c] hover:underline">تحديد الكل كمقروء</button>
+              <button onClick={markAllRead} className="text-[10px] text-[#c9a84c] hover:underline">تحديد الكل كمقروع</button>
             )}
           </div>
           <div className="overflow-y-auto flex-1">
-            {notifications.length === 0 ? (
+            {loading ? (
+              <div className="space-y-2 p-3">
+                {[1,2,3].map(i => (
+                  <div key={i} className="animate-pulse space-y-1.5 py-2">
+                    <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-2.5 bg-gray-100 rounded w-full"></div>
+                    <div className="h-2 bg-gray-50 rounded w-1/3"></div>
+                  </div>
+                ))}
+              </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <p className="text-xs text-red-400 mb-2">فشل تحميل الإشعارات</p>
+                <button onClick={load} className="text-xs text-[#c9a84c] hover:underline flex items-center gap-1 mx-auto">
+                  <RefreshCw size={12} /> إعادة المحاولة
+                </button>
+              </div>
+            ) : notifications.length === 0 ? (
               <p className="text-center py-8 text-xs text-gray-400">لا توجد إشعارات</p>
             ) : (
               notifications.map(n => (
                 <div key={n.id} onClick={() => handleNotificationClick(n)}
-                  className={`px-3 py-2.5 border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-blue-50/50' : ''}`}>
-                  <p className="text-xs font-bold text-[#1a1a2e]">{n.title}</p>
-                  <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{n.body || n.message}</p>
-                  <p className="text-[9px] text-gray-300 mt-1">{n.created_at ? new Date(n.created_at).toLocaleString('ar-EG') : ''}</p>
+                  className={`px-3 py-2.5 border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors group relative ${!n.is_read ? 'bg-blue-50/50' : ''}`}>
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm mt-0.5 shrink-0">{getIcon(n.type)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-[#1a1a2e]">{n.title}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed line-clamp-2">{n.body || n.message}</p>
+                      <p className="text-[9px] text-gray-300 mt-1">{n.created_at ? new Date(n.created_at).toLocaleString('ar-EG') : ''}</p>
+                    </div>
+                    <button onClick={(e) => dismiss(e, n.id)}
+                      className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 p-0.5 transition-opacity shrink-0">
+                      <X size={12} />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
+          </div>
+          <div className="border-t border-gray-100 p-2 text-center">
+            <button onClick={() => { navigate('/notifications'); setOpen(false); }}
+              className="text-[11px] text-[#c9a84c] hover:underline">عرض الكل</button>
           </div>
         </div>
       )}

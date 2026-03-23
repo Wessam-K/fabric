@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, ClipboardList, Clock, CheckCircle, AlertTriangle, LayoutGrid, List as ListIcon, Download } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
-import { PageHeader, KPIStrip, DataTable, StatusBadge, LoadingState, EmptyState } from '../components/ui';
+import { PageHeader, KPIStrip, StatusBadge, LoadingState, EmptyState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
 import { exportFromBackend } from '../utils/exportUtils';
@@ -48,19 +48,14 @@ export default function WorkOrdersList() {
       if (statusFilter) params.status = statusFilter;
       const { data } = await api.get('/work-orders', { params });
       setWorkOrders(data.work_orders || []);
-      setStats(data.stats || {});
+      const s = data.stats || {};
+      s.total = (s.draft || 0) + (s.pending || 0) + (s.in_progress || 0) + (s.completed || 0) + (s.cancelled || 0);
+      setStats(s);
     } catch { toast.error('فشل تحميل أوامر الإنتاج'); }
     finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, [search, statusFilter]);
-
-  const kpiCards = [
-    { label: 'إجمالي', value: stats.total || 0, icon: ClipboardList, color: 'bg-gray-50 text-gray-600' },
-    { label: 'قيد التنفيذ', value: stats.in_progress || 0, icon: Clock, color: 'bg-blue-50 text-blue-600' },
-    { label: 'مكتمل', value: stats.completed || 0, icon: CheckCircle, color: 'bg-green-50 text-green-600' },
-    { label: 'عاجل', value: stats.urgent || 0, icon: AlertTriangle, color: 'bg-red-50 text-red-600' },
-  ];
 
   const kanbanCols = [
     { key: 'draft', label: 'مسودة', color: 'border-gray-300' },

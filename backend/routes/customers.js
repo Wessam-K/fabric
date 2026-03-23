@@ -1,28 +1,26 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { requirePermission } = require('../middleware/auth');
+const { logAudit, requirePermission } = require('../middleware/auth');
 
 // ═══════════════════════════════════════════════
 // GET /api/customers — list with search & filter
 // ═══════════════════════════════════════════════
-router.get('/', (req, res) => {
+router.get('/', requirePermission('customers', 'view'), (req, res) => {
   try {
     const { search, status, page = 1, limit = 50 } = req.query;
-    let q = `SELECT * FROM customers WHERE 1=1`;
+    let where = `WHERE 1=1`;
     const params = [];
-    if (status) { q += ` AND status = ?`; params.push(status); }
+    if (status) { where += ` AND status = ?`; params.push(status); }
     if (search) {
-      q += ` AND (name LIKE ? OR code LIKE ? OR phone LIKE ?)`;
+      where += ` AND (name LIKE ? OR code LIKE ? OR phone LIKE ?)`;
       const s = `%${search}%`;
       params.push(s, s, s);
     }
-    q += ` ORDER BY created_at DESC`;
+    const total = db.prepare(`SELECT COUNT(*) as c FROM customers ${where}`).get(...params).c;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    q += ` LIMIT ? OFFSET ?`;
-    params.push(parseInt(limit), offset);
-    const rows = db.prepare(q).all(...params);
-    res.json(rows);
+    const rows = db.prepare(`SELECT * FROM customers ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
+    res.json({ customers: rows, total });
   } catch (err) {
     console.error('Customers list error:', err);
     res.status(500).json({ error: 'حدث خطأ أثناء تحميل العملاء' });
@@ -179,6 +177,7 @@ router.post('/', requirePermission('customers', 'create'), (req, res) => {
     `).run(customerCode, name.trim(), phone || null, email || null, address || null, city || null, tax_number || null, credit_limit || 0, notes || null, customer_type || 'retail', contact_name || null, payment_terms || null);
 
     const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
+    logAudit(req, 'CREATE', 'customer', customer.id, customer.name);
     res.status(201).json(customer);
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE constraint')) {
@@ -227,6 +226,7 @@ router.patch('/:id', requirePermission('customers', 'edit'), (req, res) => {
     );
 
     const updated = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
+    logAudit(req, 'UPDATE', 'customer', customer.id, customer.name, customer, updated);
     res.json(updated);
   } catch (err) {
     console.error('Customer update error:', err);
@@ -243,6 +243,7 @@ router.delete('/:id', requirePermission('customers', 'delete'), (req, res) => {
     if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
 
     db.prepare("UPDATE customers SET status = 'inactive', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
+    logAudit(req, 'DELETE', 'customer', customer.id, customer.name);
     res.json({ message: 'تم تعطيل العميل بنجاح', id: customer.id });
   } catch (err) {
     console.error('Customer delete error:', err);
@@ -294,8 +295,13 @@ router.post('/:id/payments', requirePermission('customers', 'edit'), (req, res) 
     }
 
     if (invoice_id) {
-      const inv = db.prepare('SELECT id FROM invoices WHERE id = ? AND customer_id = ?').get(invoice_id, customer.id);
+      const inv = db.prepare('SELECT id, total FROM invoices WHERE id = ? AND customer_id = ?').get(invoice_id, customer.id);
       if (!inv) return res.status(400).json({ error: 'الفاتورة غير موجودة أو لا تخص هذا العميل' });
+      const alreadyPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM customer_payments WHERE invoice_id=?').get(invoice_id).v;
+      const remaining = inv.total - alreadyPaid;
+      if (amount > remaining) {
+        return res.status(400).json({ error: `المبلغ يتجاوز المتبقي على الفاتورة (${remaining.toFixed(2)})` });
+      }
     }
 
     const result = db.prepare(`
@@ -303,7 +309,21 @@ router.post('/:id/payments', requirePermission('customers', 'edit'), (req, res) 
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(customer.id, invoice_id || null, amount, payment_method || 'cash', reference_number || null, notes || null, req.user?.id || null);
 
+    // Auto-update invoice status if linked
+    if (invoice_id) {
+      const inv = db.prepare('SELECT total FROM invoices WHERE id=?').get(invoice_id);
+      if (inv) {
+        const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM customer_payments WHERE invoice_id=?').get(invoice_id).v;
+        if (totalPaid >= inv.total) {
+          db.prepare("UPDATE invoices SET status='paid', updated_at=datetime('now') WHERE id=?").run(invoice_id);
+        } else if (totalPaid > 0) {
+          db.prepare("UPDATE invoices SET status='partial', updated_at=datetime('now') WHERE id=? AND status != 'paid'").run(invoice_id);
+        }
+      }
+    }
+
     const payment = db.prepare('SELECT * FROM customer_payments WHERE id = ?').get(result.lastInsertRowid);
+    logAudit(req, 'CREATE', 'customer_payment', payment.id, `${amount}`);
     res.status(201).json(payment);
   } catch (err) {
     res.status(500).json({ error: 'حدث خطأ أثناء تسجيل الدفعة' });

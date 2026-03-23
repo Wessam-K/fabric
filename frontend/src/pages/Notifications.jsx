@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Bell, Check, CheckCheck, Trash2, Search, Filter } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2, Search } from 'lucide-react';
 import api from '../utils/api';
 import { PageHeader, LoadingState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import { useNavigate } from 'react-router-dom';
 
-const TYPE_LABELS = { low_stock: 'مخزون منخفض', overdue: 'متأخر', info: 'معلومات', warning: 'تنبيه', system: 'نظام' };
-const TYPE_COLORS = { low_stock: 'bg-orange-100 text-orange-700', overdue: 'bg-red-100 text-red-700', info: 'bg-blue-100 text-blue-700', warning: 'bg-yellow-100 text-yellow-700', system: 'bg-gray-100 text-gray-600' };
+const TYPE_LABELS = { low_stock: 'مخزون منخفض', low_stock_fabric: 'مخزون قماش', low_stock_accessory: 'مخزون إكسسوار', overdue: 'متأخر', overdue_invoice: 'فاتورة متأخرة', overdue_work_order: 'أمر متأخر', overdue_maintenance: 'صيانة متأخرة', maintenance_upcoming: 'صيانة قادمة', maintenance_stale: 'صيانة معلقة', expense_pending: 'مصروف معلق', machine_broken: 'ماكينة معطلة', machine_idle: 'ماكينة متوقفة', info: 'معلومات', warning: 'تنبيه', system: 'نظام' };
+const TYPE_COLORS = { low_stock: 'bg-orange-100 text-orange-700', low_stock_fabric: 'bg-orange-100 text-orange-700', low_stock_accessory: 'bg-orange-100 text-orange-700', overdue: 'bg-red-100 text-red-700', overdue_invoice: 'bg-red-100 text-red-700', overdue_work_order: 'bg-red-100 text-red-700', overdue_maintenance: 'bg-red-100 text-red-700', maintenance_upcoming: 'bg-yellow-100 text-yellow-700', maintenance_stale: 'bg-yellow-100 text-yellow-700', expense_pending: 'bg-purple-100 text-purple-700', machine_broken: 'bg-red-100 text-red-700', machine_idle: 'bg-gray-100 text-gray-700', info: 'bg-blue-100 text-blue-700', warning: 'bg-yellow-100 text-yellow-700', system: 'bg-gray-100 text-gray-600' };
 const NAV_MAP = { fabric: '/inventory/fabrics', accessory: '/accessories', work_order: '/work-orders', invoice: '/invoices', purchase_order: '/purchase-orders' };
 
 export default function Notifications() {
@@ -20,26 +20,32 @@ export default function Notifications() {
     setLoading(true);
     try {
       const params = { limit: 200 };
-      if (filter === 'unread') params.unread_only = '1';
+      if (filter === 'unread') params.unread_only = 'true';
       const { data } = await api.get('/notifications', { params });
-      setItems(data);
+      setItems(data.notifications || []);
     } catch {} finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [filter]);
 
   const markRead = async (id) => {
-    await api.patch(`/notifications/${id}/read`);
-    setItems(items.map(n => n.id === id ? { ...n, is_read: 1 } : n));
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      setItems(items.map(n => n.id === id ? { ...n, is_read: 1 } : n));
+    } catch {}
   };
 
   const markAllRead = async () => {
-    await api.patch('/notifications/read-all');
-    setItems(items.map(n => ({ ...n, is_read: 1 })));
+    try {
+      await api.patch('/notifications/read-all');
+      setItems(items.map(n => ({ ...n, is_read: 1 })));
+    } catch {}
   };
 
   const remove = async (id) => {
-    await api.delete(`/notifications/${id}`);
-    setItems(items.filter(n => n.id !== id));
+    try {
+      await api.delete(`/notifications/${id}`);
+      setItems(items.filter(n => n.id !== id));
+    } catch {}
   };
 
   const handleClick = (n) => {
@@ -51,9 +57,9 @@ export default function Notifications() {
   };
 
   const filtered = items.filter(n => {
-    if (filter === 'low_stock' && n.type !== 'low_stock') return false;
-    if (filter === 'overdue' && n.type !== 'overdue') return false;
-    if (search && !n.title.includes(search) && !n.body.includes(search)) return false;
+    if (filter === 'low_stock' && !n.type?.includes('low_stock')) return false;
+    if (filter === 'overdue' && !n.type?.includes('overdue')) return false;
+    if (search && !(n.title || '').includes(search) && !(n.body || n.message || '').includes(search)) return false;
     return true;
   });
 

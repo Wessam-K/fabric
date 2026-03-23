@@ -25,7 +25,7 @@ export default function Maintenance() {
   const [machines, setMachines] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -157,7 +157,7 @@ export default function Maintenance() {
 
   const openEdit = (o) => {
     setEditId(o.id);
-    setForm({ machine_id: o.machine_id, title: o.title || '', description: o.description || '', maintenance_type: o.maintenance_type || 'corrective', priority: o.priority || 'medium', cost: o.cost || '', performed_by: o.performed_by || '', status: o.status });
+    setForm({ machine_id: o.machine_id, title: o.title || '', description: o.description || '', maintenance_type: o.maintenance_type || 'corrective', priority: o.priority || 'medium', cost: o.cost ?? '', performed_by: o.performed_by || '', status: o.status });
     setShowModal(true);
   };
 
@@ -265,7 +265,7 @@ export default function Maintenance() {
                 <td className="py-3 px-3 font-mono">{o.cost ? `${fmt(o.cost)} ج` : '—'}</td>
                 <td className="py-3 px-3">
                   <div className="flex items-center gap-1">
-                    {can('maintenance', 'update') && o.status !== 'completed' && o.status !== 'cancelled' && (
+                    {can('maintenance', 'edit') && o.status !== 'completed' && o.status !== 'cancelled' && (
                       <button onClick={() => openEdit(o)} className="text-blue-600 hover:bg-blue-50 p-1 rounded text-xs">تعديل</button>
                     )}
                     {can('maintenance', 'delete') && (
@@ -279,7 +279,7 @@ export default function Maintenance() {
         </table>
       </div>
 
-      <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} />
+      <Pagination total={total} page={page} pageSize={pageSize} onPageChange={(p, ps) => { setPage(p); setPageSize(ps); }} />
 
       {/* Create/Edit Modal */}
       {showModal && (

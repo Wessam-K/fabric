@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, FileText, DollarSign, Clock, CheckCircle, AlertTriangle, Send, X, Eye, Pencil, Trash2, Download, Filter } from 'lucide-react';
+import { Plus, Search, FileText, Clock, CheckCircle, AlertTriangle, Send, X, Eye, Pencil, Trash2, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';

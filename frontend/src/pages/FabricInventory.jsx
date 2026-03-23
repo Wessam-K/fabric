@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Warehouse, Package, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Package, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { PageHeader, LoadingState, EmptyState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';

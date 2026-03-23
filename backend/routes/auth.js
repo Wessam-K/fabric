@@ -2,7 +2,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
 const db = require('../database');
-const { generateToken, requireAuth, logAudit } = require('../middleware/auth');
+const { generateToken, requireAuth, logAudit, JWT_SECRET } = require('../middleware/auth');
+const jwt = require('jsonwebtoken');
 
 // POST /api/auth/login
 router.post('/login', (req, res) => {
@@ -54,6 +55,17 @@ router.post('/login', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /api/auth/refresh — issue new token if current token still valid
+router.post('/refresh', requireAuth, (req, res) => {
+  try {
+    // Verify user still exists and is active
+    const user = db.prepare('SELECT id, username, full_name, role, status FROM users WHERE id = ? AND status = ?').get(req.user.id, 'active');
+    if (!user) return res.status(401).json({ error: 'المستخدم غير نشط' });
+    const token = generateToken(user);
+    res.json({ token });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // POST /api/auth/logout
 router.post('/logout', requireAuth, (req, res) => {
   try {
@@ -65,8 +77,8 @@ router.post('/logout', requireAuth, (req, res) => {
 // GET /api/auth/me
 router.get('/me', requireAuth, (req, res) => {
   try {
-    const user = db.prepare('SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, must_change_password FROM users WHERE id = ?').get(req.user.id);
-    if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+    const user = db.prepare('SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, must_change_password FROM users WHERE id = ? AND status = ?').get(req.user.id, 'active');
+    if (!user) return res.status(401).json({ error: 'الحساب معطل أو غير موجود' });
     res.json(user);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -107,7 +119,11 @@ router.put('/change-password', requireAuth, (req, res) => {
 // GET /api/auth/profile — detailed profile with recent activity
 router.get('/profile', requireAuth, (req, res) => {
   try {
-    const user = db.prepare('SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, password_changed_at FROM users WHERE id = ?').get(req.user.id);
+    // Dynamically get available columns to avoid errors with missing migration columns
+    const cols = db.pragma('table_info(users)').map(c => c.name);
+    const selectCols = ['id', 'username', 'full_name', 'email', 'role', 'department', 'employee_id', 'status', 'last_login', 'created_at', 'password_changed_at']
+      .filter(c => cols.includes(c)).join(', ');
+    const user = db.prepare(`SELECT ${selectCols} FROM users WHERE id = ?`).get(req.user.id);
     if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
     const recentActivity = db.prepare('SELECT action, entity_type, entity_label, created_at FROM audit_log WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(req.user.id);
     res.json({ ...user, recent_activity: recentActivity });

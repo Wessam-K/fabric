@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Star, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Star, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from './Toast';
 

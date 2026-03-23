@@ -66,7 +66,7 @@ router.get('/:code', (req, res) => {
 
     // 6. Check work orders by WO number
     const workOrder = db.prepare(`
-      SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.total_quantity,
+      SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.quantity,
              wo.due_date, wo.completed_date, wo.total_production_cost,
              m.model_code, m.model_name
       FROM work_orders wo

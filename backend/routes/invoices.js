@@ -4,7 +4,7 @@ const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 
 // GET /api/invoices — list with search, status filter, date range
-router.get('/', (req, res) => {
+router.get('/', requirePermission('invoices', 'view'), (req, res) => {
   try {
     const { search, status, date_from, date_to, customer_id, page = 1, limit = 50 } = req.query;
     let q = `SELECT i.*, c.name as customer_name_linked FROM invoices i LEFT JOIN customers c ON c.id=i.customer_id WHERE 1=1`;
@@ -45,7 +45,8 @@ router.get('/next-number', (req, res) => {
     const last = db.prepare("SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1").get();
     let next = 'INV-001';
     if (last) {
-      const num = parseInt(last.invoice_number.replace(/\D/g, '') || '0') + 1;
+      const trailingDigits = last.invoice_number.match(/(\d+)$/);
+      const num = (trailingDigits ? parseInt(trailingDigits[1], 10) : 0) + 1;
       next = `INV-${String(num).padStart(3, '0')}`;
     }
     res.json({ next_number: next });
@@ -56,9 +57,9 @@ router.get('/next-number', (req, res) => {
 router.get('/export', (req, res) => {
   try {
     const rows = db.prepare(`SELECT i.*, c.name as customer_name_linked FROM invoices i LEFT JOIN customers c ON c.id=i.customer_id ORDER BY i.created_at DESC`).all();
-    const header = 'invoice_number,customer_name,status,subtotal,discount,tax,total,due_date,notes,created_at';
+    const header = 'invoice_number,customer_name,status,subtotal,discount,tax_pct,total,due_date,notes,created_at';
     const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
-    const csv = [header, ...rows.map(r => [r.invoice_number,r.customer_name_linked||r.customer_name,r.status,r.subtotal,r.discount,r.tax,r.total,r.due_date,r.notes,r.created_at].map(esc).join(','))].join('\n');
+    const csv = [header, ...rows.map(r => [r.invoice_number,r.customer_name_linked||r.customer_name,r.status,r.subtotal,r.discount,r.tax_pct,r.total,r.due_date,r.notes,r.created_at].map(esc).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=invoices.csv');
     res.send('\uFEFF' + csv);
@@ -123,9 +124,18 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
 
     const { customer_name, customer_phone, customer_email, customer_id, notes, tax_pct, discount, due_date, items, status } = req.body;
 
-    const subtotal = (items || []).reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
-    const taxAmt = subtotal * ((parseFloat(tax_pct) || 0) / 100);
-    const total = subtotal + taxAmt - (parseFloat(discount) || 0);
+    // Only recalculate totals if items are provided
+    let subtotal = invoice.subtotal;
+    let total = invoice.total;
+    if (items) {
+      subtotal = items.reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
+      const taxAmt = subtotal * ((parseFloat(tax_pct) || invoice.tax_pct || 0) / 100);
+      total = subtotal + taxAmt - (parseFloat(discount) || invoice.discount || 0);
+    } else if (tax_pct !== undefined || discount !== undefined) {
+      subtotal = invoice.subtotal;
+      const taxAmt = subtotal * (((parseFloat(tax_pct) ?? invoice.tax_pct) || 0) / 100);
+      total = subtotal + taxAmt - ((parseFloat(discount) ?? invoice.discount) || 0);
+    }
 
     db.prepare(`UPDATE invoices SET customer_name=?, customer_phone=?, customer_email=?, customer_id=?, notes=?, subtotal=?, tax_pct=?, discount=?, total=?, status=?, due_date=?, updated_at=datetime('now')
       WHERE id=?`).run(
@@ -134,17 +144,19 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
       total, status || invoice.status, due_date ?? invoice.due_date, invoice.id
     );
 
-    // Replace items
-    db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(invoice.id);
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, model_code, description, variant, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?,?)');
-    const insertItems = db.transaction((items) => {
-      items.forEach((item, i) => {
-        const qty = parseFloat(item.quantity) || 0;
-        const price = parseFloat(item.unit_price) || 0;
-        insItem.run(invoice.id, item.model_code || null, item.description, item.variant || null, qty, price, qty * price, i);
+    // Only replace items if they were sent in the request
+    if (items) {
+      db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(invoice.id);
+      const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, model_code, description, variant, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?,?)');
+      const insertItems = db.transaction((items) => {
+        items.forEach((item, i) => {
+          const qty = parseFloat(item.quantity) || 0;
+          const price = parseFloat(item.unit_price) || 0;
+          insItem.run(invoice.id, item.model_code || null, item.description, item.variant || null, qty, price, qty * price, i);
+        });
       });
-    });
-    if (items?.length) insertItems(items);
+      if (items.length) insertItems(items);
+    }
 
     const updated = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice.id);
     updated.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoice.id);
@@ -160,6 +172,8 @@ router.patch('/:id/status', requirePermission('invoices', 'edit'), (req, res) =>
     if (!['draft', 'sent', 'paid', 'overdue', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'حالة غير صالحة' });
     }
+    const invoice = db.prepare('SELECT id FROM invoices WHERE id = ?').get(req.params.id);
+    if (!invoice) return res.status(404).json({ error: 'الفاتورة غير موجودة' });
     db.prepare("UPDATE invoices SET status=?, updated_at=datetime('now') WHERE id=?").run(status, req.params.id);
     res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id));
   } catch (err) { res.status(500).json({ error: err.message }); }

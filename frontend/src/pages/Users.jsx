@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Shield, Plus, Search, Edit2, Key, X, UserX, ChevronDown, ChevronUp, Check, Lock, Unlock, Eye } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Shield, Plus, Search, Edit2, Key, X, UserX, Check, Lock, Eye } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
@@ -74,7 +74,7 @@ export default function UsersPage() {
 
   function openEdit(u) {
     setEditUser(u);
-    setForm({ username: u.username, full_name: u.full_name, email: u.email || '', role: u.role, department: u.department || '', password: '' });
+    setForm({ username: u.username, full_name: u.full_name, email: u.email || '', role: u.role, department: u.department || '', password: '', status: u.status || 'active' });
     setError('');
     setShowDrawer(true);
   }

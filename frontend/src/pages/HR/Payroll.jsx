@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, Calculator, CheckCircle2, CreditCard, Download, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calculator, CheckCircle2, CreditCard, Download, Eye } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api';

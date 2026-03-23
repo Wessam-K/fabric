@@ -22,6 +22,19 @@ router.post('/', requirePermission('settings', 'edit'), (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// PUT /api/stage-templates/reorder — bulk update sort_order (MUST be before :id route)
+router.put('/reorder', requirePermission('settings', 'edit'), (req, res) => {
+  try {
+    const { order } = req.body; // [{id, sort_order}]
+    const upd = db.prepare('UPDATE stage_templates SET sort_order=? WHERE id=?');
+    const transaction = db.transaction(() => {
+      (order || []).forEach(item => upd.run(item.sort_order, item.id));
+    });
+    transaction();
+    res.json(db.prepare('SELECT * FROM stage_templates ORDER BY sort_order').all());
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // PUT /api/stage-templates/:id
 router.put('/:id', requirePermission('settings', 'edit'), (req, res) => {
   try {
@@ -37,19 +50,6 @@ router.delete('/:id', requirePermission('settings', 'delete'), (req, res) => {
   try {
     db.prepare('DELETE FROM stage_templates WHERE id=?').run(parseInt(req.params.id));
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// PUT /api/stage-templates/reorder — bulk update sort_order
-router.put('/reorder', requirePermission('settings', 'edit'), (req, res) => {
-  try {
-    const { order } = req.body; // [{id, sort_order}]
-    const upd = db.prepare('UPDATE stage_templates SET sort_order=? WHERE id=?');
-    const transaction = db.transaction(() => {
-      (order || []).forEach(item => upd.run(item.sort_order, item.id));
-    });
-    transaction();
-    res.json(db.prepare('SELECT * FROM stage_templates ORDER BY sort_order').all());
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

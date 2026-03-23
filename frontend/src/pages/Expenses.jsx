@@ -22,7 +22,7 @@ export default function Expenses() {
   const [summary, setSummary] = useState({});
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -211,13 +211,13 @@ export default function Expenses() {
                 </td>
                 <td className="py-3 px-3">
                   <div className="flex items-center gap-1">
-                    {e.status === 'pending' && can('expenses', 'update') && (
+                    {e.status === 'pending' && can('expenses', 'approve') && (
                       <>
                         <button onClick={() => handleApprove(e.id)} className="text-green-600 hover:bg-green-50 p-1 rounded" title="اعتماد"><CheckCircle size={16} /></button>
                         <button onClick={() => { setRejectId(e.id); setRejectReason(''); }} className="text-red-600 hover:bg-red-50 p-1 rounded" title="رفض"><XCircle size={16} /></button>
                       </>
                     )}
-                    {e.status === 'pending' && can('expenses', 'update') && (
+                    {e.status === 'pending' && can('expenses', 'edit') && (
                       <button onClick={() => openEdit(e)} className="text-blue-600 hover:bg-blue-50 p-1 rounded text-xs">تعديل</button>
                     )}
                     {can('expenses', 'delete') && (
@@ -231,7 +231,7 @@ export default function Expenses() {
         </table>
       </div>
 
-      <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} />
+      <Pagination total={total} page={page} pageSize={pageSize} onPageChange={(p, ps) => { setPage(p); setPageSize(ps); }} />
 
       {/* Create/Edit Modal */}
       {showModal && (

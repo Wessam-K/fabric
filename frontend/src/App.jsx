@@ -1,6 +1,6 @@
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useState } from 'react';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, User, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench, Calculator, Send, CalendarClock, CheckSquare, FileSpreadsheet, ShoppingBag, Beaker, RotateCcw, FolderOpen, Database } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
@@ -48,18 +48,26 @@ import GlobalSearch from './components/GlobalSearch';
 import Breadcrumbs from './components/Breadcrumbs';
 import NotificationBell from './components/NotificationBell';
 import NotificationsPage from './pages/Notifications';
+import Permissions from './pages/Permissions';
+import MRP from './pages/MRP';
+import Shipping from './pages/Shipping';
+import Scheduling from './pages/Scheduling';
+import Quality from './pages/Quality';
+import Quotations from './pages/Quotations';
+import SalesOrders from './pages/SalesOrders';
+import Samples from './pages/Samples';
+import Returns from './pages/Returns';
+import Documents from './pages/Documents';
+import Backups from './pages/Backups';
 import QuickActions from './components/QuickActions';
 import { ToastProvider } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
 
-function ProtectedRoute({ children, roles, perm }) {
+function ProtectedRoute({ children, perm }) {
   const { user, loading, can } = useAuth();
   if (loading) return <div className="flex items-center justify-center min-h-screen text-gray-400">جاري التحميل...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (perm && !can(perm[0], perm[1])) {
-    return <div className="flex items-center justify-center min-h-screen text-red-400 text-lg">ليس لديك صلاحية للوصول لهذه الصفحة</div>;
-  }
-  if (roles && !roles.includes(user.role) && user.role !== 'superadmin') {
     return <div className="flex items-center justify-center min-h-screen text-red-400 text-lg">ليس لديك صلاحية للوصول لهذه الصفحة</div>;
   }
   return children;
@@ -89,7 +97,19 @@ function AppLayout() {
         { path: '/models', label: 'الموديلات', icon: List, hide: () => !can('models', 'view') },
         { path: '/machines', label: 'الماكينات', icon: Cog, hide: () => !can('machines', 'view') },
         { path: '/maintenance', label: 'الصيانة', icon: Wrench, hide: () => !can('maintenance', 'view') },
+        { path: '/scheduling', label: 'الجدولة', icon: CalendarClock, hide: () => !can('scheduling', 'view') },
         { path: '/stage-templates', label: 'قوالب المراحل', icon: Layers, hide: () => !can('settings', 'view') },
+      ],
+    },
+    {
+      id: 'sales',
+      label: 'المبيعات',
+      icon: ShoppingBag,
+      show: () => can('quotations', 'view') || can('sales_orders', 'view') || can('samples', 'view'),
+      items: [
+        { path: '/quotations', label: 'عروض الأسعار', icon: FileSpreadsheet, hide: () => !can('quotations', 'view') },
+        { path: '/sales-orders', label: 'أوامر البيع', icon: ShoppingBag, hide: () => !can('sales_orders', 'view') },
+        { path: '/samples', label: 'العينات', icon: Beaker, hide: () => !can('samples', 'view') },
       ],
     },
     {
@@ -102,6 +122,17 @@ function AppLayout() {
         { path: '/accessories', label: 'الاكسسوارات', icon: Gem, hide: () => !can('accessories', 'view') },
         { path: '/inventory/fabrics', label: 'مخزون الأقمشة', icon: Warehouse, hide: () => !can('inventory', 'view') },
         { path: '/inventory/accessories', label: 'مخزون الاكسسوارات', icon: Package, hide: () => !can('inventory', 'view') },
+        { path: '/mrp', label: 'تخطيط الاحتياجات', icon: Calculator, hide: () => !can('mrp', 'view') },
+      ],
+    },
+    {
+      id: 'shipping',
+      label: 'الشحن',
+      icon: Send,
+      show: () => can('shipping', 'view'),
+      items: [
+        { path: '/shipping', label: 'الشحنات', icon: Send, hide: () => !can('shipping', 'view') },
+        { path: '/returns', label: 'المرتجعات', icon: RotateCcw, hide: () => !can('returns', 'view') },
       ],
     },
     {
@@ -118,6 +149,15 @@ function AppLayout() {
         { path: '/accounting/journal', label: 'القيود اليومية', icon: Scale, hide: () => !can('accounting', 'view') },
         { path: '/accounting/trial-balance', label: 'ميزان المراجعة', icon: BarChart2, hide: () => !can('accounting', 'view') },
         { path: '/expenses', label: 'المصروفات', icon: DollarSign, hide: () => !can('expenses', 'view') },
+      ],
+    },
+    {
+      id: 'quality',
+      label: 'الجودة',
+      icon: CheckSquare,
+      show: () => can('quality', 'view'),
+      items: [
+        { path: '/quality', label: 'إدارة الجودة', icon: CheckSquare, hide: () => !can('quality', 'view') },
       ],
     },
     {
@@ -144,8 +184,11 @@ function AppLayout() {
       show: () => can('users', 'view') || can('audit', 'view') || can('settings', 'view'),
       items: [
         { path: '/users', label: 'المستخدمين', icon: Shield, hide: () => !can('users', 'manage') },
+        { path: '/permissions', label: 'الصلاحيات', icon: Key, hide: () => !can('users', 'manage') },
         { path: '/audit-log', label: 'سجل المراجعة', icon: ClipboardList, hide: () => !can('audit', 'view') },
         { path: '/notifications', label: 'الإشعارات', icon: Bell, hide: () => false },
+        { path: '/documents', label: 'المستندات', icon: FolderOpen, hide: () => !can('documents', 'view') },
+        { path: '/backups', label: 'النسخ الاحتياطية', icon: Database, hide: () => !can('backups', 'view') },
         { path: '/settings', label: 'الإعدادات', icon: Settings, hide: () => !can('settings', 'view') },
       ],
     },
@@ -167,7 +210,7 @@ function AppLayout() {
       {mobileOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`${collapsed ? 'w-16' : 'w-56'} bg-[#1a1a2e] flex flex-col shrink-0 no-print transition-all duration-200 fixed lg:static inset-y-0 right-0 z-50 ${mobileOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
+      <aside className={`${collapsed ? 'w-16' : 'w-56'} bg-[#1a1a2e] flex flex-col shrink-0 no-print transition-all duration-200 fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 right-0 z-50 ${mobileOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
         {/* Header */}
         <div className={`flex items-center ${collapsed ? 'justify-center px-2' : 'px-4'} h-14 border-b border-white/8`}>
           {!collapsed && (
@@ -179,14 +222,6 @@ function AppLayout() {
             {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
           </button>
         </div>
-
-        {/* Search + Notifications (only expanded) */}
-        {!collapsed && (
-          <div className="px-3 pt-2.5 pb-1 flex items-center gap-2">
-            <div className="flex-1"><GlobalSearch /></div>
-            <NotificationBell />
-          </div>
-        )}
 
         {/* Navigation */}
         <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
@@ -287,14 +322,16 @@ function AppLayout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        {/* Mobile header */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 sticky top-0 z-30">
-          <button onClick={() => setMobileOpen(true)} className="text-[#1a1a2e]">
+      <main className="flex-1 min-w-0">
+        {/* Top header bar */}
+        <header className="sticky top-0 z-30 bg-white border-b border-gray-200 flex items-center gap-3 px-4 h-14">
+          <button onClick={() => setMobileOpen(true)} className="lg:hidden text-[#1a1a2e] p-1">
             <Menu size={20} />
           </button>
-          <span className="text-sm font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</span>
-        </div>
+          <span className="lg:hidden text-sm font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</span>
+          <div className="flex-1"><GlobalSearch /></div>
+          <NotificationBell />
+        </header>
         <div className="p-4 lg:p-0">
           <Breadcrumbs />
         </div>
@@ -326,6 +363,7 @@ function AppLayout() {
           <Route path="/accounting/trial-balance" element={<ProtectedRoute perm={['accounting','view']}><TrialBalance /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute perm={['settings','view']}><SettingsPage /></ProtectedRoute>} />
           <Route path="/users" element={<ProtectedRoute perm={['users','manage']}><UsersPage /></ProtectedRoute>} />
+          <Route path="/permissions" element={<ProtectedRoute perm={['users','manage']}><Permissions /></ProtectedRoute>} />
           <Route path="/audit-log" element={<ProtectedRoute perm={['audit','view']}><AuditLog /></ProtectedRoute>} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/hr/employees" element={<ProtectedRoute perm={['hr','view']}><Employees /></ProtectedRoute>} />
@@ -337,11 +375,21 @@ function AppLayout() {
           <Route path="/customers/:id" element={<ProtectedRoute perm={['invoices','view']}><CustomerDetail /></ProtectedRoute>} />
           <Route path="/suppliers/:id" element={<ProtectedRoute perm={['suppliers','view']}><SupplierDetail /></ProtectedRoute>} />
           <Route path="/machines/:id" element={<ProtectedRoute perm={['machines','view']}><MachineDetail /></ProtectedRoute>} />
+          <Route path="/mrp" element={<ProtectedRoute perm={['mrp','view']}><MRP /></ProtectedRoute>} />
+          <Route path="/shipping" element={<ProtectedRoute perm={['shipping','view']}><Shipping /></ProtectedRoute>} />
+          <Route path="/scheduling" element={<ProtectedRoute perm={['scheduling','view']}><Scheduling /></ProtectedRoute>} />
+          <Route path="/quality" element={<ProtectedRoute perm={['quality','view']}><Quality /></ProtectedRoute>} />
+          <Route path="/quotations" element={<ProtectedRoute perm={['quotations','view']}><Quotations /></ProtectedRoute>} />
+          <Route path="/sales-orders" element={<ProtectedRoute perm={['sales_orders','view']}><SalesOrders /></ProtectedRoute>} />
+          <Route path="/samples" element={<ProtectedRoute perm={['samples','view']}><Samples /></ProtectedRoute>} />
+          <Route path="/returns" element={<ProtectedRoute perm={['returns','view']}><Returns /></ProtectedRoute>} />
+          <Route path="/documents" element={<ProtectedRoute perm={['documents','view']}><Documents /></ProtectedRoute>} />
+          <Route path="/backups" element={<ProtectedRoute perm={['backups','view']}><Backups /></ProtectedRoute>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/change-password" element={<ChangePassword />} />
           {/* Legacy redirects */}
           <Route path="/workorders" element={<Navigate to="/work-orders" replace />} />
-          <Route path="/workorders/:id" element={<Navigate to="/work-orders/:id" replace />} />
+          <Route path="/workorders/:id" element={<LegacyWORedirect />} />
           <Route path="/purchaseorders" element={<Navigate to="/purchase-orders" replace />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
@@ -349,6 +397,11 @@ function AppLayout() {
       <QuickActions />
     </div>
   );
+}
+
+function LegacyWORedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/work-orders/${id}`} replace />;
 }
 
 function AuthRouter() {
@@ -361,9 +414,9 @@ function AuthRouter() {
       {needsSetup && <Route path="*" element={<Setup />} />}
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/setup" element={<Setup />} />
-      <Route path="/models/:code/print" element={<PrintView />} />
-      <Route path="/models/:code/invoice" element={<InvoicePrint />} />
-      <Route path="/invoices/:id/view" element={<InvoiceView />} />
+      <Route path="/models/:code/print" element={user ? <PrintView /> : <Navigate to="/login" replace />} />
+      <Route path="/models/:code/invoice" element={user ? <InvoicePrint /> : <Navigate to="/login" replace />} />
+      <Route path="/invoices/:id/view" element={user ? <InvoiceView /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={user ? <AppLayout /> : <Navigate to="/login" replace />} />
     </Routes>
   );

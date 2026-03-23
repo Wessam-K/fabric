@@ -4,7 +4,7 @@ const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 
 // GET /api/suppliers — list
-router.get('/', (req, res) => {
+router.get('/', requirePermission('suppliers', 'view'), (req, res) => {
   try {
     const { search, type, status, page, limit } = req.query;
     let q = 'SELECT * FROM suppliers WHERE 1=1';

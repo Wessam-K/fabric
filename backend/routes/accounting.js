@@ -27,7 +27,7 @@ router.post('/coa', requirePermission('accounting', 'create'), (req, res) => {
     if (!code || !name_ar || !type) return res.status(400).json({ error: 'الكود والاسم والنوع مطلوبين' });
     const result = db.prepare('INSERT INTO chart_of_accounts (code, name_ar, type, parent_id) VALUES (?,?,?,?)')
       .run(code, name_ar, type, parent_id || null);
-    logAudit(req, 'accounting', 'create_account', `حساب ${code} — ${name_ar}`);
+    logAudit(req, 'CREATE', 'chart_of_accounts', result.lastInsertRowid, `${code} — ${name_ar}`);
     res.json({ id: result.lastInsertRowid });
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'كود الحساب موجود بالفعل' });
@@ -41,7 +41,7 @@ router.put('/coa/:id', requirePermission('accounting', 'edit'), (req, res) => {
     const { code, name_ar, type, parent_id, is_active } = req.body;
     db.prepare('UPDATE chart_of_accounts SET code=?, name_ar=?, type=?, parent_id=?, is_active=? WHERE id=?')
       .run(code, name_ar, type, parent_id || null, is_active ?? 1, req.params.id);
-    logAudit(req, 'accounting', 'update_account', `حساب ${code}`);
+    logAudit(req, 'UPDATE', 'chart_of_accounts', req.params.id, `${code}`);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -111,7 +111,7 @@ router.post('/journal', requirePermission('accounting', 'create'), (req, res) =>
       return r.lastInsertRowid;
     });
     const id = trx();
-    logAudit(req, 'accounting', 'create_journal', `قيد ${entry_number}`);
+    logAudit(req, 'CREATE', 'journal_entry', id, `${entry_number}`);
     res.json({ id });
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'رقم القيد موجود بالفعل' });
@@ -127,7 +127,7 @@ router.patch('/journal/:id/post', requirePermission('accounting', 'post'), (req,
     if (entry.status === 'posted') return res.status(400).json({ error: 'القيد مرحّل بالفعل' });
     if (entry.status === 'void') return res.status(400).json({ error: 'لا يمكن ترحيل قيد ملغى' });
     db.prepare("UPDATE journal_entries SET status = 'posted', posted_at = datetime('now') WHERE id = ?").run(req.params.id);
-    logAudit(req, 'accounting', 'post_journal', `ترحيل قيد ${entry.entry_number}`);
+    logAudit(req, 'POST', 'journal_entry', req.params.id, `${entry.entry_number}`);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -139,7 +139,7 @@ router.patch('/journal/:id/void', requirePermission('accounting', 'post'), (req,
     if (!entry) return res.status(404).json({ error: 'القيد غير موجود' });
     if (entry.status === 'void') return res.status(400).json({ error: 'القيد ملغى بالفعل' });
     db.prepare("UPDATE journal_entries SET status = 'void' WHERE id = ?").run(req.params.id);
-    logAudit(req, 'accounting', 'void_journal', `إلغاء قيد ${entry.entry_number}`);
+    logAudit(req, 'VOID', 'journal_entry', req.params.id, `${entry.entry_number}`);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -191,7 +191,7 @@ router.get('/vat-summary', requirePermission('accounting', 'view'), (req, res) =
 
     const sales = db.prepare(`
       SELECT COUNT(*) AS count, COALESCE(SUM(subtotal), 0) AS subtotal,
-        COALESCE(SUM(tax_amount), 0) AS tax, COALESCE(SUM(total_amount), 0) AS total
+        COALESCE(SUM(total - subtotal + discount), 0) AS tax, COALESCE(SUM(total), 0) AS total
       FROM invoices i WHERE ${dateCond} AND status != 'cancelled'
     `).get(...params);
 
@@ -205,8 +205,9 @@ router.get('/vat-summary', requirePermission('accounting', 'view'), (req, res) =
       FROM purchase_orders po WHERE ${purchaseDateCond} AND status != 'cancelled'
     `).get(...purchaseParams);
 
-    // Assume 14% VAT on purchases (configurable)
-    const vatRate = 0.14;
+    // Get VAT rate from settings (default 14%)
+    const vatSetting = db.prepare("SELECT value FROM settings WHERE key='tax_rate'").get();
+    const vatRate = (parseFloat(vatSetting?.value) || 14) / 100;
     const purchaseVat = purchases.total * vatRate / (1 + vatRate);
 
     res.json({

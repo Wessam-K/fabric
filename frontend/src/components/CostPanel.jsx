@@ -1,9 +1,30 @@
-export default function CostPanel({ cost, masnaiya, masrouf, marginPct, consumerPrice, wholesalePrice, onChangeMasnaiya, onChangeMasrouf, onChangeMargin, onChangeConsumer, onChangeWholesale, readOnly }) {
+export default function CostPanel({ cost, masnaiya, masrouf, marginPct, consumerPrice, wholesalePrice, onChangeMasnaiya, onChangeMasrouf, onChangeMargin, onChangeConsumer, onChangeWholesale, readOnly, summary }) {
   const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const suggestedPrice = cost.cost_per_piece > 0 ? cost.cost_per_piece * (1 + (parseFloat(marginPct) || 0) / 100) : 0;
+  const suggestedPrice = cost.suggested_consumer_price || 0;
 
   return (
     <div className="space-y-4">
+      {/* Quick Summary Strip */}
+      {summary && (
+        <div className="bg-gradient-to-br from-[#1a1a2e] to-[#2a2a4e] rounded-xl p-4 text-white space-y-2">
+          <h4 className="text-[10px] text-gray-400 font-bold mb-2">ملخص سريع</h4>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+            <span className="text-gray-400">القطع</span>
+            <span className="font-mono font-bold text-left">{summary.grandTotal}</span>
+            <span className="text-gray-400">الأقمشة</span>
+            <span className="font-mono font-bold text-left">{summary.fabricCount}</span>
+            <span className="text-gray-400">الاكسسوارات</span>
+            <span className="font-mono font-bold text-left">{summary.accessoryCount}</span>
+            <span className="text-gray-400">الألوان</span>
+            <span className="font-mono font-bold text-left">{summary.colorCount}</span>
+          </div>
+          <hr className="border-white/10" />
+          <div className="flex justify-between items-center">
+            <span className="text-gray-300 text-xs">تكلفة القطعة</span>
+            <span className="font-mono font-bold text-[#c9a84c] text-lg">{fmt(cost.cost_per_piece)} ج</span>
+          </div>
+        </div>
+      )}
       {/* Editable fields */}
       {!readOnly && (
         <div className="grid grid-cols-3 gap-3">
@@ -76,7 +97,7 @@ export default function CostPanel({ cost, masnaiya, masrouf, marginPct, consumer
               onChange={e => onChangeConsumer(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono text-center focus:border-[#c9a84c] outline-none" />
             {suggestedPrice > 0 && (
-              <p className="text-[10px] text-gray-400 mt-0.5">سعر مقترح: {Math.ceil(suggestedPrice)} ج بهامش {marginPct}%</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">سعر مقترح: {fmt(suggestedPrice)} ج بهامش {cost.margin_pct || marginPct}%</p>
             )}
           </div>
           <div>

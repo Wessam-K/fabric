@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { requirePermission } = require('../middleware/auth');
 
 // GET /api/inventory/fabric-stock — aggregated fabric inventory
-router.get('/fabric-stock', (req, res) => {
+router.get('/fabric-stock', requirePermission('inventory', 'view'), (req, res) => {
   try {
     const { search, low_stock_only } = req.query;
     const threshold = db.prepare("SELECT value FROM settings WHERE key='low_stock_threshold'").get();
@@ -22,7 +23,7 @@ router.get('/fabric-stock', (req, res) => {
     const p = [];
     if (search) { q += ' AND (f.code LIKE ? OR f.name LIKE ?)'; p.push(`%${search}%`, `%${search}%`); }
     q += ' GROUP BY f.code';
-    if (low_stock_only === '1') q += ` HAVING total_available < ${lowThreshold} AND total_available > 0`;
+    if (low_stock_only === '1') { q += ' HAVING total_available < ? AND total_available > 0'; p.push(lowThreshold); }
     q += ' ORDER BY total_available ASC';
 
     const rows = db.prepare(q).all(...p);
@@ -31,7 +32,7 @@ router.get('/fabric-stock', (req, res) => {
 });
 
 // GET /api/inventory/batches — all batches with filters
-router.get('/batches', (req, res) => {
+router.get('/batches', requirePermission('inventory', 'view'), (req, res) => {
   try {
     const { fabric_code, supplier_id, status, search } = req.query;
     let q = `SELECT fib.*, f.name as fabric_name, f.fabric_type, f.color,
@@ -52,7 +53,7 @@ router.get('/batches', (req, res) => {
 });
 
 // GET /api/inventory/accessory-stock — aggregated accessory inventory
-router.get('/accessory-stock', (req, res) => {
+router.get('/accessory-stock', requirePermission('inventory', 'view'), (req, res) => {
   try {
     const { search, type, low_stock_only } = req.query;
     let q = `SELECT a.code, a.name, a.acc_type, a.unit, a.unit_price, a.image_path,

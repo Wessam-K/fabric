@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Plus, Search, Edit2, X, Trash2, Download, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, X, Trash2, Download } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
 import HelpButton from '../../components/HelpButton';
 import PermissionGuard from '../../components/PermissionGuard';

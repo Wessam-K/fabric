@@ -12,13 +12,9 @@ function calculateWOCost(woId) {
 
   // Total pieces: from sizes or direct quantity
   let totalPieces = wo.quantity || 0;
-  if (wo.is_size_based) {
-    const szTotal = db.prepare('SELECT COALESCE(SUM(qty_s+qty_m+qty_l+qty_xl+qty_2xl+qty_3xl),0) as t FROM wo_sizes WHERE wo_id=?').get(woId).t;
-    if (szTotal > 0) totalPieces = szTotal;
-  }
-  if (!totalPieces) {
-    totalPieces = db.prepare('SELECT COALESCE(SUM(qty_s+qty_m+qty_l+qty_xl+qty_2xl+qty_3xl),0) as t FROM wo_sizes WHERE wo_id=?').get(woId).t || 0;
-  }
+  const szTotal = db.prepare('SELECT COALESCE(SUM(qty_s+qty_m+qty_l+qty_xl+qty_2xl+qty_3xl),0) as t FROM wo_sizes WHERE wo_id=?').get(woId).t;
+  if (wo.is_size_based && szTotal > 0) totalPieces = szTotal;
+  if (!totalPieces && szTotal > 0) totalPieces = szTotal;
 
   // V4 batch-based fabrics
   const batchFabrics = db.prepare('SELECT * FROM wo_fabric_batches WHERE wo_id=?').all(woId);
@@ -41,8 +37,14 @@ function calculateWOCost(woId) {
     for (const f of legacyFabrics) {
       const price = f.price_per_m || 0;
       const meters = (f.meters_per_piece || 0) * (totalPieces || 1);
-      if (f.role === 'lining') { lining_cost += meters * price; total_meters_lining += meters; }
-      else { main_fabric_cost += meters * price * (1 + (f.waste_pct || 0) / 100); total_meters_main += meters; }
+      const baseCost = meters * price;
+      if (f.role === 'lining') { lining_cost += baseCost; total_meters_lining += meters; }
+      else {
+        const wCost = baseCost * ((f.waste_pct || 0) / 100);
+        main_fabric_cost += baseCost;
+        waste_cost += wCost;
+        total_meters_main += meters;
+      }
     }
   }
 
@@ -56,7 +58,7 @@ function calculateWOCost(woId) {
       accessories_cost += qty * a.unit_price;
     }
   } else {
-    for (const a of legacyAcc) accessories_cost += (a.quantity || 0) * (a.unit_price || 0);
+    for (const a of legacyAcc) accessories_cost += (a.quantity || 0) * (a.unit_price || 0) * (totalPieces || 1);
   }
 
   // Extra expenses
@@ -147,9 +149,10 @@ function getFullWO(id) {
 
   wo.sizes = db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(id);
   wo.stages = db.prepare(`
-    SELECT ws.*, st.color as stage_color
+    SELECT ws.*, st.color as stage_color, mac.name as machine_name, mac.barcode as machine_barcode
     FROM wo_stages ws
     LEFT JOIN stage_templates st ON st.name = ws.stage_name
+    LEFT JOIN machines mac ON mac.id = ws.machine_id
     WHERE ws.wo_id=? ORDER BY ws.sort_order
   `).all(id);
   wo.extra_expenses = db.prepare('SELECT * FROM wo_extra_expenses WHERE wo_id=? ORDER BY recorded_at').all(id);
@@ -164,7 +167,7 @@ function getFullWO(id) {
     SELECT wfc.*, f.name as fabric_name, f.color as fabric_color, f.fabric_type,
       po.po_number, fib.batch_code
     FROM wo_fabric_consumption wfc
-    LEFT JOIN fabrics f ON f.id = wfc.fabric_id OR f.code = wfc.fabric_code
+    LEFT JOIN fabrics f ON f.code = wfc.fabric_code
     LEFT JOIN purchase_orders po ON po.id = wfc.po_id
     LEFT JOIN fabric_inventory_batches fib ON fib.id = wfc.batch_id
     WHERE wfc.work_order_id = ?
@@ -229,7 +232,7 @@ function getFullWO(id) {
 // ═══════════════════════════════════════════════
 // GET /api/work-orders — list
 // ═══════════════════════════════════════════════
-router.get('/', (req, res) => {
+router.get('/', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const { search, status, priority, model_code, date_from, date_to } = req.query;
     let q = `SELECT wo.*, m.model_code, m.model_name,
@@ -387,10 +390,14 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
       if (useStages.length) {
         const ins = db.prepare('INSERT INTO wo_stages (wo_id,stage_name,sort_order,assigned_to) VALUES (?,?,?,?)');
         useStages.forEach((s, i) => { ins.run(woId, s.stage_name, s.sort_order ?? i, s.assigned_to || null); });
-        // V7: Init first stage quantity_in_stage from WO quantity
+        // V7: Init first stage quantity_in_stage from WO quantity (use size-based total if applicable)
+        let initQty = quantity || 0;
+        if (is_size_based && useSizes.length) {
+          initQty = useSizes.reduce((s, r) => s + (r.qty_s||0) + (r.qty_m||0) + (r.qty_l||0) + (r.qty_xl||0) + (r.qty_2xl||0) + (r.qty_3xl||0), 0);
+        }
         const firstStage = db.prepare('SELECT id FROM wo_stages WHERE wo_id=? ORDER BY sort_order LIMIT 1').get(woId);
-        if (firstStage && quantity > 0) {
-          db.prepare('UPDATE wo_stages SET quantity_in_stage=? WHERE id=?').run(quantity, firstStage.id);
+        if (firstStage && initQty > 0) {
+          db.prepare('UPDATE wo_stages SET quantity_in_stage=? WHERE id=?').run(initQty, firstStage.id);
         }
       }
 
@@ -410,9 +417,9 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
 router.get('/export', (req, res) => {
   try {
     const rows = db.prepare(`SELECT wo.*, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id ORDER BY wo.created_at DESC`).all();
-    const header = 'wo_number,model_code,model_name,quantity,status,priority,start_date,deadline,total_cost,cost_per_piece,notes';
+    const header = 'wo_number,model_code,model_name,quantity,status,priority,start_date,due_date,notes';
     const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
-    const csv = [header, ...rows.map(r => [r.wo_number,r.model_code,r.model_name,r.quantity,r.status,r.priority,r.start_date,r.deadline,r.total_cost,r.cost_per_piece,r.notes].map(esc).join(','))].join('\n');
+    const csv = [header, ...rows.map(r => [r.wo_number,r.model_code,r.model_name,r.quantity,r.status,r.priority,r.start_date,r.due_date,r.notes].map(esc).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=work-orders.csv');
     res.send('\uFEFF' + csv);
@@ -447,7 +454,7 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
     const { model_id, priority, due_date, assigned_to, masnaiya, masrouf, margin_pct,
             consumer_price, wholesale_price, quantity, is_size_based,
             fabrics, accessories, sizes, notes,
-            fabric_batches, accessories_detail } = req.body;
+            fabric_batches, accessories_detail, extra_expenses } = req.body;
 
     const transaction = db.transaction(() => {
       db.prepare(`UPDATE work_orders SET model_id=COALESCE(?,model_id),priority=COALESCE(?,priority),due_date=?,assigned_to=COALESCE(?,assigned_to),masnaiya=COALESCE(?,masnaiya),masrouf=COALESCE(?,masrouf),margin_pct=COALESCE(?,margin_pct),consumer_price=?,wholesale_price=?,notes=COALESCE(?,notes),quantity=COALESCE(?,quantity),is_size_based=COALESCE(?,is_size_based),updated_at=datetime('now') WHERE id=?`)
@@ -488,15 +495,31 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
       if (accessories_detail) {
         db.prepare('DELETE FROM wo_accessories_detail WHERE wo_id=?').run(woId);
         let totalPieces = quantity || existing.quantity || 0;
+        const szRows2 = sizes || db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(woId);
+        if ((is_size_based ?? existing.is_size_based) && szRows2.length) {
+          totalPieces = szRows2.reduce((s, r) => s + (r.qty_s||0) + (r.qty_m||0) + (r.qty_l||0) + (r.qty_xl||0) + (r.qty_2xl||0) + (r.qty_3xl||0), 0);
+        }
         const ins = db.prepare('INSERT INTO wo_accessories_detail (wo_id,accessory_code,accessory_name,quantity_per_piece,unit_price,planned_total_cost,notes) VALUES (?,?,?,?,?,?,?)');
         for (const a of accessories_detail) {
           ins.run(woId, a.accessory_code || null, a.accessory_name || '', a.quantity_per_piece || 1, a.unit_price || 0, (a.quantity_per_piece || 1) * (a.unit_price || 0) * totalPieces, a.notes || null);
         }
       }
+      if (extra_expenses) {
+        db.prepare('DELETE FROM wo_extra_expenses WHERE wo_id=?').run(woId);
+        const ins = db.prepare('INSERT INTO wo_extra_expenses (wo_id,description,amount,stage_id,notes) VALUES (?,?,?,?,?)');
+        let total = 0;
+        for (const e of extra_expenses) {
+          ins.run(woId, e.description, e.amount || 0, e.stage_id || null, e.notes || null);
+          total += e.amount || 0;
+        }
+        db.prepare('UPDATE work_orders SET extra_expenses_total=? WHERE id=?').run(total, woId);
+      }
     });
 
     transaction();
-    res.json(getFullWO(woId));
+    const updated = getFullWO(woId);
+    logAudit(req, 'UPDATE', 'work_order', woId, existing.wo_number);
+    res.json(updated);
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
@@ -506,11 +529,55 @@ router.patch('/:id/status', requirePermission('work_orders', 'edit'), (req, res)
     const woId = parseInt(req.params.id);
     const { status } = req.body;
     if (!status) return res.status(400).json({ error: 'الحالة مطلوبة' });
+
+    const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
+    if (!wo) return res.status(404).json({ error: 'أمر العمل غير موجود' });
+
+    // Validate status transitions
+    const validTransitions = {
+      draft: ['in_progress', 'cancelled'],
+      pending: ['in_progress', 'cancelled'],
+      in_progress: ['completed', 'cancelled'],
+      completed: ['delivered'],
+      cancelled: [],
+      delivered: [],
+    };
+    const allowed = validTransitions[wo.status] || [];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ error: `لا يمكن تغيير الحالة من "${wo.status}" إلى "${status}"` });
+    }
+
     const updates = [`status=?`, `updated_at=datetime('now')`];
     const params = [status];
     if (status === 'in_progress') updates.push(`start_date=COALESCE(start_date,datetime('now'))`);
     if (status === 'completed') updates.push(`completed_date=datetime('now')`);
-    db.prepare(`UPDATE work_orders SET ${updates.join(',')} WHERE id=?`).run(...params, woId);
+
+    const doStatusChange = db.transaction(() => {
+      db.prepare(`UPDATE work_orders SET ${updates.join(',')} WHERE id=?`).run(...params, woId);
+
+      // When starting production, initialize first stage with WO quantity
+      if (status === 'in_progress') {
+        const firstStage = db.prepare('SELECT id, quantity_in_stage FROM wo_stages WHERE wo_id=? ORDER BY sort_order LIMIT 1').get(woId);
+        if (firstStage && (firstStage.quantity_in_stage || 0) === 0) {
+          let initQty = wo.quantity || 0;
+          if (wo.is_size_based) {
+            const szRows = db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(woId);
+            if (szRows.length) {
+              initQty = szRows.reduce((s, r) => s + (r.qty_s||0) + (r.qty_m||0) + (r.qty_l||0) + (r.qty_xl||0) + (r.qty_2xl||0) + (r.qty_3xl||0), 0);
+            }
+          }
+          if (initQty > 0) {
+            const userId = req.user?.id || null;
+            const userName = req.user?.full_name || req.user?.username || 'نظام';
+            db.prepare("UPDATE wo_stages SET quantity_in_stage=?, status='in_progress', started_at=datetime('now','localtime'), started_by_user_id=?, started_by_name=? WHERE id=?")
+              .run(initQty, userId, userName, firstStage.id);
+          }
+        }
+      }
+    });
+    doStatusChange();
+
+    logAudit(req, 'STATUS_CHANGE', 'work_order', woId, `${wo.status} → ${status}`);
     res.json(getFullWO(woId));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -525,36 +592,51 @@ router.patch('/:id/stages/:stageId', requirePermission('work_orders', 'edit'), (
     const stage = db.prepare('SELECT * FROM wo_stages WHERE id=? AND wo_id=?').get(stageId, woId);
     if (!stage) return res.status(404).json({ error: 'المرحلة غير موجودة' });
 
-    const sets = [];
-    const params = [];
-    if (status) {
-      sets.push('status=?'); params.push(status);
-      if (status === 'in_progress' && !stage.started_at) sets.push("started_at=datetime('now')");
-      if (status === 'completed') sets.push("completed_at=datetime('now')");
-    }
-    if (assigned_to !== undefined) { sets.push('assigned_to=?'); params.push(assigned_to); }
-    if (quantity_done !== undefined) { sets.push('quantity_done=?'); params.push(quantity_done); }
-    if (quantity_in_stage !== undefined) { sets.push('quantity_in_stage=?'); params.push(quantity_in_stage); }
-    if (quantity_completed !== undefined) { sets.push('quantity_completed=?'); params.push(quantity_completed); }
-    if (notes !== undefined) { sets.push('notes=?'); params.push(notes); }
-    if (machine_id !== undefined) { sets.push('machine_id=?'); params.push(machine_id); }
+    const transaction = db.transaction(() => {
+      const sets = [];
+      const params = [];
+      if (status) {
+        sets.push('status=?'); params.push(status);
+        if (status === 'in_progress' && !stage.started_at) sets.push("started_at=datetime('now')");
+        if (status === 'completed') sets.push("completed_at=datetime('now')");
+        if (status === 'skipped') {
+          sets.push("completed_at=datetime('now')");
+          // Move pieces from skipped stage to the next stage
+          const qtyInStage = stage.quantity_in_stage || 0;
+          if (qtyInStage > 0) {
+            const nextStage = db.prepare('SELECT id FROM wo_stages WHERE wo_id=? AND sort_order > ? ORDER BY sort_order LIMIT 1').get(woId, stage.sort_order);
+            if (nextStage) {
+              db.prepare('UPDATE wo_stages SET quantity_in_stage = quantity_in_stage + ? WHERE id=?').run(qtyInStage, nextStage.id);
+            }
+            sets.push('quantity_in_stage=0');
+          }
+        }
+      }
+      if (assigned_to !== undefined) { sets.push('assigned_to=?'); params.push(assigned_to); }
+      if (quantity_done !== undefined) { sets.push('quantity_done=?'); params.push(quantity_done); }
+      if (quantity_in_stage !== undefined) { sets.push('quantity_in_stage=?'); params.push(quantity_in_stage); }
+      if (quantity_completed !== undefined) { sets.push('quantity_completed=?'); params.push(quantity_completed); }
+      if (notes !== undefined) { sets.push('notes=?'); params.push(notes); }
+      if (machine_id !== undefined) { sets.push('machine_id=?'); params.push(machine_id); }
 
-    if (sets.length) {
-      db.prepare(`UPDATE wo_stages SET ${sets.join(',')} WHERE id=?`).run(...params, stageId);
-    }
+      if (sets.length) {
+        db.prepare(`UPDATE wo_stages SET ${sets.join(',')} WHERE id=?`).run(...params, stageId);
+      }
 
-    // Recalculate pieces_completed from last stage
-    const lastStage = db.prepare('SELECT quantity_completed FROM wo_stages WHERE wo_id=? ORDER BY sort_order DESC LIMIT 1').get(woId);
-    if (lastStage) db.prepare('UPDATE work_orders SET pieces_completed=? WHERE id=?').run(lastStage.quantity_completed || 0, woId);
+      // Recalculate pieces_completed from last stage
+      const lastStage = db.prepare('SELECT quantity_completed FROM wo_stages WHERE wo_id=? ORDER BY sort_order DESC LIMIT 1').get(woId);
+      if (lastStage) db.prepare('UPDATE work_orders SET pieces_completed=? WHERE id=?').run(lastStage.quantity_completed || 0, woId);
 
-    // Auto-complete if all stages done
-    const allStages = db.prepare('SELECT status FROM wo_stages WHERE wo_id=?').all(woId);
-    const allDone = allStages.length > 0 && allStages.every(s => s.status === 'completed' || s.status === 'skipped');
-    if (allDone) {
-      db.prepare("UPDATE work_orders SET status='completed', completed_date=datetime('now'), updated_at=datetime('now') WHERE id=? AND status != 'completed'").run(woId);
-    } else if (status === 'in_progress') {
-      db.prepare("UPDATE work_orders SET status='in_progress', start_date=COALESCE(start_date,datetime('now')), updated_at=datetime('now') WHERE id=? AND status IN ('draft','pending')").run(woId);
-    }
+      // Auto-complete if all stages done
+      const allStages = db.prepare('SELECT status FROM wo_stages WHERE wo_id=?').all(woId);
+      const allDone = allStages.length > 0 && allStages.every(s => s.status === 'completed' || s.status === 'skipped');
+      if (allDone) {
+        db.prepare("UPDATE work_orders SET status='completed', completed_date=datetime('now'), updated_at=datetime('now') WHERE id=? AND status != 'completed'").run(woId);
+      } else if (status === 'in_progress') {
+        db.prepare("UPDATE work_orders SET status='in_progress', start_date=COALESCE(start_date,datetime('now')), updated_at=datetime('now') WHERE id=? AND status IN ('draft','pending')").run(woId);
+      }
+    });
+    transaction();
 
     res.json(getFullWO(woId));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -570,17 +652,20 @@ router.patch('/:id/stage-quantity', requirePermission('work_orders', 'edit'), (r
     const stage = db.prepare('SELECT * FROM wo_stages WHERE id=? AND wo_id=?').get(stage_id, woId);
     if (!stage) return res.status(404).json({ error: 'المرحلة غير موجودة' });
 
-    const sets = [];
-    const params = [];
-    if (quantity_in_stage !== undefined) { sets.push('quantity_in_stage=?'); params.push(quantity_in_stage); }
-    if (quantity_completed !== undefined) { sets.push('quantity_completed=?'); params.push(quantity_completed); }
-    if (assigned_to !== undefined) { sets.push('assigned_to=?'); params.push(assigned_to); }
-    if (notes !== undefined) { sets.push('notes=?'); params.push(notes); }
+    const transaction = db.transaction(() => {
+      const sets = [];
+      const params = [];
+      if (quantity_in_stage !== undefined) { sets.push('quantity_in_stage=?'); params.push(quantity_in_stage); }
+      if (quantity_completed !== undefined) { sets.push('quantity_completed=?'); params.push(quantity_completed); }
+      if (assigned_to !== undefined) { sets.push('assigned_to=?'); params.push(assigned_to); }
+      if (notes !== undefined) { sets.push('notes=?'); params.push(notes); }
 
-    if (sets.length) db.prepare(`UPDATE wo_stages SET ${sets.join(',')} WHERE id=?`).run(...params, stage_id);
+      if (sets.length) db.prepare(`UPDATE wo_stages SET ${sets.join(',')} WHERE id=?`).run(...params, stage_id);
 
-    const lastStage = db.prepare('SELECT quantity_completed FROM wo_stages WHERE wo_id=? ORDER BY sort_order DESC LIMIT 1').get(woId);
-    if (lastStage) db.prepare('UPDATE work_orders SET pieces_completed=? WHERE id=?').run(lastStage.quantity_completed || 0, woId);
+      const lastStage = db.prepare('SELECT quantity_completed FROM wo_stages WHERE wo_id=? ORDER BY sort_order DESC LIMIT 1').get(woId);
+      if (lastStage) db.prepare('UPDATE work_orders SET pieces_completed=? WHERE id=?').run(lastStage.quantity_completed || 0, woId);
+    });
+    transaction();
 
     res.json(getFullWO(woId));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -709,8 +794,10 @@ router.post('/:id/finalize', requirePermission('work_orders', 'edit'), (req, res
         WHERE id=?`)
         .run(round2(costPerPiece), pieces_produced || null, round2(totalCost), round2(costPerPiece), round2(wasteCostPerPiece), userId, woId);
 
+      const realLiningCost = fabricCost > 0 ? 0 : cost.lining_cost;
+      const realMainCost = fabricCost > 0 ? fabricCost : cost.main_fabric_cost;
       db.prepare(`INSERT INTO cost_snapshots (wo_id,model_id,total_pieces,total_meters_main,total_meters_lining,main_fabric_cost,lining_cost,accessories_cost,masnaiya,masrouf,waste_cost,extra_expenses,total_cost,cost_per_piece) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(woId, wo.model_id, qty, cost.total_meters_main, cost.total_meters_lining, round2(useFabricCost), 0, round2(useAccessoryCost), round2(masnaiyaTotal), round2(masroufTotal), round2(wasteCost), round2(cost.extra_expenses), round2(totalCost), round2(costPerPiece));
+        .run(woId, wo.model_id, qty, cost.total_meters_main, cost.total_meters_lining, round2(realMainCost), round2(realLiningCost), round2(useAccessoryCost), round2(masnaiyaTotal), round2(masroufTotal), round2(wasteCost), round2(cost.extra_expenses), round2(totalCost), round2(costPerPiece));
 
       if (extra_notes) {
         db.prepare("UPDATE work_orders SET notes=COALESCE(notes||'\n'||?,?) WHERE id=?").run(extra_notes, extra_notes, woId);
@@ -760,11 +847,47 @@ router.post('/:id/cost-snapshot', requirePermission('work_orders', 'edit'), (req
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE /api/work-orders/:id — soft delete
+// DELETE /api/work-orders/:id — soft delete (redirects to cancel with material return)
 router.delete('/:id', requirePermission('work_orders', 'delete'), (req, res) => {
   try {
-    db.prepare("UPDATE work_orders SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(parseInt(req.params.id));
-    logAudit(req, 'DELETE', 'work_order', req.params.id, `WO#${req.params.id}`);
+    const woId = parseInt(req.params.id);
+    const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
+    if (!wo) return res.status(404).json({ error: 'غير موجود' });
+    if (wo.status === 'completed' || wo.status === 'cancelled') {
+      return res.status(400).json({ error: 'لا يمكن حذف أمر تشغيل مكتمل أو ملغي' });
+    }
+    const userId = req.user ? req.user.id : null;
+    db.transaction(() => {
+      db.prepare(`UPDATE work_orders SET status='cancelled', cancel_reason='حذف بواسطة المستخدم', cancelled_by=?, cancelled_at=datetime('now','localtime'), updated_at=datetime('now') WHERE id=?`)
+        .run(userId, woId);
+      // Return fabric batches
+      const wfBatches = db.prepare('SELECT * FROM wo_fabric_batches WHERE wo_id=?').all(woId);
+      for (const wfb of wfBatches) {
+        const meters = wfb.actual_total_meters || wfb.planned_total_meters || 0;
+        if (meters > 0) {
+          db.prepare('UPDATE fabric_inventory_batches SET used_meters = MAX(0, used_meters - ?) WHERE id=?').run(meters, wfb.batch_id);
+          const batch = db.prepare('SELECT fabric_code FROM fabric_inventory_batches WHERE id=?').get(wfb.batch_id);
+          if (batch) db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) + ? WHERE code=?').run(meters, batch.fabric_code);
+        }
+      }
+      // Return accessories
+      const accDetails = db.prepare('SELECT * FROM wo_accessories_detail WHERE wo_id=?').all(woId);
+      if (accDetails.length) {
+        let totalPieces = wo.quantity || 0;
+        if (wo.is_size_based) {
+          const szRows = db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(woId);
+          if (szRows.length) totalPieces = szRows.reduce((s, r) => s + (r.qty_s||0) + (r.qty_m||0) + (r.qty_l||0) + (r.qty_xl||0) + (r.qty_2xl||0) + (r.qty_3xl||0), 0);
+        }
+        for (const ad of accDetails) {
+          const returnQty = (ad.quantity_per_piece || 0) * totalPieces;
+          if (returnQty > 0) {
+            const acc = db.prepare('SELECT id, quantity_on_hand FROM accessories WHERE code=?').get(ad.accessory_code);
+            if (acc) db.prepare('UPDATE accessories SET quantity_on_hand=? WHERE id=?').run((acc.quantity_on_hand || 0) + returnQty, acc.id);
+          }
+        }
+      }
+    })();
+    logAudit(req, 'DELETE', 'work_order', woId, `WO#${woId}`);
     res.json({ message: 'تم الإلغاء' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -871,13 +994,16 @@ router.patch('/:id/stage-start', requirePermission('work_orders', 'edit'), (req,
     const userId = req.user?.id || null;
     const userName = req.user?.full_name || req.user?.username || 'نظام';
 
-    db.prepare("UPDATE wo_stages SET status='in_progress', started_at=datetime('now','localtime'), started_by_user_id=?, started_by_name=? WHERE id=?")
-      .run(userId, userName, stage_id);
+    const transaction = db.transaction(() => {
+      db.prepare("UPDATE wo_stages SET status='in_progress', started_at=datetime('now','localtime'), started_by_user_id=?, started_by_name=? WHERE id=?")
+        .run(userId, userName, stage_id);
 
-    // Also update WO status and track last active stage
-    db.prepare("UPDATE work_orders SET status='in_progress', start_date=COALESCE(start_date,datetime('now','localtime')), last_active_stage_name=?, updated_at=datetime('now','localtime') WHERE id=? AND status IN ('draft','pending')").run(stage.stage_name, woId);
-    // If WO already in_progress, just update the stage name
-    db.prepare("UPDATE work_orders SET last_active_stage_name=?, updated_at=datetime('now','localtime') WHERE id=? AND status='in_progress'").run(stage.stage_name, woId);
+      // Also update WO status and track last active stage
+      db.prepare("UPDATE work_orders SET status='in_progress', start_date=COALESCE(start_date,datetime('now','localtime')), last_active_stage_name=?, updated_at=datetime('now','localtime') WHERE id=? AND status IN ('draft','pending')").run(stage.stage_name, woId);
+      // If WO already in_progress, just update the stage name
+      db.prepare("UPDATE work_orders SET last_active_stage_name=?, updated_at=datetime('now','localtime') WHERE id=? AND status='in_progress'").run(stage.stage_name, woId);
+    });
+    transaction();
 
     res.json(getFullWO(woId));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1040,6 +1166,111 @@ router.delete('/:id/fabric-consumption/:consumptionId', requirePermission('work_
 // V8 — Waste Tracking
 // ═══════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════
+// Accessory Consumption CRUD
+// ═══════════════════════════════════════════════
+
+// GET /api/work-orders/:id/accessory-consumption
+router.get('/:id/accessory-consumption', (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const consumption = db.prepare(`
+      SELECT wac.*, a.name as accessory_name, a.unit as accessory_unit
+      FROM wo_accessory_consumption wac
+      LEFT JOIN accessories a ON a.id = wac.accessory_id OR a.code = wac.accessory_code
+      WHERE wac.work_order_id = ?
+      ORDER BY wac.recorded_at DESC
+    `).all(woId);
+    res.json(consumption);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/work-orders/:id/accessory-consumption
+router.post('/:id/accessory-consumption', requirePermission('work_orders', 'edit'), (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
+    if (!wo) return res.status(404).json({ error: 'أمر العمل غير موجود' });
+    const { accessory_id, accessory_code, actual_qty, unit_price, notes } = req.body;
+    if (!actual_qty || actual_qty <= 0) return res.status(400).json({ error: 'يجب تحديد الكمية' });
+
+    let accId = accessory_id;
+    let accCode = accessory_code;
+    if (!accId && accCode) {
+      const acc = db.prepare('SELECT id FROM accessories WHERE code=?').get(accCode);
+      if (acc) accId = acc.id;
+    } else if (accId && !accCode) {
+      const acc = db.prepare('SELECT code FROM accessories WHERE id=?').get(accId);
+      if (acc) accCode = acc.code;
+    }
+    if (!accId && !accCode) return res.status(400).json({ error: 'يجب تحديد الإكسسوار' });
+
+    const qty = parseFloat(actual_qty);
+    const price = parseFloat(unit_price) || 0;
+    const totalCost = qty * price;
+
+    const transaction = db.transaction(() => {
+      db.prepare(`INSERT INTO wo_accessory_consumption (work_order_id, accessory_id, accessory_code, actual_qty, unit_price, total_cost) VALUES (?,?,?,?,?,?)`)
+        .run(woId, accId, accCode, qty, price, totalCost);
+      if (accCode) {
+        db.prepare('UPDATE accessories SET quantity_on_hand = MAX(0, quantity_on_hand - ?) WHERE code=?').run(qty, accCode);
+        db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+          .run(accCode, 'out', qty, 'work_order', woId, notes || 'استهلاك إكسسوار - أمر تشغيل ' + wo.wo_number, req.user?.id || null);
+      }
+    });
+    transaction();
+
+    logAudit(req, 'ACCESSORY_CONSUMPTION', 'work_order', woId, `${qty} من ${accCode}`);
+    res.status(201).json(getFullWO(woId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /api/work-orders/:id/accessory-consumption/:consumptionId
+router.patch('/:id/accessory-consumption/:consumptionId', requirePermission('work_orders', 'edit'), (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const cId = parseInt(req.params.consumptionId);
+    const record = db.prepare('SELECT * FROM wo_accessory_consumption WHERE id=? AND work_order_id=?').get(cId, woId);
+    if (!record) return res.status(404).json({ error: 'سجل الاستهلاك غير موجود' });
+
+    const { actual_qty, unit_price } = req.body;
+    const newQty = actual_qty !== undefined ? parseFloat(actual_qty) : record.actual_qty;
+    const newPrice = unit_price !== undefined ? parseFloat(unit_price) : record.unit_price;
+    const delta = newQty - (record.actual_qty || 0);
+
+    const transaction = db.transaction(() => {
+      db.prepare('UPDATE wo_accessory_consumption SET actual_qty=?, unit_price=?, total_cost=? WHERE id=?')
+        .run(newQty, newPrice, newQty * newPrice, cId);
+      if (delta !== 0 && record.accessory_code) {
+        db.prepare('UPDATE accessories SET quantity_on_hand = MAX(0, quantity_on_hand - ?) WHERE code=?').run(delta, record.accessory_code);
+      }
+    });
+    transaction();
+
+    res.json(getFullWO(woId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/work-orders/:id/accessory-consumption/:consumptionId
+router.delete('/:id/accessory-consumption/:consumptionId', requirePermission('work_orders', 'edit'), (req, res) => {
+  try {
+    const woId = parseInt(req.params.id);
+    const cId = parseInt(req.params.consumptionId);
+    const record = db.prepare('SELECT * FROM wo_accessory_consumption WHERE id=? AND work_order_id=?').get(cId, woId);
+    if (!record) return res.status(404).json({ error: 'سجل الاستهلاك غير موجود' });
+
+    const transaction = db.transaction(() => {
+      if (record.accessory_code && record.actual_qty) {
+        db.prepare('UPDATE accessories SET quantity_on_hand = quantity_on_hand + ? WHERE code=?').run(record.actual_qty, record.accessory_code);
+      }
+      db.prepare('DELETE FROM wo_accessory_consumption WHERE id=?').run(cId);
+    });
+    transaction();
+
+    res.json(getFullWO(woId));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/work-orders/:id/waste
 router.get('/:id/waste', (req, res) => {
   try {
@@ -1183,14 +1414,22 @@ router.post('/:id/cancel', requirePermission('work_orders', 'edit'), (req, res) 
 
       // Return allocated accessories
       const accDetails = db.prepare('SELECT * FROM wo_accessories_detail WHERE wo_id=?').all(woId);
-      for (const ad of accDetails) {
-        if (ad.total_qty > 0) {
-          const acc = db.prepare('SELECT id, quantity_on_hand FROM accessories WHERE code=?').get(ad.accessory_code);
-          if (acc) {
-            const newQty = (acc.quantity_on_hand || 0) + ad.total_qty;
-            db.prepare('UPDATE accessories SET quantity_on_hand=? WHERE id=?').run(newQty, acc.id);
-            db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
-              .run(ad.accessory_code, 'return', ad.total_qty, 'work_order', woId, 'إرجاع إكسسوار - إلغاء أمر تشغيل ' + wo.wo_number, userId);
+      if (accDetails.length) {
+        let totalPieces = wo.quantity || 0;
+        if (wo.is_size_based) {
+          const szRows = db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(woId);
+          if (szRows.length) totalPieces = szRows.reduce((s, r) => s + (r.qty_s||0) + (r.qty_m||0) + (r.qty_l||0) + (r.qty_xl||0) + (r.qty_2xl||0) + (r.qty_3xl||0), 0);
+        }
+        for (const ad of accDetails) {
+          const returnQty = (ad.quantity_per_piece || 0) * totalPieces;
+          if (returnQty > 0) {
+            const acc = db.prepare('SELECT id, quantity_on_hand FROM accessories WHERE code=?').get(ad.accessory_code);
+            if (acc) {
+              const newQty = (acc.quantity_on_hand || 0) + returnQty;
+              db.prepare('UPDATE accessories SET quantity_on_hand=? WHERE id=?').run(newQty, acc.id);
+              db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+                .run(ad.accessory_code, 'return', returnQty, 'work_order', woId, 'إرجاع إكسسوار - إلغاء أمر تشغيل ' + wo.wo_number, userId);
+            }
           }
         }
       }

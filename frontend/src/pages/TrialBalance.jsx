@@ -108,7 +108,10 @@ export default function TrialBalance() {
                       </tr>
                     ))}
                     {data.accounts.filter(a => a.total_debit || a.total_credit).length === 0 && (
-                      <tr><td colSpan={6} className="text-center py-12 text-gray-400">لا توجد حركات مالية مرحّلة</td></tr>
+                      <tr><td colSpan={6} className="text-center py-12 text-gray-400">
+                        <p className="mb-2">لا توجد حركات مالية مرحّلة</p>
+                        <p className="text-[10px]">أنشئ قيود يومية من صفحة القيود ثم رحّلها لتظهر هنا</p>
+                      </td></tr>
                     )}
                     <tr className="border-t-2 border-[#1a1a2e] font-bold bg-gray-50">
                       <td colSpan={3} className="px-4 py-3 text-left">الإجمالي</td>

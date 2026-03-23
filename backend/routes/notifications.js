@@ -2,6 +2,90 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 
+// GET /api/notifications/count — unread count only (lightweight poll) — MUST be before /:id
+router.get('/count', (req, res) => {
+  try {
+    const userId = req.user ? req.user.id : null;
+    const count = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=0').get(userId).count;
+    res.json({ unread_count: count });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /api/notifications/read-all — MUST be before /:id
+router.patch('/read-all', (req, res) => {
+  try {
+    const userId = req.user ? req.user.id : null;
+    db.prepare('UPDATE notifications SET is_read=1 WHERE user_id=? AND is_read=0').run(userId);
+    res.json({ message: 'تم تحديث جميع الإشعارات' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/notifications/check-overdue
+router.post('/check-overdue', (req, res) => {
+  try {
+    const adminUsers = db.prepare("SELECT id FROM users WHERE role IN ('superadmin','admin','manager') AND status='active'").all();
+    if (adminUsers.length === 0) return res.json({ message: 'لا يوجد مستخدمين', created: 0 });
+    let created = 0;
+
+    // Overdue invoices
+    try {
+      const overdue = db.prepare(`SELECT id, invoice_number, customer_name, due_date FROM invoices WHERE status IN ('sent','partial') AND due_date < date('now')`).all();
+      for (const inv of overdue) {
+        for (const u of adminUsers) {
+          const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND reference_type=? AND reference_id=? AND type=? AND created_at > datetime("now","-1 day")').get(u.id, 'invoice', inv.id, 'overdue_invoice');
+          if (!exists) { createNotification(u.id, 'overdue_invoice', 'فاتورة متأخرة', `الفاتورة ${inv.invoice_number} (${inv.customer_name}) متأخرة منذ ${inv.due_date}`, 'invoice', inv.id); created++; }
+        }
+      }
+    } catch {}
+
+    // Low stock accessories
+    try {
+      const lowStock = db.prepare('SELECT code, name, quantity_on_hand, low_stock_threshold FROM accessories WHERE quantity_on_hand <= low_stock_threshold AND status = "active"').all();
+      for (const acc of lowStock) {
+        for (const u of adminUsers) {
+          const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND reference_type=? AND reference_id=? AND type=? AND created_at > datetime("now","-1 day")').get(u.id, 'accessory', acc.code, 'low_stock');
+          if (!exists) { createNotification(u.id, 'low_stock', 'مخزون منخفض', `${acc.name} (${acc.code}) — الكمية: ${acc.quantity_on_hand} أقل من الحد الأدنى ${acc.low_stock_threshold}`, 'accessory', acc.code); created++; }
+        }
+      }
+    } catch {}
+
+    // Maintenance orders overdue
+    try {
+      const overdueMO = db.prepare(`SELECT mo.id, mo.title, mo.scheduled_date, m.name as machine_name FROM maintenance_orders mo JOIN machines m ON m.id=mo.machine_id WHERE mo.status NOT IN ('completed','cancelled') AND mo.scheduled_date < date('now')`).all();
+      for (const mt of overdueMO) {
+        for (const u of adminUsers) {
+          const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND reference_type=? AND reference_id=? AND type=? AND created_at > datetime("now","-1 day")').get(u.id, 'maintenance', mt.id, 'overdue_maintenance');
+          if (!exists) { createNotification(u.id, 'overdue_maintenance', 'أمر صيانة متأخر', `${mt.machine_name}: ${mt.title} — مجدول في ${mt.scheduled_date}`, 'maintenance', mt.id); created++; }
+        }
+      }
+    } catch {}
+
+    // Machines broken > 24h
+    try {
+      const broken = db.prepare(`SELECT id, name, updated_at FROM machines WHERE status='broken' AND updated_at < datetime('now','-24 hours')`).all();
+      for (const m of broken) {
+        for (const u of adminUsers) {
+          const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND reference_type=? AND reference_id=? AND type=? AND created_at > datetime("now","-1 day")').get(u.id, 'machine', m.id, 'machine_broken');
+          if (!exists) { createNotification(u.id, 'machine_broken', 'ماكينة معطلة > 24 ساعة', `${m.name} — معطلة منذ ${m.updated_at}`, 'machine', m.id); created++; }
+        }
+      }
+    } catch {}
+
+    // Expenses pending > 24h
+    try {
+      const pending = db.prepare(`SELECT id, description, amount FROM expenses WHERE status='pending' AND created_at < datetime('now','-24 hours') AND is_deleted=0`).all();
+      for (const exp of pending) {
+        for (const u of adminUsers) {
+          const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND reference_type=? AND reference_id=? AND type=? AND created_at > datetime("now","-1 day")').get(u.id, 'expense', exp.id, 'expense_pending');
+          if (!exists) { createNotification(u.id, 'expense_pending', 'مصروف بانتظار الاعتماد > 24 ساعة', `${exp.description} — ${exp.amount} ج.م`, 'expense', exp.id); created++; }
+        }
+      }
+    } catch {}
+
+    res.json({ message: `تم إنشاء ${created} إشعار جديد`, created });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Get notifications for current user
 router.get('/', (req, res) => {
   try {
@@ -18,7 +102,7 @@ router.get('/', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Mark notification as read
+// Mark notification as read — after all string routes
 router.patch('/:id/read', (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
@@ -26,15 +110,6 @@ router.patch('/:id/read', (req, res) => {
     if (!notif) return res.status(404).json({ error: 'الإشعار غير موجود' });
     db.prepare('UPDATE notifications SET is_read=1 WHERE id=?').run(req.params.id);
     res.json({ message: 'تم التحديث' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Mark all as read
-router.patch('/read-all', (req, res) => {
-  try {
-    const userId = req.user ? req.user.id : null;
-    db.prepare('UPDATE notifications SET is_read=1 WHERE user_id=? AND is_read=0').run(userId);
-    res.json({ message: 'تم تحديث جميع الإشعارات' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -46,56 +121,6 @@ router.delete('/:id', (req, res) => {
     if (!notif) return res.status(404).json({ error: 'الإشعار غير موجود' });
     db.prepare('DELETE FROM notifications WHERE id=?').run(req.params.id);
     res.json({ message: 'تم الحذف' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// GET /api/notifications/count — unread count only (lightweight poll)
-router.get('/count', (req, res) => {
-  try {
-    const userId = req.user ? req.user.id : null;
-    const count = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=0').get(userId).count;
-    res.json({ unread_count: count });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// POST /api/notifications/check-overdue — auto-generate notifications for overdue invoices & low stock
-router.post('/check-overdue', (req, res) => {
-  try {
-    const userId = req.user ? req.user.id : null;
-    let created = 0;
-    const insNotif = db.prepare('INSERT INTO notifications (user_id, type, title, message, related_type, related_id) VALUES (?,?,?,?,?,?)');
-
-    // Overdue invoices
-    const overdue = db.prepare(`SELECT id, invoice_number, customer_name, due_date FROM invoices WHERE status IN ('sent','partial') AND due_date < date('now')`).all();
-    for (const inv of overdue) {
-      const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND related_type=? AND related_id=? AND type=? AND created_at > datetime("now","-1 day")').get(userId, 'invoice', inv.id, 'overdue_invoice');
-      if (!exists) {
-        insNotif.run(userId, 'overdue_invoice', 'فاتورة متأخرة', `الفاتورة ${inv.invoice_number} (${inv.customer_name}) متأخرة منذ ${inv.due_date}`, 'invoice', inv.id);
-        created++;
-      }
-    }
-
-    // Low stock accessories
-    const lowStock = db.prepare('SELECT code, name, quantity_on_hand, low_stock_threshold FROM accessories WHERE quantity_on_hand <= low_stock_threshold AND status = "active"').all();
-    for (const acc of lowStock) {
-      const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND related_type=? AND related_id=? AND type=? AND created_at > datetime("now","-1 day")').get(userId, 'accessory', acc.code, 'low_stock');
-      if (!exists) {
-        insNotif.run(userId, 'low_stock', 'مخزون منخفض', `${acc.name} (${acc.code}) — الكمية: ${acc.quantity_on_hand} أقل من الحد الأدنى ${acc.low_stock_threshold}`, 'accessory', acc.code);
-        created++;
-      }
-    }
-
-    // Overdue maintenance
-    const overdueMaint = db.prepare(`SELECT mm.id, mm.next_maintenance_date, m.name as machine_name FROM machine_maintenance mm JOIN machines m ON m.id=mm.machine_id WHERE mm.next_maintenance_date < date('now') AND m.status='active'`).all();
-    for (const mt of overdueMaint) {
-      const exists = db.prepare('SELECT 1 FROM notifications WHERE user_id=? AND related_type=? AND related_id=? AND type=? AND created_at > datetime("now","-1 day")').get(userId, 'maintenance', mt.id, 'overdue_maintenance');
-      if (!exists) {
-        insNotif.run(userId, 'overdue_maintenance', 'صيانة متأخرة', `${mt.machine_name} — موعد الصيانة كان ${mt.next_maintenance_date}`, 'maintenance', mt.id);
-        created++;
-      }
-    }
-
-    res.json({ message: `تم إنشاء ${created} إشعار جديد`, created });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

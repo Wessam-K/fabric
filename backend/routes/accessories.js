@@ -17,7 +17,7 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilt
   else cb(new Error('Only images allowed'));
 }});
 
-router.get('/', (req, res) => {
+router.get('/', requirePermission('accessories', 'view'), (req, res) => {
   try {
     const { type, search, status, supplier_id, page, limit } = req.query;
     let q = 'SELECT a.*, s.name as supplier_name FROM accessories a LEFT JOIN suppliers s ON s.id=a.supplier_id WHERE 1=1';

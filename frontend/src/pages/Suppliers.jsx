@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Star, Phone, Mail, Building2, DollarSign, X, Upload, Download } from 'lucide-react';
+import { Plus, Search, Star, Building2, DollarSign, Upload, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
-import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
 import { exportFromBackend, importFromCSV } from '../utils/exportUtils';

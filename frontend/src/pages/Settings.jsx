@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Save, Plus, Trash2, Factory, Building2, Cog, DollarSign, Shield } from 'lucide-react';
 import { PageHeader, LoadingState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
@@ -255,9 +256,9 @@ export default function SettingsPage() {
           <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700">
             لإدارة الصلاحيات بالتفصيل، انتقل إلى صفحة المستخدمين
           </div>
-          <a href="/users" className="inline-flex items-center gap-2 px-4 py-2 bg-[#1a1a2e] text-white rounded-lg text-sm font-bold hover:bg-[#2a2a3e] transition-colors">
+          <Link to="/users" className="inline-flex items-center gap-2 px-4 py-2 bg-[#1a1a2e] text-white rounded-lg text-sm font-bold hover:bg-[#2a2a3e] transition-colors">
             <Shield size={16} /> إدارة المستخدمين والصلاحيات
-          </a>
+          </Link>
         </div>
       )}
     </div>

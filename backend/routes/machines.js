@@ -3,18 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { notFound, validationError, dbError, serverError, sanitize } = require('../utils/errors');
 const { logAudit, requirePermission } = require('../middleware/auth');
-
-function toCSV(rows, columns) {
-  if (!rows || rows.length === 0) return columns.join(',') + '\n';
-  const header = columns.join(',');
-  const lines = rows.map(row =>
-    columns.map(col => {
-      const val = row[col] == null ? '' : String(row[col]);
-      return '"' + val.replace(/"/g, '""') + '"';
-    }).join(',')
-  );
-  return header + '\n' + lines.join('\n');
-}
+const { toCSV } = require('../utils/csv');
 
 // ═══════════════════════════════════════════════
 // GET /api/machines/stats
@@ -61,7 +50,7 @@ router.get('/barcode/:barcode', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/machines — list with search & filter
 // ═══════════════════════════════════════════════
-router.get('/', (req, res) => {
+router.get('/', requirePermission('machines', 'view'), (req, res) => {
   try {
     const { search, status, type } = req.query;
     let q = 'SELECT * FROM machines WHERE 1=1';
@@ -149,6 +138,7 @@ router.post('/', requirePermission('machines', 'create'), (req, res) => {
       db.prepare('UPDATE machines SET barcode=? WHERE id=?').run(barcode, result.lastInsertRowid);
       machine.barcode = barcode;
     }
+    logAudit(req, 'CREATE', 'machine', machine.id, machine.name);
     res.status(201).json(machine);
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
@@ -193,6 +183,7 @@ router.patch('/:id', requirePermission('machines', 'edit'), (req, res) => {
     );
 
     const updated = db.prepare('SELECT * FROM machines WHERE id = ?').get(req.params.id);
+    logAudit(req, 'UPDATE', 'machine', machine.id, machine.name, machine, updated);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'حدث خطأ أثناء تحديث بيانات الماكينة' });
@@ -211,6 +202,7 @@ router.delete('/:id', requirePermission('machines', 'delete'), (req, res) => {
     if (inUse.c > 0) return res.status(400).json({ error: 'لا يمكن حذف ماكينة قيد الاستخدام في مراحل نشطة' });
 
     db.prepare("UPDATE machines SET status = 'inactive', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
+    logAudit(req, 'DELETE', 'machine', machine.id, machine.name);
     res.json({ message: 'تم تعطيل الماكينة بنجاح', id: machine.id });
   } catch (err) {
     res.status(500).json({ error: 'حدث خطأ أثناء حذف الماكينة' });
@@ -248,7 +240,9 @@ router.post('/:id/maintenance', requirePermission('machines', 'edit'), (req, res
     `).run(req.params.id, maintenance_type, description || null, cost || 0, performed_by || null,
       performed_at || new Date().toISOString(), next_due || null, notes || null, title || null, barcode, req.user?.id || null);
 
-    res.status(201).json(db.prepare('SELECT * FROM machine_maintenance WHERE id = ?').get(result.lastInsertRowid));
+    const newRecord = db.prepare('SELECT * FROM machine_maintenance WHERE id = ?').get(result.lastInsertRowid);
+    logAudit(req, 'CREATE', 'machine_maintenance', newRecord.id, maintenance_type);
+    res.status(201).json(newRecord);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -267,7 +261,9 @@ router.put('/:id/maintenance/:mid', requirePermission('machines', 'edit'), (req,
       cost!==undefined?cost:null, performed_by!==undefined?performed_by:null,
       performed_at||null, next_due!==undefined?next_due:null,
       notes!==undefined?notes:null, title!==undefined?title:null, status||null, req.params.mid);
-    res.json(db.prepare('SELECT * FROM machine_maintenance WHERE id=?').get(req.params.mid));
+    const updated = db.prepare('SELECT * FROM machine_maintenance WHERE id=?').get(req.params.mid);
+    logAudit(req, 'UPDATE', 'machine_maintenance', record.id, record.maintenance_type, record, updated);
+    res.json(updated);
   } catch (err) { serverError(res, err); }
 });
 
@@ -292,7 +288,9 @@ router.post('/:id/expenses', requirePermission('machines', 'edit'), (req, res) =
     if (!amount || !description) return validationError(res, 'المبلغ والوصف مطلوبان');
     const result = db.prepare(`INSERT INTO expenses (expense_type, reference_id, reference_type, amount, description, expense_date, created_by, status, notes)
       VALUES ('machine', ?, 'machine', ?, ?, ?, ?, 'pending', ?)`).run(req.params.id, amount, description, expense_date || new Date().toISOString().slice(0,10), req.user?.id || null, notes || null);
-    res.status(201).json(db.prepare('SELECT * FROM expenses WHERE id = ?').get(result.lastInsertRowid));
+    const expense = db.prepare('SELECT * FROM expenses WHERE id = ?').get(result.lastInsertRowid);
+    logAudit(req, 'CREATE', 'machine_expense', expense.id, description);
+    res.status(201).json(expense);
   } catch (err) { serverError(res, err); }
 });
 

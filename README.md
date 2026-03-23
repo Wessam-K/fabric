@@ -1,35 +1,27 @@
-# WK-Hub v12 — نظام إدارة المصنع 🏭
+# WK-Hub v2.0 — نظام إدارة المصنع الشامل 🏭
 
-نظام ERP متكامل لإدارة مصانع الملابس. يشمل إدارة الموديلات، الأقمشة، الاكسسوارات، حساب التكاليف، الفواتير، المحاسبة (دليل حسابات + قيود يومية + ميزان مراجعة + ضريبة القيمة المضافة)، أوامر العمل، الموردين، المخزون، الموارد البشرية، الرواتب، الحضور، المستخدمين، الإشعارات، سجل المراجعة، مركز التقارير المتقدم مع الجداول المحورية.
+نظام ERP متكامل لإدارة مصانع الملابس — مبني بـ Node.js + Express + SQLite (backend) و React 19 + Vite + Tailwind CSS 4 (frontend).
 
-## v12 — Enterprise Enhancement (أحدث)
+## v2.0 — Full Factory ERP (أحدث)
 
 | المرحلة | المحتوى |
 |---------|---------|
-| Phase 0 | إصلاحات حرجة — CORS، JWT auto-gen، إصدار موحد، تنظيم الملفات |
-| Phase 1 | نظام المصادقة الكامل — قفل الحساب، تغيير كلمة المرور الإجباري، سجل كلمات المرور |
-| Phase 2 | تدفقات الإنتاج — صفحة مخزون اكسسوارات، تقرير أعمار الديون |
-| Phase 3 | المحاسبة المالية — دليل الحسابات، القيود اليومية، ميزان المراجعة، ملخص الضريبة |
-| Phase 4 | التقارير والتصدير — تقييم المخزون، أدوات التنسيق |
-| Phase 5 | نظام الإشعارات — صفحة الإشعارات الكاملة، تنبيهات أوامر الشراء المتأخرة |
-| Phase 6 | تحسينات الواجهة — فتات الخبز (Breadcrumbs)، الشريط الجانبي للموبايل، هياكل التحميل |
-| Phase 7 | تعزيز الأمان — تنقية المدخلات، تكوين Helmet، تسجيل IP/UA |
-| Phase 8 | DevOps — نسخ احتياطي، فحص الصحة، تحديث README |
+| Phase 0-8 | الإصلاحات الحرجة + المصادقة + الإنتاج + المحاسبة + التقارير + الإشعارات + الأمان + DevOps |
+| Phase 9 | V23 Database Migration — 20+ جدول جديد، 240 إذن، 15 إعداد نظام |
+| Phase 10 | 10 وحدات Backend جديدة — MRP, Scheduling, Quality, Quotations, Samples, Shipping, Returns, Documents, Backups |
+| Phase 11 | 10 صفحات Frontend جديدة — واجهات كاملة لجميع الوحدات |
+| Phase 12 | إصلاح SQL شامل — مطابقة كل الاستعلامات مع المخطط الفعلي V23 |
 
 ## إحصائيات المشروع
 
 | البند | العدد |
 |-------|-------|
-| إجمالي الملفات | **103 ملف** |
-| ملفات الباكند | 32 ملف — 8,585 سطر |
-| ملفات الفرونتند | 68 ملف — 12,266 سطر |
-| ملفات الجذر | 3 ملفات (electron.js, package.json, README.md) |
-| إجمالي أسطر الكود | **~20,851 سطر** |
-| جداول قاعدة البيانات | **56 جدول** |
-| صفحات الواجهة | **35 صفحة** |
-| مكونات قابلة لإعادة الاستخدام | **23 مكون** |
-| نقاط API | **186 نقطة** |
-| أدوار المستخدمين | **7 أدوار** |
+| جداول قاعدة البيانات | **87 جدول** (Schema V23) |
+| صفحات الواجهة | **45+ صفحة** |
+| نقاط API | **230+ نقطة** |
+| ملفات الراوتر | **34 ملف** |
+| أدوار المستخدمين | **7 أدوار** مع 240 إذن |
+| اختبارات API | **58 اختبار** (100% pass) |
 
 ## المتطلبات
 
@@ -215,23 +207,31 @@ factory-system/
 | سجل المراجعة | `/audit-log` | superadmin, manager |
 | الإعدادات | `/settings` | superadmin, manager |
 
-## قاعدة البيانات — 56 جدول (Schema V14)
+## قاعدة البيانات — 87 جدول (Schema V23)
 
-### جداول v1-v4 (27 جدول)
-`settings`, `fabrics`, `accessories`, `models`, `model_fabrics`, `model_fabric_consumption`, `model_accessories`, `model_sizes`, `model_size_quantities`, `model_images`, `bom_templates`, `bom_template_fabrics`, `bom_template_accessories`, `invoices`, `invoice_items`, `work_orders`, `work_order_models`, `wo_model_sizes`, `wo_model_fabrics`, `wo_model_accessories`, `wo_stages`, `wo_cost_snapshots`, `stage_templates`, `suppliers`, `supplier_payments`, `purchase_orders`, `purchase_order_items`
+### جداول أساسية (v1-v14)
+`settings`, `fabrics`, `accessories`, `models`, `model_fabrics`, `model_fabric_consumption`, `model_accessories`, `model_sizes`, `model_size_quantities`, `model_images`, `bom_templates`, `bom_template_fabrics`, `bom_template_accessories`, `invoices`, `invoice_items`, `work_orders`, `work_order_models`, `wo_model_sizes`, `wo_model_fabrics`, `wo_model_accessories`, `wo_stages`, `wo_cost_snapshots`, `stage_templates`, `suppliers`, `supplier_payments`, `purchase_orders`, `purchase_order_items`, `users`, `audit_log`, `employees`, `attendance`, `attendance_imports`, `payroll_periods`, `payroll_records`, `hr_adjustments`, `customers`, `customer_payments`, `fabric_batches`, `machines`, `maintenance_records`, `leave_requests`, `notifications`
 
-### جداول v5 الجديدة (8 جداول)
+### جداول V23 الجديدة (20+ جدول)
 
 | الجدول | الوصف |
 |--------|-------|
-| `users` | المستخدمين — username, email, password_hash, role, full_name, is_active |
-| `audit_log` | سجل المراجعة — user_id, action, entity_type, entity_id, old_values, new_values |
-| `employees` | الموظفين — code, name, department, job_title, salary_type, base_salary, allowances, deductions, bank info |
-| `attendance_imports` | واردات الحضور — month, rows_count, errors_count |
-| `attendance` | بيانات الحضور — employee_id, date, status, check_in/out, work_hours, overtime_hours (GENERATED) |
-| `payroll_periods` | فترات الرواتب — name, month, status (draft/calculated/approved/paid), totals |
-| `payroll_records` | سجلات الراتب — employee_id, period_id, all salary components, net_salary |
-| `hr_adjustments` | تعديلات الرواتب — employee_id, type (bonus/deduction/advance), amount, reason |
+| `quotations` + `quotation_items` | عروض الأسعار |
+| `sales_orders` + `sales_order_items` | أوامر البيع |
+| `samples` | إدارة العينات |
+| `shipments` + `packing_lists` | الشحن والتغليف |
+| `sales_returns` + `sales_return_items` | مرتجعات المبيعات |
+| `purchase_returns` + `purchase_return_items` | مرتجعات المشتريات |
+| `qc_templates` + `qc_template_items` | قوالب فحص الجودة |
+| `qc_inspections` + `qc_inspection_items` | فحوصات الجودة |
+| `qc_ncr` | تقارير عدم المطابقة |
+| `qc_defect_codes` | أكواد العيوب |
+| `mrp_runs` + `mrp_suggestions` | تخطيط الموارد |
+| `production_lines` + `production_schedule` | خطوط وجدولة الإنتاج |
+| `expenses` | المصروفات |
+| `documents` | إدارة المستندات |
+| `backups` | النسخ الاحتياطي |
+| `permissions` | نظام الأذونات (240 إذن) |
 
 ## API Endpoints
 
@@ -353,6 +353,99 @@ factory-system/
 
 ### لوحة التحكم `/api/dashboard`
 - `GET /` — إحصائيات + آخر الموديلات
+
+### عروض الأسعار `/api/quotations` (V23 جديد)
+- `GET /` — قائمة عروض الأسعار مع فلاتر وصفحات
+- `GET /:id` — تفاصيل عرض سعر مع البنود
+- `POST /` — إنشاء عرض سعر + بنود
+- `PUT /:id` — تعديل عرض سعر
+- `DELETE /:id` — إلغاء عرض سعر
+- `POST /:id/convert-to-so` — تحويل لأمر بيع
+
+### أوامر البيع `/api/quotations/sales-orders` (V23 جديد)
+- `GET /list` — قائمة أوامر البيع
+- `GET /:id` — تفاصيل أمر بيع مع البنود
+- `PUT /:id` — تعديل أمر بيع
+- `POST /:id/convert-to-wo` — تحويل لأمر عمل
+- `PATCH /:id/status` — تحديث حالة أمر البيع
+
+### العينات `/api/samples` (V23 جديد)
+- `GET /` — قائمة العينات
+- `GET /next-number` — رقم العينة التالي
+- `GET /:id` — تفاصيل عينة
+- `POST /` — إنشاء عينة
+- `PUT /:id` — تعديل عينة
+- `POST /:id/convert-to-wo` — تحويل لأمر عمل
+- `DELETE /:id` — إلغاء عينة
+
+### الشحن `/api/shipping` (V23 جديد)
+- `GET /` — قائمة الشحنات
+- `GET /next-number` — رقم الشحنة التالي
+- `GET /:id` — تفاصيل شحنة مع قوائم التعبئة
+- `POST /` — إنشاء شحنة
+- `PUT /:id` — تعديل شحنة
+- `PATCH /:id/status` — تحديث حالة الشحنة
+
+### المرتجعات `/api/returns` (V23 جديد)
+- `GET /sales` — مرتجعات المبيعات
+- `POST /sales` — إنشاء مرتجع مبيعات
+- `GET /sales/:id` — تفاصيل مرتجع مبيعات
+- `PATCH /sales/:id/approve` — اعتماد مرتجع مبيعات
+- `GET /purchases` — مرتجعات المشتريات
+- `POST /purchases` — إنشاء مرتجع مشتريات
+- `GET /purchases/:id` — تفاصيل مرتجع مشتريات
+- `PATCH /purchases/:id/approve` — اعتماد مرتجع مشتريات
+
+### ضمان الجودة `/api/quality` (V23 جديد)
+- `GET /templates` — قوالب الفحص
+- `POST /templates` — إنشاء قالب فحص
+- `GET /templates/:id` — تفاصيل قالب مع البنود
+- `PUT /templates/:id` — تعديل قالب
+- `DELETE /templates/:id` — حذف قالب
+- `GET /defect-codes` — أكواد العيوب
+- `POST /defect-codes` — إنشاء كود عيب
+- `GET /inspections` — قائمة الفحوصات
+- `POST /inspections` — إنشاء فحص جديد
+- `GET /inspections/:id` — تفاصيل فحص
+- `PATCH /inspections/:id/complete` — إكمال فحص
+- `GET /ncr` — تقارير عدم المطابقة
+- `POST /ncr` — إنشاء تقرير NCR
+- `PATCH /ncr/:id` — تحديث تقرير NCR
+
+### تخطيط الموارد `/api/mrp` (V23 جديد)
+- `GET /` — قائمة تشغيلات MRP
+- `GET /:id` — تفاصيل تشغيل مع الاقتراحات
+- `POST /calculate` — تشغيل حساب MRP
+- `POST /:id/auto-po` — إنشاء أوامر شراء تلقائية
+
+### جدولة الإنتاج `/api/scheduling` (V23 جديد)
+- `GET /` — جدول الإنتاج (Gantt)
+- `GET /lines` — خطوط الإنتاج
+- `POST /lines` — إنشاء خط إنتاج
+- `PUT /lines/:id` — تعديل خط إنتاج
+- `GET /capacity` — سعة الخطوط
+- `POST /` — إنشاء جدولة
+- `PUT /:id` — تعديل جدولة
+
+### المصروفات `/api/expenses` (V23 جديد)
+- `GET /` — قائمة المصروفات
+- `POST /` — إنشاء مصروف
+- `GET /:id` — تفاصيل مصروف
+- `PUT /:id` — تعديل مصروف
+- `PATCH /:id/approve` — اعتماد مصروف
+
+### المستندات `/api/documents` (V23 جديد)
+- `GET /` — قائمة المستندات
+- `POST /upload` — رفع مستند
+- `GET /:id` — تفاصيل مستند
+- `PUT /:id` — تعديل عنوان/تصنيف
+- `DELETE /:id` — حذف مستند
+
+### النسخ الاحتياطي `/api/backups` (V23 جديد)
+- `GET /` — قائمة النسخ الاحتياطية
+- `POST /` — إنشاء نسخة احتياطية
+- `POST /:id/restore` — طلب استعادة
+- `DELETE /:id` — حذف نسخة احتياطية
 
 ## مركز التقارير المتقدم (v5)
 

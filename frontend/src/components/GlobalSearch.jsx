@@ -59,10 +59,10 @@ export default function GlobalSearch() {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-gray-400 text-xs transition-colors border border-white/10">
+        className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-400 text-xs transition-colors border border-gray-200">
         <Search size={14} />
-        <span>بحث...</span>
-        <kbd className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-mono">Ctrl+K</kbd>
+        <span className="flex-1 text-right">بحث...</span>
+        <kbd className="text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded font-mono">Ctrl+K</kbd>
       </button>
     );
   }

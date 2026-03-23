@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker, Printer, XCircle } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 import HelpButton from '../components/HelpButton';
 import StageChecklist from '../components/StageChecklist';
 import CostPanel from '../components/CostPanel';
-import { StatusBadge, LoadingState, Modal } from '../components/ui';
+import PermissionGuard from '../components/PermissionGuard';
+import { StatusBadge, LoadingState } from '../components/ui';
 
 const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
 
@@ -45,6 +47,7 @@ export default function WorkOrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { can } = useAuth();
   const [wo, setWo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('stages');
@@ -103,9 +106,11 @@ export default function WorkOrderDetail() {
         if (b) { price = b.price_per_meter; break; }
       }
     }
-    // Find fabric by code
-    const fab = (wo.fabrics || []).find(f => f.fabric_code === fabric_code) || (wo.fabric_batches || []).find(f => f.fabric_code === fabric_code);
-    if (fab) fabric_id = fab.id || 0;
+    // Find fabric_id by looking up the actual fabric by code
+    if (fabric_code && wo.fabric_consumption) {
+      const existing = wo.fabric_consumption.find(c => c.fabric_code === fabric_code);
+      if (existing && existing.fabric_id) fabric_id = existing.fabric_id;
+    }
 
     try {
       const { data } = await api.post(`/work-orders/${id}/fabric-consumption`, {
@@ -144,13 +149,6 @@ export default function WorkOrderDetail() {
       setWo(data.wo);
       setInvoiceForm({ qty: '', price: '', customer_name: '', notes: '' });
       toast.success(`تم إصدار فاتورة ${data.invoice_number} لـ ${qty} قطعة`);
-    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
-  };
-
-  const handleStageAction = async (stageId, status) => {
-    try {
-      const { data } = await api.patch(`/work-orders/${id}/stages/${stageId}`, { status });
-      setWo(data); toast.success('تم تحديث المرحلة');
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
@@ -278,14 +276,14 @@ export default function WorkOrderDetail() {
         </div>
         <div className="flex gap-2">
           <HelpButton pageKey="workorderdetail" />
-          {wo.status === 'draft' && <button onClick={() => handleStatusChange('in_progress')} className="btn btn-primary"><Play size={14} /> بدء التنفيذ</button>}
-          {wo.status === 'in_progress' && <button onClick={handleFinalize} className="btn" style={{background:'var(--color-success)',color:'white'}}><CheckCircle size={14} /> إنهاء الإنتاج</button>}
-          {!['completed', 'cancelled', 'delivered'].includes(wo.status) && (
+          {wo.status === 'draft' && can('work_orders', 'edit') && <button onClick={() => handleStatusChange('in_progress')} className="btn btn-primary"><Play size={14} /> بدء التنفيذ</button>}
+          {wo.status === 'in_progress' && can('work_orders', 'edit') && <button onClick={handleFinalize} className="btn" style={{background:'var(--color-success)',color:'white'}}><CheckCircle size={14} /> إنهاء الإنتاج</button>}
+          {!['completed', 'cancelled', 'delivered'].includes(wo.status) && can('work_orders', 'delete') && (
             <button onClick={() => setShowCancelModal(true)} className="btn btn-ghost" style={{color:'var(--color-danger)'}}><XCircle size={14} /> إلغاء</button>
           )}
           <button onClick={handlePrint} className="btn btn-ghost"><Printer size={14} /> طباعة</button>
-          <button onClick={() => navigate(`/work-orders/${id}/edit`)} className="btn btn-outline"><Edit2 size={14} /> تعديل</button>
-          <button onClick={handleDelete} className="btn btn-ghost" style={{color:'var(--color-danger)'}}><Trash2 size={16} /></button>
+          {can('work_orders', 'edit') && <button onClick={() => navigate(`/work-orders/${id}/edit`)} className="btn btn-outline"><Edit2 size={14} /> تعديل</button>}
+          {can('work_orders', 'delete') && <button onClick={handleDelete} className="btn btn-ghost" style={{color:'var(--color-danger)'}}><Trash2 size={16} /></button>}
         </div>
       </div>
 
@@ -333,7 +331,7 @@ export default function WorkOrderDetail() {
                 <h3 className="text-sm font-bold text-[#1a1a2e] mb-4">مراحل الإنتاج</h3>
                 <StageChecklist
                   stages={wo.stages || []}
-                  editable={['draft', 'pending', 'in_progress'].includes(wo.status)}
+                  editable={can('work_orders', 'edit') && ['draft', 'pending', 'in_progress'].includes(wo.status)}
                   totalQty={wo.quantity || 0}
                   onAdvance={handleStageAdvance}
                   onStart={handleStageStart}
@@ -411,7 +409,7 @@ export default function WorkOrderDetail() {
                   </table>
                 )}
                 {/* Add consumption form */}
-                {['draft', 'pending', 'in_progress'].includes(wo.status) && (
+                {can('work_orders', 'edit') && ['draft', 'pending', 'in_progress'].includes(wo.status) && (
                   <div className="bg-gray-50 rounded-lg p-3 space-y-2">
                     <p className="text-xs text-gray-500 font-bold">إضافة استهلاك قماش</p>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -452,7 +450,7 @@ export default function WorkOrderDetail() {
                     ))}
                   </div>
                 )}
-                {['draft', 'pending', 'in_progress'].includes(wo.status) && (
+                {can('work_orders', 'edit') && ['draft', 'pending', 'in_progress'].includes(wo.status) && (
                   <div className="bg-gray-50 rounded-lg p-3 space-y-2">
                     <div className="grid grid-cols-3 gap-2">
                       <input type="number" placeholder="كمية الهدر (م)" value={wasteForm.waste_meters}
@@ -478,17 +476,17 @@ export default function WorkOrderDetail() {
               <div className="bg-gradient-to-br from-[#1a1a2e] to-[#2a2a4e] rounded-2xl p-5 text-white">
                 <h3 className="text-sm font-bold mb-4">ملخص التكلفة</h3>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-400">تكلفة الأقمشة</span><span className="font-mono">{fmt(wo.total_fabric_consumption_cost || cs.main_fabric_cost + cs.lining_cost)} ج</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">تكلفة الاكسسوار</span><span className="font-mono">{fmt(wo.total_accessory_consumption_cost || cs.accessories_cost)} ج</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">المصنعية</span><span className="font-mono">{fmt(cs.masnaiya_total)} ج</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">المصروف</span><span className="font-mono">{fmt(cs.masrouf_total)} ج</span></div>
-                  <div className="flex justify-between text-orange-400"><span>تكلفة الهدر</span><span className="font-mono">{fmt(wo.total_waste_cost || cs.waste_cost)} ج</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">تكلفة الأقمشة</span><span className="font-mono">{fmt(wo.total_fabric_consumption_cost ?? ((cs.main_fabric_cost || 0) + (cs.lining_cost || 0)))} ج</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">تكلفة الاكسسوار</span><span className="font-mono">{fmt(wo.total_accessory_consumption_cost ?? (cs.accessories_cost || 0))} ج</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">المصنعية</span><span className="font-mono">{fmt(cs.masnaiya_total || 0)} ج</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">المصروف</span><span className="font-mono">{fmt(cs.masrouf_total || 0)} ج</span></div>
+                  <div className="flex justify-between text-orange-400"><span>تكلفة الهدر</span><span className="font-mono">{fmt(wo.total_waste_cost ?? (cs.waste_cost || 0))} ج</span></div>
                   <hr className="border-white/20" />
                   {(() => {
-                    const totalFab = wo.total_fabric_consumption_cost || (cs.main_fabric_cost + cs.lining_cost);
-                    const totalAcc = wo.total_accessory_consumption_cost || cs.accessories_cost;
-                    const totalW = wo.total_waste_cost || cs.waste_cost || 0;
-                    const grand = totalFab + totalAcc + cs.masnaiya_total + cs.masrouf_total + totalW + (cs.extra_expenses || 0);
+                    const totalFab = wo.total_fabric_consumption_cost ?? ((cs.main_fabric_cost || 0) + (cs.lining_cost || 0));
+                    const totalAcc = wo.total_accessory_consumption_cost ?? (cs.accessories_cost || 0);
+                    const totalW = wo.total_waste_cost ?? (cs.waste_cost || 0);
+                    const grand = totalFab + totalAcc + (cs.masnaiya_total || 0) + (cs.masrouf_total || 0) + totalW + (cs.extra_expenses || 0);
                     const cpp = piecesCompleted > 0 ? grand / piecesCompleted : cs.cost_per_piece;
                     return (
                       <>
@@ -596,6 +594,7 @@ export default function WorkOrderDetail() {
             <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
               <h3 className="text-sm font-bold text-[#1a1a2e] flex items-center gap-2"><DollarSign size={16} className="text-red-500" /> المصاريف الإضافية</h3>
               {/* Add form */}
+              <PermissionGuard module="work_orders" action="edit">
               <div className="flex items-end gap-2 bg-gray-50 rounded-lg p-3">
                 <div className="flex-1">
                   <label className="block text-[10px] text-gray-400 mb-0.5">الوصف</label>
@@ -609,6 +608,7 @@ export default function WorkOrderDetail() {
                 </div>
                 <button onClick={handleAddExpense} className="px-3 py-2 bg-[#c9a84c] hover:bg-[#b8973f] text-white rounded-lg text-sm"><Plus size={16} /></button>
               </div>
+              </PermissionGuard>
               {/* List */}
               {(wo.extra_expenses || []).length === 0 ? (
                 <p className="text-center text-xs text-gray-400 py-4">لا توجد مصاريف إضافية</p>
@@ -621,7 +621,7 @@ export default function WorkOrderDetail() {
                         <td className="py-2">{e.description}</td>
                         <td className="py-2 text-center font-mono font-bold text-red-500">{fmt(e.amount)} ج</td>
                         <td className="py-2 text-center text-xs text-gray-400">{new Date(e.recorded_at).toLocaleDateString('ar-EG')}</td>
-                        <td className="py-2 text-center"><button onClick={() => handleDeleteExpense(e.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></td>
+                        <td className="py-2 text-center">{can('work_orders', 'edit') && <button onClick={() => handleDeleteExpense(e.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button>}</td>
                       </tr>
                     ))}
                   </tbody>

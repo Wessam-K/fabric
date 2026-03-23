@@ -2,18 +2,26 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { toCSV } = require('../utils/csv');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
-function toCSV(rows, columns) {
-  if (!rows || rows.length === 0) return columns.join(',') + '\n';
-  const header = columns.join(',');
-  const lines = rows.map(row =>
-    columns.map(col => {
-      const val = row[col] == null ? '' : String(row[col]);
-      return '"' + val.replace(/"/g, '""') + '"';
-    }).join(',')
-  );
-  return header + '\n' + lines.join('\n');
-}
+const uploadsDir = path.join(__dirname, '..', 'uploads', 'receipts');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const receiptStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => cb(null, `rcpt-${Date.now()}${path.extname(file.originalname)}`)
+});
+const receiptUpload = multer({
+  storage: receiptStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/image\/(jpeg|jpg|png|webp)|application\/pdf/.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Only images and PDFs allowed'));
+  }
+});
 
 // ═══════════════════════════════════════════════
 // GET /api/expenses/summary
@@ -33,7 +41,7 @@ router.get('/summary', requirePermission('expenses', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/expenses/export
 // ═══════════════════════════════════════════════
-router.get('/export', requirePermission('expenses', 'export'), (req, res) => {
+router.get('/export', requirePermission('expenses', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT e.*, u.full_name as created_by_name FROM expenses e LEFT JOIN users u ON u.id=e.created_by WHERE e.is_deleted=0 ORDER BY e.expense_date DESC`).all();
     const columns = ['id','expense_type','description','amount','expense_date','status','reference_type','reference_id','notes','created_by_name'];
@@ -93,6 +101,9 @@ router.post('/', requirePermission('expenses', 'create'), (req, res) => {
     const { expense_type, amount, description, expense_date, reference_type, reference_id, notes, receipt_url } = req.body;
     if (!expense_type || !amount || !description || !expense_date) {
       return res.status(400).json({ error: 'النوع والمبلغ والوصف والتاريخ مطلوبون' });
+    }
+    if (parseFloat(amount) <= 0) {
+      return res.status(400).json({ error: 'المبلغ يجب أن يكون أكبر من صفر' });
     }
     const result = db.prepare(`INSERT INTO expenses (expense_type, amount, description, expense_date, reference_type, reference_id, notes, receipt_url, created_by, status)
       VALUES (?,?,?,?,?,?,?,?,?,'pending')`).run(expense_type, amount, description, expense_date, reference_type || null, reference_id || null, notes || null, receipt_url || null, req.user.id);
@@ -187,6 +198,21 @@ router.post('/import', requirePermission('expenses', 'create'), (req, res) => {
       } catch (e) { errors.push({ row: i+1, error: e.message }); }
     }
     res.json({ inserted, errors });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/expenses/:id/receipt — upload receipt image/PDF
+router.post('/:id/receipt', requirePermission('expenses', 'edit'), receiptUpload.single('receipt'), (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const expense = db.prepare('SELECT * FROM expenses WHERE id=? AND is_deleted=0').get(id);
+    if (!expense) return res.status(404).json({ error: 'المصروف غير موجود' });
+    if (!req.file) return res.status(400).json({ error: 'يجب رفع ملف' });
+
+    const receiptUrl = `/uploads/receipts/${req.file.filename}`;
+    db.prepare('UPDATE expenses SET receipt_url=? WHERE id=?').run(receiptUrl, id);
+    logAudit(req, 'update', 'expenses', id, 'رفع إيصال', { receipt_url: expense.receipt_url }, { receipt_url: receiptUrl });
+    res.json({ receipt_url: receiptUrl });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

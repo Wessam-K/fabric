@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ArrowUpDown, ChevronDown, ChevronUp, UserCheck, BoxIcon, CheckCircle, Settings, CreditCard, Wrench, Receipt, Activity, Barcode, FileText, Percent } from 'lucide-react';
+import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package, Scissors, Search, Calendar, AlertTriangle, Factory, Warehouse, Users, Table2, ChevronDown, ChevronUp, UserCheck, CheckCircle, Settings, CreditCard, Wrench, Receipt, Activity, Barcode, FileText, Percent } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
@@ -183,10 +183,10 @@ export default function Reports() {
           const { data } = await api.get('/reports/machine-utilization');
           setMachineUtilization(data);
         } else if (tab === 'maintenance-cost') {
-          const { data } = await api.get('/reports/maintenance-cost', { params: filterParams() });
+          const { data } = await api.get('/reports/maintenance-cost', filterParams());
           setMaintenanceCost(data);
         } else if (tab === 'expense-analysis') {
-          const { data } = await api.get('/reports/expense-analysis', { params: filterParams() });
+          const { data } = await api.get('/reports/expense-analysis', filterParams());
           setExpenseAnalysis(data);
         } else if (tab === 'pl-monthly') {
           const { data } = await api.get('/reports/pl-monthly');
@@ -345,7 +345,7 @@ export default function Reports() {
                   <td className="px-4 py-3 font-mono text-xs">{f.code}</td>
                   <td className="px-4 py-3 font-bold">{f.name}</td>
                   <td className="px-4 py-3 text-center"><span className={`text-[10px] px-2 py-0.5 rounded-full ${f.fabric_type === 'main' ? 'bg-blue-100 text-blue-700' : f.fabric_type === 'lining' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>{f.fabric_type}</span></td>
-                  <td className="px-4 py-3 text-center font-mono">{f.model_count}</td>
+                  <td className="px-4 py-3 text-center font-mono">{f.wo_count}</td>
                   <td className="px-4 py-3 text-center font-mono font-bold">{fmt(f.total_meters)} م</td>
                 </tr>
               ))}
@@ -383,7 +383,7 @@ export default function Reports() {
                   <td className="px-4 py-3 font-mono text-xs">{a.code}</td>
                   <td className="px-4 py-3 font-bold">{a.name}</td>
                   <td className="px-4 py-3 text-center"><span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded">{a.acc_type}</span></td>
-                  <td className="px-4 py-3 text-center font-mono">{a.model_count}</td>
+                  <td className="px-4 py-3 text-center font-mono">{a.wo_count}</td>
                   <td className="px-4 py-3 text-center font-mono">{fmt(a.total_quantity)}</td>
                   <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(a.total_cost)} ج</td>
                 </tr>
@@ -633,22 +633,22 @@ export default function Reports() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-right text-xs text-gray-500">القماش</th>
-                <th className="px-4 py-3 text-right text-xs text-gray-500">الباتش</th>
-                <th className="px-4 py-3 text-center text-xs text-gray-500">أمر الإنتاج</th>
-                <th className="px-4 py-3 text-center text-xs text-gray-500">الكمية المستخدمة</th>
-                <th className="px-4 py-3 text-center text-xs text-gray-500">الهدر</th>
+                <th className="px-4 py-3 text-right text-xs text-gray-500">النوع</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">أوامر الإنتاج</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">الفعلي (م)</th>
+                <th className="px-4 py-3 text-center text-xs text-gray-500">الهدر (م)</th>
                 <th className="px-4 py-3 text-center text-xs text-gray-500">التكلفة</th>
               </tr>
             </thead>
             <tbody>
               {fabricConsumption.map((r, i) => (
                 <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
-                  <td className="px-4 py-3 font-bold">{r.fabric_name || r.fabric_code}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{r.batch_code || '—'}</td>
-                  <td className="px-4 py-3 text-center font-mono text-xs">{r.wo_number}</td>
-                  <td className="px-4 py-3 text-center font-mono">{fmt(r.quantity_used)} م</td>
+                  <td className="px-4 py-3 font-bold">{r.name || r.code}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.fabric_type || '—'}</td>
+                  <td className="px-4 py-3 text-center font-mono text-xs">{r.wo_count}</td>
+                  <td className="px-4 py-3 text-center font-mono">{fmt(r.actual_meters)} م</td>
                   <td className="px-4 py-3 text-center font-mono text-amber-600">{fmt(r.waste_meters)} م</td>
-                  <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(r.total_cost)} ج</td>
+                  <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(r.actual_cost)} ج</td>
                 </tr>
               ))}
             </tbody>
@@ -660,7 +660,7 @@ export default function Reports() {
 
   const renderWaste = () => {
     if (!wasteData || wasteData.length === 0) return <div className="text-center py-16 text-gray-400">لا توجد بيانات هدر</div>;
-    const totalWaste = wasteData.reduce((s, r) => s + (r.total_waste_cost || 0), 0);
+    const totalWaste = wasteData.reduce((s, r) => s + (r.waste_cost || 0), 0);
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
@@ -687,8 +687,8 @@ export default function Reports() {
                 <tr key={i} className="border-t border-gray-100 hover:bg-gray-50/50">
                   <td className="px-4 py-3 font-mono text-xs">{r.wo_number}</td>
                   <td className="px-4 py-3 font-bold">{r.model_code}</td>
-                  <td className="px-4 py-3 text-center font-mono text-amber-600">{fmt(r.total_waste_meters)}</td>
-                  <td className="px-4 py-3 text-center font-mono font-bold text-red-500">{fmt(r.total_waste_cost)} ج</td>
+                  <td className="px-4 py-3 text-center font-mono text-amber-600">{fmt(r.waste_meters)}</td>
+                  <td className="px-4 py-3 text-center font-mono font-bold text-red-500">{fmt(r.waste_cost)} ج</td>
                 </tr>
               ))}
             </tbody>

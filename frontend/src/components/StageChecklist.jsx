@@ -95,6 +95,14 @@ export default function StageChecklist({ stages = [], editable = false, totalQty
 
   return (
     <div className="space-y-4">
+      {/* Warning: no pieces in pipeline */}
+      {totalQty > 0 && totalIn === 0 && totalCompleted === 0 && stages.some(s => s.status === 'in_progress' || s.status === 'pending') && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2 text-xs text-amber-700">
+          <AlertTriangle size={14} />
+          <span>لم يتم تهيئة كميات المراحل بعد. قم بإعادة بدء التنفيذ أو تعديل الكمية يدوياً.</span>
+        </div>
+      )}
+
       {/* Flow Summary Bar */}
       <div className="bg-gradient-to-l from-[#1a1a2e] to-[#2a2a4e] rounded-xl p-4 text-white">
         <div className="flex items-center justify-between mb-2">

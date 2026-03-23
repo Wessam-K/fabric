@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Upload, Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 
 export default function ImageUpload({ value, onChange, label, size = 'md', className = '' }) {
   const inputRef = useRef();
