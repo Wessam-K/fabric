@@ -221,10 +221,19 @@ router.post('/:code/bom-templates', requirePermission('models', 'edit'), (req, r
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
     const { template_name, is_default, masnaiya, masrouf, margin_pct, notes, fabrics, accessories, sizes } = req.body;
 
+    // Load defaults from settings when values not provided
+    const getSetting = (key, fallback) => {
+      const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key);
+      return row ? parseFloat(row.value) || fallback : fallback;
+    };
+    const defMasnaiya = masnaiya ?? getSetting('masnaiya_default', 90);
+    const defMasrouf = masrouf ?? getSetting('masrouf_default', 50);
+    const defMargin = margin_pct ?? getSetting('margin_default', 25);
+
     const transaction = db.transaction(() => {
       if (is_default) db.prepare('UPDATE bom_templates SET is_default=0 WHERE model_id=?').run(model.id);
       const r = db.prepare('INSERT INTO bom_templates (model_id,template_name,is_default,masnaiya,masrouf,margin_pct,notes) VALUES (?,?,?,?,?,?,?)')
-        .run(model.id, template_name || 'الافتراضي', is_default ? 1 : 0, masnaiya ?? 90, masrouf ?? 50, margin_pct ?? 25, notes || null);
+        .run(model.id, template_name || 'الافتراضي', is_default ? 1 : 0, defMasnaiya, defMasrouf, defMargin, notes || null);
       const tid = r.lastInsertRowid;
 
       if (fabrics?.length) {

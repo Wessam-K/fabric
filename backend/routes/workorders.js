@@ -301,6 +301,15 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
             fabric_batches, accessories_detail, extra_expenses } = req.body;
     if (!wo_number) return res.status(400).json({ error: 'رقم أمر العمل مطلوب' });
 
+    // Load defaults from settings when values not provided
+    const getSetting = (key, fallback) => {
+      const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key);
+      return row ? parseFloat(row.value) || fallback : fallback;
+    };
+    const defMasnaiya = masnaiya ?? getSetting('masnaiya_default', 90);
+    const defMasrouf = masrouf ?? getSetting('masrouf_default', 50);
+    const defMargin = margin_pct ?? getSetting('margin_default', 25);
+
     const transaction = db.transaction(() => {
       // Determine fabric variant label from template
       let fabricVariantLabel = null;
@@ -310,7 +319,7 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
       }
 
       const r = db.prepare(`INSERT INTO work_orders (wo_number,model_id,template_id,priority,due_date,assigned_to,masnaiya,masrouf,margin_pct,consumer_price,wholesale_price,notes,quantity,is_size_based,fabric_variant_label) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(wo_number, model_id || null, template_id || null, priority || 'normal', due_date || null, assigned_to || null, masnaiya ?? 90, masrouf ?? 50, margin_pct ?? 25, consumer_price || null, wholesale_price || null, notes || null, quantity || 0, is_size_based ? 1 : 0, fabricVariantLabel);
+        .run(wo_number, model_id || null, template_id || null, priority || 'normal', due_date || null, assigned_to || null, defMasnaiya, defMasrouf, defMargin, consumer_price || null, wholesale_price || null, notes || null, quantity || 0, is_size_based ? 1 : 0, fabricVariantLabel);
       const woId = r.lastInsertRowid;
 
       // V3 legacy fabrics

@@ -221,7 +221,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     try {
       const cancelledCount = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE status='cancelled'`).get().c;
       productionPipeline.cancelled = cancelledCount;
-    } catch {}
+    } catch (e) { console.error('dashboard cancelled count:', e.message); }
     pipelineRows.forEach(r => { if (productionPipeline.hasOwnProperty(r.status)) productionPipeline[r.status] = r.count; });
 
     // V9 — low stock alerts (return arrays for frontend iteration)
@@ -254,7 +254,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     try {
       topModels = db.prepare(`SELECT model_code, model_name, total_wo, completed_wo, total_quantity, total_pieces_completed, avg_cost_per_piece
         FROM model_production_summary ORDER BY total_wo DESC LIMIT 5`).all();
-    } catch {}
+    } catch (e) { console.error('dashboard topModels:', e.message); }
 
     // V11 — stage bottleneck detection (stages with most WIP)
     let stageBottlenecks = [];
@@ -264,13 +264,13 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
         FROM wo_stages ws JOIN work_orders wo ON wo.id=ws.wo_id
         WHERE wo.status='in_progress' AND ws.status='in_progress' AND ws.quantity_in_stage > 0
         GROUP BY ws.stage_name ORDER BY total_wip DESC LIMIT 5`).all();
-    } catch {}
+    } catch (e) { console.error('dashboard stageBottlenecks:', e.message); }
 
     // V17 — Machine status board
     let machineStatusBoard = [];
     try {
       machineStatusBoard = db.prepare(`SELECT id, code, name, status, location, machine_type FROM machines ORDER BY sort_order, name LIMIT 30`).all();
-    } catch {}
+    } catch (e) { console.error('dashboard machineStatusBoard:', e.message); }
 
     // V18 — Today's summary
     const today = new Date().toISOString().slice(0, 10);
@@ -282,13 +282,13 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       const todayExpenses = db.prepare("SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND expense_date=?").get(today)?.v || 0;
       const todayInvoices = db.prepare("SELECT COUNT(*) as c FROM invoices WHERE DATE(created_at)=?").get(today)?.c || 0;
       todaySummary = { attendance: todayAttendance, deliveries: todayDeliveries, due_today: dueTodayWO, expenses: Math.round(todayExpenses * 100) / 100, invoices: todayInvoices };
-    } catch { todaySummary = { attendance: 0, deliveries: 0, due_today: 0, expenses: 0, invoices: 0 }; }
+    } catch (e) { console.error('dashboard todaySummary:', e.message); todaySummary = { attendance: 0, deliveries: 0, due_today: 0, expenses: 0, invoices: 0 }; }
 
     // V18 — Overdue invoices
     let overdueInvoicesList = [];
     try {
       overdueInvoicesList = db.prepare(`SELECT id, invoice_number, customer_name, total, due_date FROM invoices WHERE status='overdue' ORDER BY due_date ASC LIMIT 5`).all();
-    } catch {}
+    } catch (e) { console.error('dashboard overdueInvoices:', e.message); }
 
     // V18 — Overdue work orders list (detailed)
     let overdueWOList = [];
@@ -297,7 +297,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
         FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id
         WHERE wo.due_date < date('now') AND wo.status NOT IN ('completed','cancelled')
         ORDER BY wo.due_date ASC LIMIT 5`).all();
-    } catch {}
+    } catch (e) { console.error('dashboard overdueWOList:', e.message); }
 
     res.json({
       total_models: totalModels, total_fabrics: totalFabrics, total_accessories: totalAccessories,
@@ -349,11 +349,11 @@ app.get('/api/search', requireAuth, (req, res) => {
     let machines = [];
     try {
       machines = db.prepare(`SELECT id, code, name, barcode, machine_type, status FROM machines WHERE status != 'inactive' AND (code LIKE ? OR name LIKE ? OR barcode LIKE ?) LIMIT 8`).all(like, like, like);
-    } catch {}
+    } catch (e) { console.error('search machines:', e.message); }
     try {
       maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT 8`).all(like, like, like);
       expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT 8`).all(like, like);
-    } catch {}
+    } catch (e) { console.error('search maintenance/expenses:', e.message); }
     res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults, machines });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

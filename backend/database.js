@@ -427,10 +427,7 @@ function initializeDatabase() {
     INSERT OR IGNORE INTO settings (key, value) VALUES ('waste_pct_default', '5');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('margin_default', '25');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('fabric_batch_auto', '1');
-    INSERT OR IGNORE INTO settings (key, value) VALUES ('default_waste_pct', '5');
-    INSERT OR IGNORE INTO settings (key, value) VALUES ('default_masnaiya', '90');
-    INSERT OR IGNORE INTO settings (key, value) VALUES ('default_masrouf', '50');
-    INSERT OR IGNORE INTO settings (key, value) VALUES ('default_margin', '25');
+    -- Removed duplicate default_* keys; canonical keys are masnaiya_default, masrouf_default, waste_pct_default, margin_default
     INSERT OR IGNORE INTO settings (key, value) VALUES ('low_stock_threshold', '20');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('tax_rate', '14');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('working_hours_per_day', '8');
@@ -2327,6 +2324,13 @@ function runMigrations() {
     `);
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (26)`);
+  }
+
+  // V27 — Clean up duplicate settings keys (keep canonical *_default, remove default_*)
+  const v27 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 27').get();
+  if (!v27) {
+    db.exec(`DELETE FROM settings WHERE key IN ('default_waste_pct', 'default_masnaiya', 'default_masrouf', 'default_margin')`);
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (27)`);
   }
 }
 

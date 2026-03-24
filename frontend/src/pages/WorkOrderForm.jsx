@@ -53,9 +53,9 @@ export default function WorkOrderForm() {
   const [sizeMode, setSizeMode] = useState('standard');
 
   // Cost
-  const [masnaiya, setMasnaiya] = useState('90');
-  const [masrouf, setMasrouf] = useState('50');
-  const [marginPct, setMarginPct] = useState('25');
+  const [masnaiya, setMasnaiya] = useState('');
+  const [masrouf, setMasrouf] = useState('');
+  const [marginPct, setMarginPct] = useState('');
   const [consumerPrice, setConsumerPrice] = useState('');
   const [wholesalePrice, setWholesalePrice] = useState('');
 

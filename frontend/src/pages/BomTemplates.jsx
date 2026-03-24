@@ -67,9 +67,9 @@ export default function BomTemplates() {
 
   // Edit state for active template
   const [templateName, setTemplateName] = useState('');
-  const [masnaiya, setMasnaiya] = useState('90');
-  const [masrouf, setMasrouf] = useState('50');
-  const [marginPct, setMarginPct] = useState('25');
+  const [masnaiya, setMasnaiya] = useState('');
+  const [masrouf, setMasrouf] = useState('');
+  const [marginPct, setMarginPct] = useState('');
   const [mainFabrics, setMainFabrics] = useState([emptyFabric('main')]);
   const [linings, setLinings] = useState([emptyFabric('lining')]);
   const [sizes, setSizes] = useState([emptySize()]);
@@ -83,6 +83,9 @@ export default function BomTemplates() {
   const [fabricsList, setFabricsList] = useState([]);
   const [accessoriesList, setAccessoriesList] = useState([]);
   const [defaultWaste, setDefaultWaste] = useState(5);
+  const [defaultMasnaiya, setDefaultMasnaiya] = useState('90');
+  const [defaultMasrouf, setDefaultMasrouf] = useState('50');
+  const [defaultMargin, setDefaultMargin] = useState('25');
 
   const loadModel = async () => {
     try {
@@ -97,6 +100,9 @@ export default function BomTemplates() {
       setAccessoriesList(accRes.data);
       const s = settingsRes.data || {};
       setDefaultWaste(parseFloat(s.waste_pct_default) || 5);
+      setDefaultMasnaiya(s.masnaiya_default ?? '90');
+      setDefaultMasrouf(s.masrouf_default ?? '50');
+      setDefaultMargin(s.margin_default ?? '25');
 
       // Load templates list
       const { data: tpls } = await api.get(`/models/${code}/bom-templates`);
@@ -104,6 +110,11 @@ export default function BomTemplates() {
       if (tpls.length > 0) {
         const defTpl = tpls.find(t => t.is_default) || tpls[0];
         await loadTemplate(defTpl.id);
+      } else {
+        // No templates yet — initialize with settings defaults
+        setMasnaiya(s.masnaiya_default ?? '90');
+        setMasrouf(s.masrouf_default ?? '50');
+        setMarginPct(s.margin_default ?? '25');
       }
       // Load matrix data for variant comparison
       try {
@@ -191,9 +202,9 @@ export default function BomTemplates() {
   const handleNew = () => {
     setActiveId(null);
     setTemplateName('');
-    setMasnaiya('90');
-    setMasrouf('50');
-    setMarginPct('25');
+    setMasnaiya(defaultMasnaiya);
+    setMasrouf(defaultMasrouf);
+    setMarginPct(defaultMargin);
     setNotes('');
     setMainFabrics([emptyFabric('main', defaultWaste)]);
     setLinings([emptyFabric('lining')]);
