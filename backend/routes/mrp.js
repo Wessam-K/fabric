@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -130,7 +130,7 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
 
     logAudit(req, 'create', 'mrp', runId, `MRP Run #${runId} — ${suggestions.length} suggestions`);
     res.status(201).json({ run: runData, suggestions });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -147,7 +147,7 @@ router.get('/', requirePermission('mrp', 'view'), (req, res) => {
       ORDER BY mr.created_at DESC
     `).all();
     res.json(runs);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -160,7 +160,7 @@ router.get('/:id', requirePermission('mrp', 'view'), (req, res) => {
     if (!run) return res.status(404).json({ error: 'غير موجود' });
     run.suggestions = db.prepare('SELECT * FROM mrp_suggestions WHERE mrp_run_id=? ORDER BY item_type, shortage_qty DESC').all(id);
     res.json(run);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -210,7 +210,7 @@ router.post('/:id/auto-po', requirePermission('mrp', 'create'), (req, res) => {
 
     logAudit(req, 'MRP_AUTO_PO', 'mrp', runId, `Created ${createdPOs.length} POs from MRP #${runId}`);
     res.json({ created_pos: createdPOs });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/mrp/:id
@@ -222,7 +222,7 @@ router.delete('/:id', requirePermission('mrp', 'delete'), (req, res) => {
     db.prepare("UPDATE mrp_runs SET status='cancelled' WHERE id=?").run(id);
     logAudit(req, 'delete', 'mrp', id, `MRP Run #${id}`);
     res.json({ message: 'تم إلغاء تشغيل MRP' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

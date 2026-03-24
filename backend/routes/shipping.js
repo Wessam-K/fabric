@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -35,7 +35,7 @@ router.get('/', requirePermission('shipping', 'view'), (req, res) => {
       ORDER BY s.created_at DESC LIMIT ? OFFSET ?
     `).all(...params);
     res.json({ data, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/shipping/next-number
@@ -60,7 +60,7 @@ router.get('/:id', requirePermission('shipping', 'view'), (req, res) => {
     shipment.items = db.prepare('SELECT * FROM shipment_items WHERE shipment_id=?').all(id);
     shipment.packing_lists = db.prepare('SELECT * FROM packing_lists WHERE shipment_id=?').all(id);
     res.json(shipment);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/shipping
@@ -101,7 +101,7 @@ router.post('/', requirePermission('shipping', 'create'), (req, res) => {
 
     logAudit(req, 'create', 'shipment', created.id, created.shipment_number);
     res.status(201).json(created);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/shipping/:id
@@ -139,7 +139,7 @@ router.put('/:id', requirePermission('shipping', 'edit'), (req, res) => {
 
     logAudit(req, 'update', 'shipment', id, old.shipment_number, old, req.body);
     res.json(db.prepare('SELECT * FROM shipments WHERE id=?').get(id));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/shipping/:id/status
@@ -162,7 +162,7 @@ router.patch('/:id/status', requirePermission('shipping', 'edit'), (req, res) =>
 
     logAudit(req, 'update', 'shipment', id, old.shipment_number, { status: old.status }, { status });
     res.json(db.prepare('SELECT * FROM shipments WHERE id=?').get(id));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/shipping/:id/packing-list
@@ -178,7 +178,7 @@ router.post('/:id/packing-list', requirePermission('shipping', 'edit'), (req, re
 
     const lists = db.prepare('SELECT * FROM packing_lists WHERE shipment_id=?').all(shipId);
     res.status(201).json(lists);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/shipping/:id
@@ -190,7 +190,7 @@ router.delete('/:id', requirePermission('shipping', 'delete'), (req, res) => {
     db.prepare("UPDATE shipments SET status='cancelled', updated_at=datetime('now','localtime') WHERE id=?").run(id);
     logAudit(req, 'delete', 'shipment', id, old.shipment_number, old, null);
     res.json({ message: 'تم إلغاء الشحنة' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

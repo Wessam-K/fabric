@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { requirePermission } = require('../middleware/auth');
@@ -26,7 +26,7 @@ router.get('/', requirePermission('audit', 'view'), (req, res) => {
     `).all(...params, Number(limit), offset);
 
     res.json({ logs, total, page: Number(page), limit: Number(limit) });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

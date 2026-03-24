@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -12,7 +12,7 @@ router.get('/lines', requirePermission('scheduling', 'view'), (req, res) => {
   try {
     const lines = db.prepare('SELECT * FROM production_lines ORDER BY name').all();
     res.json(lines);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/scheduling/lines
@@ -24,7 +24,7 @@ router.post('/lines', requirePermission('scheduling', 'create'), (req, res) => {
       .run(name, description || null, parseFloat(capacity_per_day) || 0);
     logAudit(req, 'create', 'production_line', result.lastInsertRowid, name);
     res.status(201).json(db.prepare('SELECT * FROM production_lines WHERE id=?').get(result.lastInsertRowid));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/scheduling/lines/:id
@@ -35,7 +35,7 @@ router.put('/lines/:id', requirePermission('scheduling', 'edit'), (req, res) => 
     db.prepare('UPDATE production_lines SET name=COALESCE(?,name), description=COALESCE(?,description), capacity_per_day=COALESCE(?,capacity_per_day), status=COALESCE(?,status) WHERE id=?')
       .run(name, description, capacity_per_day !== undefined ? capacity_per_day : null, status, id);
     res.json(db.prepare('SELECT * FROM production_lines WHERE id=?').get(id));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -68,7 +68,7 @@ router.get('/', requirePermission('scheduling', 'view'), (req, res) => {
       ORDER BY ps.planned_start ASC
     `).all(...params);
     res.json(data);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/scheduling/capacity
@@ -94,7 +94,7 @@ router.get('/capacity', requirePermission('scheduling', 'view'), (req, res) => {
       };
     });
     res.json(result);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/scheduling
@@ -112,7 +112,7 @@ router.post('/', requirePermission('scheduling', 'create'), (req, res) => {
 
     logAudit(req, 'create', 'schedule', result.lastInsertRowid, `Schedule for WO #${work_order_id}`);
     res.status(201).json(db.prepare('SELECT * FROM production_schedule WHERE id=?').get(result.lastInsertRowid));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/scheduling/:id
@@ -138,7 +138,7 @@ router.put('/:id', requirePermission('scheduling', 'edit'), (req, res) => {
 
     logAudit(req, 'update', 'schedule', id, `Schedule #${id}`, old, req.body);
     res.json(db.prepare('SELECT * FROM production_schedule WHERE id=?').get(id));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/scheduling/:id
@@ -150,7 +150,7 @@ router.delete('/:id', requirePermission('scheduling', 'delete'), (req, res) => {
     db.prepare("UPDATE production_schedule SET status='cancelled', updated_at=datetime('now','localtime') WHERE id=?").run(id);
     logAudit(req, 'delete', 'schedule', id, `Schedule #${id}`, old, null);
     res.json({ message: 'تم إلغاء الجدول' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

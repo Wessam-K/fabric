@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -10,7 +10,7 @@ router.get('/', requirePermission('settings', 'view'), (req, res) => {
     const settings = {};
     rows.forEach(r => { settings[r.key] = r.value; });
     res.json(settings);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/settings — update settings
@@ -43,7 +43,7 @@ router.put('/', requirePermission('settings', 'edit'), (req, res) => {
     const response = { ...settings };
     if (rejected.length > 0) response._rejected_keys = rejected;
     res.json(response);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // NOTE: Stage template CRUD is handled by /api/stage-templates (stagetemplates.js)

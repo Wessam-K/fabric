@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -41,7 +41,7 @@ router.get('/', requirePermission('models', 'view'), (req, res) => {
     const models = db.prepare(q).all(...p);
     const result = models.map(m => ({ ...m, bom_template_count: countStmt.get(m.id).c }));
     res.json(result);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/models/next-serial — suggest next serial
@@ -52,7 +52,7 @@ router.get('/next-serial', requirePermission('models', 'view'), (req, res) => {
     const parts = last.serial_number.split('-');
     const num = parseInt(parts[parts.length - 1], 10) || 0;
     res.json({ next_serial: `${parts[0]}-${String(num + 1).padStart(3, '0')}` });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/models — create (SIMPLIFIED: no fabrics/accessories/sizes)
@@ -79,7 +79,7 @@ router.get('/:code', requirePermission('models', 'view'), (req, res) => {
     if (!model) return res.status(404).json({ error: 'غير موجود' });
     model.bom_templates = db.prepare('SELECT id, template_name, is_default, masnaiya, masrouf, margin_pct, created_at FROM bom_templates WHERE model_id=? ORDER BY is_default DESC, id').all(model.id);
     res.json(model);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/models/:code — update basic info
@@ -94,7 +94,7 @@ router.put('/:code', requirePermission('models', 'edit'), (req, res) => {
     const updated = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
     logAudit(req, 'UPDATE', 'model', req.params.code, existing.model_name, existing, updated);
     res.json(updated);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/models/:code — soft delete
@@ -105,7 +105,7 @@ router.delete('/:code', requirePermission('models', 'delete'), (req, res) => {
     db.prepare("UPDATE models SET status='inactive',updated_at=datetime('now') WHERE model_code=?").run(req.params.code);
     logAudit(req, 'DELETE', 'model', req.params.code, existing.model_name || existing.model_code);
     res.json({ message: 'تم التعطيل' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/models/:code/image — upload model image
@@ -115,7 +115,7 @@ router.post('/:code/image', requirePermission('models', 'edit'), upload.single('
     const image_path = `/uploads/models/${req.file.filename}`;
     db.prepare("UPDATE models SET model_image=?,updated_at=datetime('now') WHERE model_code=?").run(image_path, req.params.code);
     res.json({ image_path });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════ BOM TEMPLATES ═══════════════
@@ -195,7 +195,7 @@ router.get('/:code/bom-matrix', requirePermission('models', 'view'), (req, res) 
       };
     });
     res.json(variants);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/models/:code/bom-templates — list all BOM templates
@@ -211,7 +211,7 @@ router.get('/:code/bom-templates', requirePermission('models', 'view'), (req, re
       t.size_count = db.prepare('SELECT COUNT(*) as c FROM bom_template_sizes WHERE template_id=?').get(t.id).c;
     }
     res.json(templates);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/models/:code/bom-templates — create new BOM template
@@ -244,7 +244,7 @@ router.post('/:code/bom-templates', requirePermission('models', 'edit'), (req, r
 
     const tid = transaction();
     res.status(201).json(getFullTemplate(tid));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/models/:code/bom-templates/:templateId — full template
@@ -253,7 +253,7 @@ router.get('/:code/bom-templates/:templateId', requirePermission('models', 'view
     const tmpl = getFullTemplate(parseInt(req.params.templateId));
     if (!tmpl) return res.status(404).json({ error: 'القالب غير موجود' });
     res.json(tmpl);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/models/:code/bom-templates/:templateId — update template
@@ -288,7 +288,7 @@ router.put('/:code/bom-templates/:templateId', requirePermission('models', 'edit
 
     transaction();
     res.json(getFullTemplate(tid));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/models/:code/bom-templates/:templateId — delete
@@ -300,7 +300,7 @@ router.delete('/:code/bom-templates/:templateId', requirePermission('models', 'd
     if (count <= 1) return res.status(400).json({ error: 'لا يمكن حذف آخر وصفة' });
     db.prepare('DELETE FROM bom_templates WHERE id=?').run(parseInt(req.params.templateId));
     res.json({ message: 'تم الحذف' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/models/:code/bom-templates/:templateId/set-default
@@ -311,7 +311,7 @@ router.post('/:code/bom-templates/:templateId/set-default', requirePermission('m
     db.prepare('UPDATE bom_templates SET is_default=0 WHERE model_id=?').run(model.id);
     db.prepare('UPDATE bom_templates SET is_default=1 WHERE id=?').run(parseInt(req.params.templateId));
     res.json({ message: 'تم التعيين كافتراضي' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

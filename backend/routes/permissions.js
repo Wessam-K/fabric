@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { requireRole, logAudit } = require('../middleware/auth');
@@ -14,7 +14,7 @@ router.get('/definitions', (req, res) => {
       grouped[d.module].push(d);
     }
     res.json({ definitions: defs, grouped });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/permissions/roles — all role permissions
@@ -29,7 +29,7 @@ router.get('/roles', requireRole('superadmin'), (req, res) => {
       byRole[p.role][key] = p.allowed;
     }
     res.json(byRole);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/permissions/roles/:role — update role permissions (superadmin only)
@@ -68,7 +68,7 @@ router.put('/roles/:role', requireRole('superadmin'), (req, res) => {
 
     logAudit(req, 'UPDATE', 'role_permissions', role, `تعديل صلاحيات دور: ${role}`, null, permissions);
     res.json({ message: 'تم تحديث صلاحيات الدور بنجاح' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/permissions/user/:userId — get user-specific permission overrides
@@ -80,7 +80,7 @@ router.get('/user/:userId', requireRole('superadmin'), (req, res) => {
       result[`${p.module}:${p.action}`] = p.allowed;
     }
     res.json(result);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/permissions/user/:userId — set user-specific permission overrides
@@ -110,7 +110,7 @@ router.put('/user/:userId', requireRole('superadmin'), (req, res) => {
 
     logAudit(req, 'UPDATE', 'user_permissions', userId, `تعديل صلاحيات: ${user.full_name}`, null, permissions);
     res.json({ message: 'تم تحديث صلاحيات المستخدم بنجاح' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/permissions/my — get current user's effective permissions
@@ -141,7 +141,7 @@ router.get('/my', (req, res) => {
     }
 
     res.json(effective);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

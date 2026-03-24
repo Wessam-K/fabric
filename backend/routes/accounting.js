@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { requirePermission, logAudit } = require('../middleware/auth');
@@ -17,7 +17,7 @@ router.get('/coa', requirePermission('accounting', 'view'), (req, res) => {
       ORDER BY c.code
     `).all();
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/accounting/coa
@@ -43,7 +43,7 @@ router.put('/coa/:id', requirePermission('accounting', 'edit'), (req, res) => {
       .run(code, name_ar, type, parent_id || null, is_active ?? 1, req.params.id);
     logAudit(req, 'UPDATE', 'chart_of_accounts', req.params.id, `${code}`);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -65,7 +65,7 @@ router.get('/journal', requirePermission('accounting', 'view'), (req, res) => {
     sql += ' ORDER BY je.entry_date DESC, je.id DESC';
     const rows = db.prepare(sql).all(...params);
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/accounting/journal/next-number
@@ -74,7 +74,7 @@ router.get('/journal/next-number', requirePermission('accounting', 'create'), (r
     const last = db.prepare("SELECT entry_number FROM journal_entries ORDER BY id DESC LIMIT 1").get();
     const num = last ? parseInt(last.entry_number.replace(/\D/g, '')) + 1 : 1;
     res.json({ next: `JE-${String(num).padStart(4, '0')}` });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/accounting/journal/:id
@@ -87,7 +87,7 @@ router.get('/journal/:id', requirePermission('accounting', 'view'), (req, res) =
       FROM journal_entry_lines jl JOIN chart_of_accounts c ON jl.account_id = c.id
       WHERE jl.entry_id = ? ORDER BY jl.id`).all(req.params.id);
     res.json(entry);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/accounting/journal
@@ -129,7 +129,7 @@ router.patch('/journal/:id/post', requirePermission('accounting', 'post'), (req,
     db.prepare("UPDATE journal_entries SET status = 'posted', posted_at = datetime('now') WHERE id = ?").run(req.params.id);
     logAudit(req, 'POST', 'journal_entry', req.params.id, `${entry.entry_number}`);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/accounting/journal/:id/void
@@ -141,7 +141,7 @@ router.patch('/journal/:id/void', requirePermission('accounting', 'post'), (req,
     db.prepare("UPDATE journal_entries SET status = 'void' WHERE id = ?").run(req.params.id);
     logAudit(req, 'VOID', 'journal_entry', req.params.id, `${entry.entry_number}`);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -175,7 +175,7 @@ router.get('/trial-balance', requirePermission('accounting', 'view'), (req, res)
     }, { total_debit: 0, total_credit: 0 });
 
     res.json({ accounts: rows, totals });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -216,7 +216,7 @@ router.get('/vat-summary', requirePermission('accounting', 'view'), (req, res) =
       purchases_total: purchases.total,
       period: { from: from || 'all', to: to || 'all' },
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

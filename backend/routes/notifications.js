@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { requireRole, logAudit } = require('../middleware/auth');
@@ -9,7 +9,7 @@ router.get('/count', (req, res) => {
     const userId = req.user ? req.user.id : null;
     const count = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=0').get(userId).count;
     res.json({ unread_count: count });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/notifications/read-all — MUST be before /:id
@@ -18,7 +18,7 @@ router.patch('/read-all', (req, res) => {
     const userId = req.user ? req.user.id : null;
     db.prepare('UPDATE notifications SET is_read=1 WHERE user_id=? AND is_read=0').run(userId);
     res.json({ message: 'تم تحديث جميع الإشعارات' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/notifications/check-overdue
@@ -84,7 +84,7 @@ router.post('/check-overdue', requireRole('superadmin', 'manager'), (req, res) =
     } catch {}
 
     res.json({ message: `تم إنشاء ${created} إشعار جديد`, created });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // Get notifications for current user
@@ -100,7 +100,7 @@ router.get('/', (req, res) => {
     const notifications = db.prepare(q).all(...p);
     const unread_count = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=0').get(userId).count;
     res.json({ notifications, unread_count });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // Mark notification as read — after all string routes
@@ -111,7 +111,7 @@ router.patch('/:id/read', (req, res) => {
     if (!notif) return res.status(404).json({ error: 'الإشعار غير موجود' });
     db.prepare('UPDATE notifications SET is_read=1 WHERE id=?').run(req.params.id);
     res.json({ message: 'تم التحديث' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // Delete notification
@@ -123,7 +123,7 @@ router.delete('/:id', (req, res) => {
     db.prepare('DELETE FROM notifications WHERE id=?').run(req.params.id);
     logAudit(req, 'DELETE', 'notification', req.params.id, notif.title);
     res.json({ message: 'تم الحذف' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // Generate automatic notifications for low stock, overdue WOs, overdue invoices

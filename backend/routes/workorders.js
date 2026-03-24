@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -262,7 +262,7 @@ router.get('/', requirePermission('work_orders', 'view'), (req, res) => {
     };
 
     res.json({ work_orders, stats });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/work-orders/next-number
@@ -273,7 +273,7 @@ router.get('/next-number', requirePermission('work_orders', 'view'), (req, res) 
     if (!last) return res.json({ next_number: `WO-${year}-001` });
     const num = parseInt(last.wo_number.split('-')[2], 10) || 0;
     res.json({ next_number: `WO-${year}-${String(num + 1).padStart(3, '0')}` });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/work-orders/by-stage
@@ -286,7 +286,7 @@ router.get('/by-stage', requirePermission('work_orders', 'view'), (req, res) => 
       GROUP BY ws.stage_name, ws.status
     `).all();
     res.json(data);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -426,7 +426,7 @@ router.get('/export', requirePermission('work_orders', 'view'), (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=work-orders.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/work-orders/:id
@@ -436,7 +436,7 @@ router.get('/:id', requirePermission('work_orders', 'view'), (req, res) => {
     const wo = getFullWO(parseInt(req.params.id));
     if (!wo) return res.status(404).json({ error: 'غير موجود' });
     res.json(wo);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/work-orders/:id/cost-summary
@@ -445,7 +445,7 @@ router.get('/:id/cost-summary', requirePermission('work_orders', 'view'), (req, 
     const cost = calculateWOCost(parseInt(req.params.id));
     if (!cost) return res.status(404).json({ error: 'غير موجود' });
     res.json(cost);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/work-orders/:id
@@ -585,7 +585,7 @@ router.patch('/:id/status', requirePermission('work_orders', 'edit'), (req, res)
 
     logAudit(req, 'STATUS_CHANGE', 'work_order', woId, `${wo.status} → ${status}`);
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/work-orders/:id/stages/:stageId
@@ -645,7 +645,7 @@ router.patch('/:id/stages/:stageId', requirePermission('work_orders', 'edit'), (
     transaction();
 
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/work-orders/:id/stage-quantity — WIP tracking
@@ -674,7 +674,7 @@ router.patch('/:id/stage-quantity', requirePermission('work_orders', 'edit'), (r
     transaction();
 
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/work-orders/:id/actual-fabric — record actual usage
@@ -718,7 +718,7 @@ router.patch('/:id/actual-fabric', requirePermission('work_orders', 'edit'), (re
 
     transaction();
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/work-orders/:id/expenses
@@ -734,7 +734,7 @@ router.post('/:id/expenses', requirePermission('work_orders', 'edit'), (req, res
     db.prepare('UPDATE work_orders SET extra_expenses_total=? WHERE id=?').run(total, woId);
 
     res.status(201).json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/work-orders/:id/expenses/:expId
@@ -745,7 +745,7 @@ router.delete('/:id/expenses/:expId', requirePermission('work_orders', 'edit'), 
     const total = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM wo_extra_expenses WHERE wo_id=?').get(woId).v;
     db.prepare('UPDATE work_orders SET extra_expenses_total=? WHERE id=?').run(total, woId);
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/work-orders/:id/finalize — close production with real cost calculation
@@ -820,7 +820,7 @@ router.post('/:id/finalize', requirePermission('work_orders', 'edit'), (req, res
     const result = getFullWO(woId);
     if (warning) result.warning = warning;
     res.json(result);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/work-orders/:id/partial-invoice
@@ -843,7 +843,7 @@ router.post('/:id/partial-invoice', requirePermission('work_orders', 'edit'), (r
       .run(woId, pieces_invoiced, cost_per_piece ?? cost.cost_per_piece, invoice_price_per_piece ?? cost.suggested_consumer_price, notes || null);
 
     res.status(201).json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/work-orders/:id/cost-snapshot
@@ -855,7 +855,7 @@ router.post('/:id/cost-snapshot', requirePermission('work_orders', 'edit'), (req
     const r = db.prepare(`INSERT INTO cost_snapshots (wo_id,model_id,total_pieces,total_meters_main,total_meters_lining,main_fabric_cost,lining_cost,accessories_cost,masnaiya,masrouf,waste_cost,extra_expenses,total_cost,cost_per_piece) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(wo.id, wo.model_id, c.total_pieces, c.total_meters_main, c.total_meters_lining, c.main_fabric_cost, c.lining_cost, c.accessories_cost, c.masnaiya_total, c.masrouf_total, c.waste_cost, c.extra_expenses, c.total_cost, c.cost_per_piece);
     res.status(201).json(db.prepare('SELECT * FROM cost_snapshots WHERE id=?').get(r.lastInsertRowid));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/work-orders/:id — soft delete (redirects to cancel with material return)
@@ -900,7 +900,7 @@ router.delete('/:id', requirePermission('work_orders', 'delete'), (req, res) => 
     })();
     logAudit(req, 'DELETE', 'work_order', woId, `WO#${woId}`);
     res.json({ message: 'تم الإلغاء' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -986,7 +986,7 @@ router.patch('/:id/stage-advance', requirePermission('work_orders', 'edit'), (re
     doAdvance();
     logAudit(req, 'STAGE_ADVANCE', 'work_order', woId, `${fromStage.stage_name}: ${qPass} passed, ${qReject} rejected`);
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -1017,7 +1017,7 @@ router.patch('/:id/stage-start', requirePermission('work_orders', 'edit'), (req,
     transaction();
 
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -1028,7 +1028,7 @@ router.get('/:id/movement-log', requirePermission('work_orders', 'view'), (req, 
     const woId = parseInt(req.params.id);
     const logs = db.prepare('SELECT * FROM stage_movement_log WHERE wo_id=? ORDER BY moved_at DESC').all(woId);
     res.json(logs);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -1074,7 +1074,7 @@ router.get('/:id/fabric-consumption', requirePermission('work_orders', 'view'), 
     }
 
     res.json({ consumption, available_batches });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/work-orders/:id/fabric-consumption
@@ -1114,7 +1114,7 @@ router.post('/:id/fabric-consumption', requirePermission('work_orders', 'edit'),
 
     logAudit(req, 'FABRIC_CONSUMPTION', 'work_order', woId, `${actual_meters}م من ${fabric_code || fabric_id}`);
     res.status(201).json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/work-orders/:id/fabric-consumption/:consumptionId
@@ -1149,7 +1149,7 @@ router.patch('/:id/fabric-consumption/:consumptionId', requirePermission('work_o
     transaction();
 
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/work-orders/:id/fabric-consumption/:consumptionId
@@ -1170,7 +1170,7 @@ router.delete('/:id/fabric-consumption/:consumptionId', requirePermission('work_
     transaction();
 
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -1193,7 +1193,7 @@ router.get('/:id/accessory-consumption', requirePermission('work_orders', 'view'
       ORDER BY wac.recorded_at DESC
     `).all(woId);
     res.json(consumption);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/work-orders/:id/accessory-consumption
@@ -1233,7 +1233,7 @@ router.post('/:id/accessory-consumption', requirePermission('work_orders', 'edit
 
     logAudit(req, 'ACCESSORY_CONSUMPTION', 'work_order', woId, `${qty} من ${accCode}`);
     res.status(201).json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/work-orders/:id/accessory-consumption/:consumptionId
@@ -1259,7 +1259,7 @@ router.patch('/:id/accessory-consumption/:consumptionId', requirePermission('wor
     transaction();
 
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/work-orders/:id/accessory-consumption/:consumptionId
@@ -1279,7 +1279,7 @@ router.delete('/:id/accessory-consumption/:consumptionId', requirePermission('wo
     transaction();
 
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/work-orders/:id/waste
@@ -1288,7 +1288,7 @@ router.get('/:id/waste', requirePermission('work_orders', 'view'), (req, res) =>
     const woId = parseInt(req.params.id);
     const waste = db.prepare('SELECT * FROM wo_waste WHERE work_order_id=? ORDER BY recorded_at DESC').all(woId);
     res.json(waste);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/work-orders/:id/waste
@@ -1315,7 +1315,7 @@ router.post('/:id/waste', requirePermission('work_orders', 'edit'), (req, res) =
 
     logAudit(req, 'WASTE_RECORDED', 'work_order', woId, `${waste_meters}م × ${price} = ${wasteCost} ج`);
     res.status(201).json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -1369,7 +1369,7 @@ router.post('/:id/create-invoice', requirePermission('work_orders', 'edit'), (re
     const result = transaction();
     logAudit(req, 'INVOICE_FROM_WO', 'work_order', woId, `فاتورة ${result.invoice_number} — ${qty_to_invoice} قطعة`);
     res.status(201).json({ ...result, wo: getFullWO(woId) });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/work-orders/:id/cancel — cancel a WO
@@ -1448,7 +1448,7 @@ router.post('/:id/cancel', requirePermission('work_orders', 'edit'), (req, res) 
 
     logAudit(req, 'CANCEL', 'work_order', woId, wo.wo_number + ' — ' + cancel_reason.trim());
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

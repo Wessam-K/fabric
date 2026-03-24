@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -19,7 +19,7 @@ router.get('/', requirePermission('samples', 'view'), (req, res) => {
       WHERE ${where} ORDER BY s.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
 
     res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/samples/next-number
@@ -29,7 +29,7 @@ router.get('/next-number', requirePermission('samples', 'view'), (req, res) => {
     const last = db.prepare('SELECT sample_number FROM samples ORDER BY id DESC LIMIT 1').get();
     const num = last ? parseInt(String(last.sample_number).replace(/\D/g, '')) + 1 : 1;
     res.json({ next_number: `${prefix}${String(num).padStart(5, '0')}` });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/samples/:id
@@ -40,7 +40,7 @@ router.get('/:id', requirePermission('samples', 'view'), (req, res) => {
       WHERE s.id=?`).get(req.params.id);
     if (!s) return res.status(404).json({ error: 'العينة غير موجودة' });
     res.json(s);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/samples
@@ -59,7 +59,7 @@ router.post('/', requirePermission('samples', 'create'), (req, res) => {
 
     logAudit(req, 'CREATE', 'sample', result.lastInsertRowid, sample_number || model_code);
     res.status(201).json({ id: result.lastInsertRowid });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/samples/:id
@@ -82,7 +82,7 @@ router.put('/:id', requirePermission('samples', 'edit'), (req, res) => {
 
     logAudit(req, 'UPDATE', 'sample', id, old.sample_number || old.model_code, old, req.body);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/samples/:id/convert-to-wo
@@ -112,7 +112,7 @@ router.post('/:id/convert-to-wo', requirePermission('work_orders', 'create'), (r
 
     logAudit(req, 'CONVERT', 'sample', id, `${s.sample_number} → ${woResult.wo_number}`);
     res.status(201).json(woResult);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/samples/:id
@@ -123,7 +123,7 @@ router.delete('/:id', requirePermission('samples', 'delete'), (req, res) => {
     db.prepare("UPDATE samples SET status='cancelled' WHERE id=?").run(req.params.id);
     logAudit(req, 'DELETE', 'sample', req.params.id);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

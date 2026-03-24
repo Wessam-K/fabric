@@ -502,3 +502,38 @@
 
 - **Post all fixes (R6-01 to R6-15)**: 58/58 passing ✅
 - **Frontend build**: Success (0 errors, 2545 modules) ✅
+
+---
+
+## Round 7 — Critical Route Fixes, Soft-Delete Gaps, Transaction Safety, Error Messages
+
+### R7-01 — `customers.js`: 3 Broken GET Routes Rebuilt (P1 CRITICAL)
+- **GET `/:id`** — missing `try {`, customer fetch query, and null check → crashes with ReferenceError on every request. Rebuilt with proper structure.
+- **GET `/:id/invoices`** — same corruption pattern. Rebuilt.
+- **GET `/:id/balance`** — same corruption pattern. Rebuilt.
+
+### R7-02 — `purchaseorders.js`: Receive Endpoint Error Leak
+- **PATCH `/:id/receive`** catch block leaked `err.message` to client → replaced with generic Arabic error message, UNIQUE constraint special case preserved.
+
+### R7-03 — `machines.js`: 3 Soft-Delete Filter Gaps
+- **`/stats`** — `machine_maintenance` cost SUM query missing `AND is_deleted=0` → deleted records inflated cost totals. Fixed.
+- **`/:id/maintenance` GET** — returned soft-deleted maintenance records. Added `AND is_deleted=0`.
+- **`/:id/maintenance/:mid` PUT** — allowed updates to soft-deleted records. Added `AND is_deleted=0` to pre-check.
+
+### R7-04 — `quotations.js`: Convert-to-SO Transaction Wrapper
+- Wrapped INSERT `sales_orders` + INSERT items loop + UPDATE `quotations` status in `db.transaction()` — prevents orphaned records on partial failure.
+
+### R7-05 — `quotations.js`: Convert-to-WO Transaction + Status Check
+- Wrapped INSERT `work_orders` + UPDATE `sales_orders` status in `db.transaction()`.
+- Added status validation: only `confirmed` or `pending` sales orders can be converted to work orders.
+
+### R7-06 — `quotations.js`: Sales Order Status Validation
+- **PATCH `/sales-orders/:id/status`** — added whitelist validation: `confirmed`, `in_production`, `shipped`, `delivered`, `cancelled`. Returns 400 for invalid values.
+
+### R7-07 — All 31 Route Files: Placeholder Error Messages Fixed
+- Replaced ~150+ instances of corrupted `'??? ??? ?????'` with proper Arabic `'حدث خطأ داخلي'` across all route files via UTF-8-safe batch replacement.
+
+## Test Results — Round 7
+
+- **Post all fixes (R7-01 to R7-07)**: 58/58 passing ✅
+- **Frontend build**: Success (0 errors, 2545 modules) ✅

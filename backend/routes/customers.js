@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -39,7 +39,7 @@ router.get('/export', requirePermission('customers', 'view'), (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=customers.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/customers/import — bulk import
@@ -61,13 +61,18 @@ router.post('/import', requirePermission('customers', 'create'), (req, res) => {
       }
     })();
     res.json({ imported, updated, errors });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
 // GET /api/customers/:id — single with invoice summary
 // ═══════════════════════════════════════════════
 router.get('/:id', requirePermission('customers', 'view'), (req, res) => {
+  try {
+    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
+    if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
+
+    const invoiceSummary = db.prepare(`
       SELECT COUNT(*) as invoice_count,
         COALESCE(SUM(total), 0) as total_invoiced,
         COALESCE(SUM(CASE WHEN status = 'paid' THEN total ELSE 0 END), 0) as total_paid
@@ -90,6 +95,9 @@ router.get('/:id', requirePermission('customers', 'view'), (req, res) => {
 // GET /api/customers/:id/invoices
 // ═══════════════════════════════════════════════
 router.get('/:id/invoices', requirePermission('customers', 'view'), (req, res) => {
+  try {
+    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
+    if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
 
     const invoices = db.prepare(`
       SELECT id, invoice_number, status, subtotal, total, due_date, created_at
@@ -118,6 +126,9 @@ router.get('/:id/invoices', requirePermission('customers', 'view'), (req, res) =
 // GET /api/customers/:id/balance
 // ═══════════════════════════════════════════════
 router.get('/:id/balance', requirePermission('customers', 'view'), (req, res) => {
+  try {
+    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
+    if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
 
     const totals = db.prepare(`
       SELECT COALESCE(SUM(total), 0) as total_invoiced,

@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
@@ -44,7 +44,7 @@ router.get('/', requirePermission('documents', 'view'), (req, res) => {
       WHERE ${where} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
 
     res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/documents/upload
@@ -71,7 +71,7 @@ router.post('/upload', requirePermission('documents', 'create'), upload.single('
 
     logAudit(req, 'UPLOAD', 'document', result.lastInsertRowid, title || req.file.originalname);
     res.status(201).json({ id: result.lastInsertRowid, file_path: `/uploads/documents/${req.file.filename}` });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/documents/:id
@@ -80,7 +80,7 @@ router.get('/:id', requirePermission('documents', 'view'), (req, res) => {
     const doc = db.prepare('SELECT d.*, u.full_name as uploaded_by_name FROM documents d LEFT JOIN users u ON u.id=d.uploaded_by WHERE d.id=?').get(req.params.id);
     if (!doc) return res.status(404).json({ error: 'المستند غير موجود' });
     res.json(doc);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/documents/:id
@@ -92,7 +92,7 @@ router.put('/:id', requirePermission('documents', 'edit'), (req, res) => {
       .run(title, category, notes, id);
     logAudit(req, 'UPDATE', 'document', id, title);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/documents/:id
@@ -104,7 +104,7 @@ router.delete('/:id', requirePermission('documents', 'delete'), (req, res) => {
     db.prepare("UPDATE documents SET deleted_at=datetime('now','localtime') WHERE id=?").run(id);
     logAudit(req, 'DELETE', 'document', id, doc?.title);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

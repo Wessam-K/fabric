@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -38,7 +38,7 @@ router.get('/', requirePermission('fabrics', 'view'), (req, res) => {
       return res.json({ data, total, page: pg, totalPages: Math.ceil(total / lim) });
     }
     res.json(db.prepare(q).all(...p));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 router.post('/', upload.single('image'), requirePermission('fabrics', 'create'), (req, res) => {
@@ -67,7 +67,7 @@ router.get('/export', requirePermission('fabrics', 'view'), (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=fabrics.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/fabrics/import — bulk import
@@ -90,7 +90,7 @@ router.post('/import', requirePermission('fabrics', 'create'), (req, res) => {
     })();
     logAudit(req, 'IMPORT', 'fabric', null, `imported:${imported} updated:${updated}`);
     res.json({ imported, updated, errors });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 router.put('/:code', upload.single('image'), requirePermission('fabrics', 'edit'), (req, res) => {
@@ -104,7 +104,7 @@ router.put('/:code', upload.single('image'), requirePermission('fabrics', 'edit'
     const updated = db.prepare('SELECT * FROM fabrics WHERE code=?').get(req.params.code);
     logAudit(req, 'UPDATE', 'fabric', req.params.code, existing.name, existing, updated);
     res.json(updated);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 router.post('/:code/image', requirePermission('fabrics', 'edit'), upload.single('image'), (req, res) => {
@@ -113,7 +113,7 @@ router.post('/:code/image', requirePermission('fabrics', 'edit'), upload.single(
     const image_path = `/uploads/fabrics/${req.file.filename}`;
     db.prepare('UPDATE fabrics SET image_path=? WHERE code=?').run(image_path, req.params.code);
     res.json({ image_path });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 router.delete('/:code', requirePermission('fabrics', 'delete'), (req, res) => {
@@ -123,7 +123,7 @@ router.delete('/:code', requirePermission('fabrics', 'delete'), (req, res) => {
     db.prepare("UPDATE fabrics SET status='inactive' WHERE code=?").run(req.params.code);
     logAudit(req, 'DELETE', 'fabric', req.params.code, existing.name);
     res.json({ message: 'تم التعطيل', code: req.params.code });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/fabrics/:code/po-batches — PO line items for this fabric
@@ -153,7 +153,7 @@ router.get('/:code/po-batches', requirePermission('fabrics', 'view'), (req, res)
       ORDER BY po.order_date DESC
     `).all(fabricCode);
     res.json({ batches, latest_price: batches[0]?.price_per_meter || 0 });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/fabrics/:code/batches — available inventory batches per fabric
@@ -170,7 +170,7 @@ router.get('/:code/batches', requirePermission('fabrics', 'view'), (req, res) =>
     else { q += " AND fib.batch_status IN ('available','reserved')"; }
     q += ' ORDER BY fib.received_date DESC';
     res.json(db.prepare(q).all(...p));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

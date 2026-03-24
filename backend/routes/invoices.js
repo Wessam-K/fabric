@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -36,7 +36,7 @@ router.get('/', requirePermission('invoices', 'view'), (req, res) => {
     FROM invoices`).get();
 
     res.json({ invoices, totals });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/invoices/next-number — suggest next invoice number
@@ -50,7 +50,7 @@ router.get('/next-number', requirePermission('invoices', 'view'), (req, res) => 
       next = `INV-${String(num).padStart(3, '0')}`;
     }
     res.json({ next_number: next });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/invoices/export — CSV export
@@ -63,7 +63,7 @@ router.get('/export', requirePermission('invoices', 'view'), (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=invoices.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/invoices/:id — single invoice with items
@@ -73,7 +73,7 @@ router.get('/:id', requirePermission('invoices', 'view'), (req, res) => {
     if (!invoice) return res.status(404).json({ error: 'الفاتورة غير موجودة' });
     invoice.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order').all(invoice.id);
     res.json(invoice);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/invoices — create invoice
@@ -124,7 +124,7 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
     created.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoiceId);
     logAudit(req, 'CREATE', 'invoice', invoiceId, invoice_number);
     res.status(201).json(created);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/invoices/:id — update invoice
@@ -174,7 +174,7 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
     updated.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoice.id);
     logAudit(req, 'UPDATE', 'invoice', invoice.id, invoice.invoice_number, invoice, updated);
     res.json(updated);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/invoices/:id/status — quick status update
@@ -202,7 +202,7 @@ router.patch('/:id/status', requirePermission('invoices', 'edit'), (req, res) =>
 
     db.prepare("UPDATE invoices SET status=?, updated_at=datetime('now') WHERE id=?").run(status, req.params.id);
     res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/invoices/:id — soft-cancel (preserve audit trail)
@@ -214,7 +214,7 @@ router.delete('/:id', requirePermission('invoices', 'delete'), (req, res) => {
     db.prepare("UPDATE invoices SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(req.params.id);
     logAudit(req, 'DELETE', 'invoice', req.params.id, `INV#${req.params.id} cancelled`);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

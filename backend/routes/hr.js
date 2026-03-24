@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const path = require('path');
@@ -43,7 +43,7 @@ router.get('/employees', requirePermission('hr', 'view'), (req, res) => {
     const pieceWork = db.prepare("SELECT COUNT(*) as c FROM employees WHERE status='active' AND employment_type='piece_work'").get().c;
 
     res.json({ employees, kpi: { total, full_time: fullTime, daily, piece_work: pieceWork } });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/hr/employees/next-code
@@ -56,7 +56,7 @@ router.get('/employees/next-code', requirePermission('hr', 'edit'), (req, res) =
       next = `EMP-${String(num).padStart(3, '0')}`;
     }
     res.json({ next_code: next });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/hr/employees
@@ -94,7 +94,7 @@ router.post('/employees', requirePermission('hr', 'create'), (req, res) => {
 
     logAudit(req, 'CREATE', 'employee', result.lastInsertRowid, d.full_name, null, d);
     res.json({ id: result.lastInsertRowid, message: 'تم إنشاء الموظف بنجاح' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/hr/employees/import — bulk import employees from CSV
@@ -147,7 +147,7 @@ router.post('/employees/import', requirePermission('hr', 'create'), (req, res) =
       return { inserted: ins, updated: upd };
     })();
     res.json({ inserted, updated, errors, message: `تم استيراد ${inserted} موظف جديد وتحديث ${updated}` });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/hr/employees/:id
@@ -174,7 +174,7 @@ router.get('/employees/:id', requirePermission('hr', 'view'), (req, res) => {
     `).all(emp.id);
 
     res.json({ ...emp, attendance, payroll, adjustments });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/hr/employees/:id
@@ -208,7 +208,7 @@ router.put('/employees/:id', requirePermission('hr', 'edit'), (req, res) => {
 
     logAudit(req, 'UPDATE', 'employee', old.id, d.full_name || old.full_name, old, d);
     res.json({ message: 'تم تحديث بيانات الموظف' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // DELETE /api/hr/employees/:id — soft delete
@@ -219,7 +219,7 @@ router.delete('/employees/:id', requirePermission('hr', 'delete'), (req, res) =>
     db.prepare("UPDATE employees SET status='terminated', termination_date=datetime('now') WHERE id=?").run(emp.id);
     logAudit(req, 'DELETE', 'employee', emp.id, emp.full_name);
     res.json({ message: 'تم إنهاء خدمة الموظف' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -293,7 +293,7 @@ WHERE emp_code = ? AND status = 'active'
       emp_code: emp.emp_code,
       time: currentTime
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/hr/attendance/import — Excel import
@@ -438,7 +438,7 @@ router.post('/attendance/import', requirePermission('hr', 'edit'), upload.single
 
     logAudit(req, 'CREATE', 'attendance_import', batchId, `${period_month} (${imported} records)`);
     res.json({ imported, errors, batch_id: batchId });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/hr/attendance — list with filters
@@ -458,7 +458,7 @@ router.get('/attendance', requirePermission('hr', 'view'), (req, res) => {
     `).all(...params);
 
     res.json(records);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/hr/attendance/summary/:month — monthly summary per employee
@@ -479,7 +479,7 @@ router.get('/attendance/summary/:month', requirePermission('hr', 'view'), (req, 
     `).all(month + '%');
 
     res.json(summary);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/hr/attendance/:id — update single record
@@ -494,7 +494,7 @@ router.put('/attendance/:id', requirePermission('hr', 'edit'), (req, res) => {
         late_minutes ?? old.late_minutes, notes ?? old.notes, old.id);
 
     res.json({ message: 'تم تحديث السجل' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/hr/attendance/bulk — manual bulk entry
@@ -521,7 +521,7 @@ router.post('/attendance/bulk', requirePermission('hr', 'edit'), (req, res) => {
 
     logAudit(req, 'CREATE', 'attendance', null, `bulk (${records.length} records)`);
     res.json({ message: `تم إدخال ${records.length} سجل حضور` });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -533,7 +533,7 @@ router.get('/payroll', requirePermission('hr', 'view'), (req, res) => {
   try {
     const periods = db.prepare('SELECT * FROM payroll_periods ORDER BY period_month DESC').all();
     res.json(periods);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/hr/payroll/periods — create period
@@ -555,7 +555,7 @@ router.post('/payroll/periods', requirePermission('hr', 'create'), (req, res) =>
 
     logAudit(req, 'CREATE', 'payroll_period', result.lastInsertRowid, periodName);
     res.json({ id: result.lastInsertRowid, message: 'تم إنشاء كشف الرواتب' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/hr/payroll/:periodId/calculate — calculate payroll
@@ -641,7 +641,7 @@ router.post('/payroll/:periodId/calculate', requirePermission('hr', 'edit'), (re
 
     logAudit(req, 'UPDATE', 'payroll_period', period.id, `Calculate ${period.period_name}`);
     res.json({ message: 'تم احتساب الرواتب بنجاح', total_gross: totalGross, total_net: totalNet, employees_count: employees.length });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 function calculateEmployeePay(employee, attendanceSummary, adjustments) {
@@ -722,7 +722,7 @@ router.get('/payroll/:periodId', requirePermission('hr', 'view'), (req, res) => 
     `).all(period.id);
 
     res.json({ ...period, records });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/hr/payroll/:periodId/approve
@@ -737,7 +737,7 @@ router.patch('/payroll/:periodId/approve', requirePermission('hr', 'edit'), (req
 
     logAudit(req, 'UPDATE', 'payroll_period', period.id, `Approve ${period.period_name}`);
     res.json({ message: 'تم اعتماد كشف الرواتب' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/hr/payroll/:periodId/pay
@@ -753,7 +753,7 @@ router.patch('/payroll/:periodId/pay', requirePermission('hr', 'edit'), (req, re
 
     logAudit(req, 'UPDATE', 'payroll_period', period.id, `Pay ${period.period_name}`);
     res.json({ message: 'تم تأكيد صرف الرواتب' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/hr/payroll/:periodId/slip/:employeeId — payslip
@@ -771,7 +771,7 @@ router.get('/payroll/:periodId/slip/:employeeId', requirePermission('hr', 'view'
 
     if (!record) return res.status(404).json({ error: 'سجل الراتب غير موجود' });
     res.json(record);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/hr/adjustments
@@ -788,7 +788,7 @@ router.post('/adjustments', requirePermission('hr', 'create'), (req, res) => {
 
     logAudit(req, 'CREATE', 'hr_adjustment', result.lastInsertRowid, `${adj_type}: ${description}`);
     res.json({ id: result.lastInsertRowid, message: 'تم إضافة التعديل' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/hr/adjustments/:employeeId
@@ -796,7 +796,7 @@ router.get('/adjustments/:employeeId', requirePermission('hr', 'view'), (req, re
   try {
     const adjs = db.prepare('SELECT * FROM hr_adjustments WHERE employee_id = ? ORDER BY created_at DESC').all(req.params.employeeId);
     res.json(adjs);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -813,7 +813,7 @@ router.get('/leaves', requirePermission('hr', 'view'), (req, res) => {
       ORDER BY lr.created_at DESC
     `).all();
     res.json(leaves);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/hr/leaves
@@ -834,7 +834,7 @@ router.post('/leaves', requirePermission('hr', 'create'), (req, res) => {
       LEFT JOIN employees e ON e.id = lr.employee_id WHERE lr.id = ?
     `).get(result.lastInsertRowid);
     res.status(201).json(leave);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/hr/leaves/:id — approve/reject
@@ -863,7 +863,7 @@ router.patch('/leaves/:id', requirePermission('hr', 'view'), (req, res) => {
     }
 
     res.json({ message: status === 'approved' ? 'تم قبول الطلب' : 'تم رفض الطلب' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

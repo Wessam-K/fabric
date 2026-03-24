@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { notFound, validationError, dbError, serverError, sanitize } = require('../utils/errors');
@@ -15,7 +15,7 @@ router.get('/stats', requirePermission('machines', 'view'), (req, res) => {
     const under_maintenance = db.prepare("SELECT COUNT(*) as c FROM machines WHERE status='maintenance'").get().c;
     const inactive = db.prepare("SELECT COUNT(*) as c FROM machines WHERE status='inactive'").get().c;
     const machines_in_use = db.prepare("SELECT COUNT(DISTINCT machine_id) as c FROM wo_stages WHERE status='in_progress' AND machine_id IS NOT NULL").get().c;
-    const total_maintenance_cost_this_month = db.prepare("SELECT COALESCE(SUM(cost),0) as v FROM machine_maintenance WHERE performed_at >= date('now','start of month')").get().v;
+    const total_maintenance_cost_this_month = db.prepare("SELECT COALESCE(SUM(cost),0) as v FROM machine_maintenance WHERE performed_at >= date('now','start of month') AND is_deleted=0").get().v;
     let upcoming_maintenance_count = 0;
     try { upcoming_maintenance_count = db.prepare("SELECT COUNT(*) as c FROM machines WHERE next_maintenance_date IS NOT NULL AND next_maintenance_date <= date('now','+7 days') AND status='active'").get().c; } catch {}
     res.json({ total, active, under_maintenance, inactive, machines_in_use, total_maintenance_cost_this_month, upcoming_maintenance_count });
@@ -220,9 +220,9 @@ router.delete('/:id', requirePermission('machines', 'delete'), (req, res) => {
 // GET /api/machines/:id/maintenance
 router.get('/:id/maintenance', requirePermission('machines', 'view'), (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM machine_maintenance WHERE machine_id = ? ORDER BY performed_at DESC').all(req.params.id);
+    const rows = db.prepare('SELECT * FROM machine_maintenance WHERE machine_id = ? AND is_deleted=0 ORDER BY performed_at DESC').all(req.params.id);
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/machines/:id/maintenance
@@ -247,13 +247,13 @@ router.post('/:id/maintenance', requirePermission('machines', 'edit'), (req, res
     const newRecord = db.prepare('SELECT * FROM machine_maintenance WHERE id = ?').get(result.lastInsertRowid);
     logAudit(req, 'CREATE', 'machine_maintenance', newRecord.id, maintenance_type);
     res.status(201).json(newRecord);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/machines/:id/maintenance/:mid
 router.put('/:id/maintenance/:mid', requirePermission('machines', 'edit'), (req, res) => {
   try {
-    const record = db.prepare('SELECT * FROM machine_maintenance WHERE id=? AND machine_id=?').get(req.params.mid, req.params.id);
+    const record = db.prepare('SELECT * FROM machine_maintenance WHERE id=? AND machine_id=? AND is_deleted=0').get(req.params.mid, req.params.id);
     if (!record) return notFound(res, 'سجل الصيانة');
     const { maintenance_type, description, cost, performed_by, performed_at, next_due, notes, title, status } = req.body;
     db.prepare(`UPDATE machine_maintenance SET

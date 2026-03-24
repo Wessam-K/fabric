@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -35,7 +35,7 @@ router.get('/summary', requirePermission('expenses', 'view'), (req, res) => {
     const pending_count = db.prepare(`SELECT COUNT(*) as c FROM expenses WHERE is_deleted=0 AND status='pending'`).get().c;
     const pending_total = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='pending'`).get().v;
     res.json({ total_this_month, total_this_year, by_type, by_month, pending_count, pending_total });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -49,7 +49,7 @@ router.get('/export', requirePermission('expenses', 'view'), (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="expenses.csv"');
     res.send('\uFEFF' + csv);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -77,7 +77,7 @@ router.get('/', requirePermission('expenses', 'view'), (req, res) => {
     `).all(...params, parseInt(limit), offset);
 
     res.json({ data, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -90,7 +90,7 @@ router.get('/:id', requirePermission('expenses', 'view'), (req, res) => {
       WHERE e.id=? AND e.is_deleted=0`).get(req.params.id);
     if (!expense) return res.status(404).json({ error: 'المصروف غير موجود' });
     res.json(expense);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -112,7 +112,7 @@ router.post('/', requirePermission('expenses', 'create'), (req, res) => {
     const expense = db.prepare('SELECT * FROM expenses WHERE id=?').get(result.lastInsertRowid);
     logAudit(req, 'create', 'expenses', expense.id, description, null, expense);
     res.status(201).json(expense);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -136,7 +136,7 @@ router.put('/:id', requirePermission('expenses', 'edit'), (req, res) => {
     const updated = db.prepare('SELECT * FROM expenses WHERE id=?').get(req.params.id);
     logAudit(req, 'update', 'expenses', old.id, old.description, old, updated);
     res.json(updated);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -149,7 +149,7 @@ router.put('/:id/approve', requirePermission('expenses', 'approve'), (req, res) 
     db.prepare("UPDATE expenses SET status='approved', approved_by=? WHERE id=?").run(req.user.id, req.params.id);
     logAudit(req, 'approve', 'expenses', old.id, old.description, { status: old.status }, { status: 'approved' });
     res.json(db.prepare('SELECT * FROM expenses WHERE id=?').get(req.params.id));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -164,7 +164,7 @@ router.put('/:id/reject', requirePermission('expenses', 'approve'), (req, res) =
       .run(req.user.id, 'سبب الرفض: ' + req.body.reason, req.params.id);
     logAudit(req, 'reject', 'expenses', old.id, old.description, { status: old.status }, { status: 'rejected', reason: req.body.reason });
     res.json(db.prepare('SELECT * FROM expenses WHERE id=?').get(req.params.id));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -177,7 +177,7 @@ router.delete('/:id', requirePermission('expenses', 'delete'), (req, res) => {
     db.prepare('UPDATE expenses SET is_deleted=1 WHERE id=?').run(req.params.id);
     logAudit(req, 'delete', 'expenses', old.id, old.description, old, null);
     res.json({ message: 'تم حذف المصروف بنجاح' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -207,7 +207,7 @@ router.post('/import', requirePermission('expenses', 'create'), (req, res) => {
       return count;
     })();
     res.json({ inserted, errors });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/expenses/:id/receipt — upload receipt image/PDF
@@ -222,7 +222,7 @@ router.post('/:id/receipt', requirePermission('expenses', 'edit'), receiptUpload
     db.prepare('UPDATE expenses SET receipt_url=? WHERE id=?').run(receiptUrl, id);
     logAudit(req, 'update', 'expenses', id, 'رفع إيصال', { receipt_url: expense.receipt_url }, { receipt_url: receiptUrl });
     res.json({ receipt_url: receiptUrl });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

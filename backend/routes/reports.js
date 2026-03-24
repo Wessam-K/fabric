@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { requirePermission } = require('../middleware/auth');
@@ -39,7 +39,7 @@ router.get('/summary', requirePermission('reports', 'view'), (req, res) => {
       outstanding_payables: Math.round(outstandingPayables * 100) / 100,
       pending_invoices: pendingInvoices,
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/work-orders — WO-based production report
@@ -58,7 +58,7 @@ router.get('/work-orders', requirePermission('reports', 'view'), (req, res) => {
     if (search) { const s = `%${search}%`; q += ' AND (wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ?)'; p.push(s, s, s); }
     q += ' ORDER BY wo.created_at DESC';
     res.json(db.prepare(q).all(...p));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/by-fabric — fabric usage from work orders
@@ -85,7 +85,7 @@ router.get('/by-fabric', requirePermission('reports', 'view'), (req, res) => {
       ORDER BY total_cost DESC
     `).all(...p);
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/by-accessory — accessory usage from work orders
@@ -111,7 +111,7 @@ router.get('/by-accessory', requirePermission('reports', 'view'), (req, res) => 
       ORDER BY total_cost DESC
     `).all(...p);
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/suppliers — supplier spending report
@@ -130,7 +130,7 @@ router.get('/suppliers', requirePermission('reports', 'view'), (req, res) => {
       ORDER BY total_ordered DESC
     `).all();
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/by-model — per-model WO cost breakdown
@@ -163,7 +163,7 @@ router.get('/by-model', requirePermission('reports', 'view'), (req, res) => {
       ORDER BY wo_count DESC
     `).all(...p);
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/model-detail/:code — full model breakdown
@@ -200,7 +200,7 @@ router.get('/model-detail/:code', requirePermission('reports', 'view'), (req, re
       ORDER BY cs.snapshot_date DESC LIMIT 20`).all(model.id);
 
     res.json({ model, summary, templates: templateDetails, work_orders: workOrders, cost_history: costHistory });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports — cost snapshots (paginated)
@@ -221,7 +221,7 @@ router.get('/', requirePermission('reports', 'view'), (req, res) => {
     q += ` LIMIT ? OFFSET ?`;
     p.push(parseInt(limit), offset);
     res.json(db.prepare(q).all(...p));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/production-by-stage — WIP pipeline
@@ -241,7 +241,7 @@ router.get('/production-by-stage', requirePermission('reports', 'view'), (req, r
       ORDER BY MIN(ws.sort_order)
     `).all();
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/costs — cost breakdown from cost_snapshots
@@ -263,7 +263,7 @@ router.get('/costs', requirePermission('reports', 'view'), (req, res) => {
       WHERE cs.wo_id IS NOT NULL
       ORDER BY cs.snapshot_date DESC`).all();
     res.json({ totals, snapshots });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/fabric-consumption — fabric usage from batches
@@ -292,7 +292,7 @@ router.get('/fabric-consumption', requirePermission('reports', 'view'), (req, re
       ORDER BY actual_cost DESC
     `).all(...p);
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/supplier-fabric — fabric purchased by supplier
@@ -315,7 +315,7 @@ router.get('/supplier-fabric', requirePermission('reports', 'view'), (req, res) 
       ORDER BY s.name, total_value DESC
     `).all();
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/waste-analysis — waste tracking
@@ -343,7 +343,7 @@ router.get('/waste-analysis', requirePermission('reports', 'view'), (req, res) =
       ORDER BY waste_cost DESC
     `).all(...p);
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/cost-variance — planned vs actual
@@ -375,7 +375,7 @@ router.get('/cost-variance', requirePermission('reports', 'view'), (req, res) =>
       ORDER BY wo.created_at DESC
     `).all(...p);
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/pivot — Dynamic pivot table data
@@ -442,7 +442,7 @@ router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
       return res.status(400).json({ error: 'مصدر غير صالح. استخدم: production, financial, hr, inventory' });
     }
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/hr-summary — HR KPI overview
@@ -473,7 +473,7 @@ router.get('/hr-summary', requirePermission('reports', 'view'), (req, res) => {
       dept_breakdown: deptBreakdown,
       type_breakdown: typeBreakdown,
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -511,7 +511,7 @@ router.get('/production-by-stage-detail', requirePermission('reports', 'view'), 
     }
 
     res.json(stages);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // V8 — Production by model
@@ -554,7 +554,7 @@ router.get('/production-by-model', requirePermission('reports', 'view'), (req, r
     }
 
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // V8 — Fabric consumption by supplier (aggregated)
@@ -574,7 +574,7 @@ router.get('/fabric-consumption-by-supplier', requirePermission('reports', 'view
     `).all();
 
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/customer-summary — revenue + balance per customer
@@ -595,7 +595,7 @@ router.get('/customer-summary', requirePermission('reports', 'view'), (req, res)
       total_outstanding: Math.round(customers.reduce((s, c) => s + c.outstanding, 0) * 100) / 100,
     };
     res.json({ customers, totals });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/inventory-status — fabric + accessory stock overview
@@ -623,7 +623,7 @@ router.get('/inventory-status', requirePermission('reports', 'view'), (req, res)
       low_stock_fabrics: fabrics.filter(f => f.is_low_stock).length,
       low_stock_accessories: accessories.filter(a => a.is_low_stock).length,
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/quality — quality & rejection report
@@ -684,7 +684,7 @@ router.get('/quality', requirePermission('reports', 'view'), (req, res) => {
       total_rejected: overall.total_rejected,
       qc_checkpoints: qcCheckpoints,
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/machines — machine utilization report
@@ -701,7 +701,7 @@ router.get('/machines', requirePermission('reports', 'view'), (req, res) => {
     `).all();
 
     res.json({ machines });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/ar-aging — accounts receivable aging
@@ -735,7 +735,7 @@ router.get('/ar-aging', requirePermission('reports', 'view'), (req, res) => {
     }
 
     res.json({ buckets, totals, total_invoices: invoices.length });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/inventory-valuation — fabric + accessory stock with monetary values
@@ -764,7 +764,7 @@ router.get('/inventory-valuation', requirePermission('reports', 'view'), (req, r
       accessory_total: accessoryTotal,
       grand_total: fabricTotal + accessoryTotal,
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/machine-utilization — machine usage statistics
@@ -780,7 +780,7 @@ router.get('/machine-utilization', requirePermission('reports', 'view'), (req, r
     const avgMaintenancePerMachine = totalMachines ? Math.round(totalMaintenanceCost / totalMachines * 100) / 100 : 0;
     const needsMaintenance = machines.filter(m => m.next_maintenance_date && m.next_maintenance_date <= new Date().toISOString().slice(0, 10)).length;
     res.json({ machines, summary: { total_machines: totalMachines, total_maintenance_cost: totalMaintenanceCost, avg_maintenance_per_machine: avgMaintenancePerMachine, needs_maintenance: needsMaintenance } });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/maintenance-cost — maintenance cost analysis
@@ -810,7 +810,7 @@ router.get('/maintenance-cost', requirePermission('reports', 'view'), (req, res)
     }
     const totalCost = orders.reduce((s, o) => s + (o.cost || 0), 0);
     res.json({ orders, by_type: byType, by_priority: byPriority, total_cost: totalCost, total_orders: orders.length });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/expense-analysis — expense breakdown
@@ -846,7 +846,7 @@ router.get('/expense-analysis', requirePermission('reports', 'view'), (req, res)
     }
     const totalAmount = expenses.reduce((s, e) => s + (e.amount || 0), 0);
     res.json({ expenses, by_category: byCategory, by_status: byStatus, monthly: monthlyData, total_amount: totalAmount, total_expenses: expenses.length });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/financial/pl — Profit & Loss report
@@ -912,7 +912,7 @@ router.get('/financial/pl', requirePermission('reports', 'view'), (req, res) => 
     totals.margin_pct = totals.revenue > 0 ? Math.round((totals.profit / totals.revenue) * 10000) / 100 : 0;
 
     res.json({ year, months, totals });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/production/efficiency — Production efficiency metrics
@@ -979,7 +979,7 @@ router.get('/production/efficiency', requirePermission('reports', 'view'), (req,
         avg_pieces_per_day: avgPiecesPerDay,
       }
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/cash-flow — monthly inflows vs outflows
@@ -1005,7 +1005,7 @@ router.get('/cash-flow', requirePermission('reports', 'view'), (req, res) => {
       });
     }
     res.json({ months: data });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/tax-summary — VAT collected vs paid
@@ -1026,7 +1026,7 @@ router.get('/tax-summary', requirePermission('reports', 'view'), (req, res) => {
     }
     const totals = months.reduce((a, m) => ({ vat_collected: a.vat_collected + m.vat_collected, vat_paid: a.vat_paid + m.vat_paid, net_vat: a.net_vat + m.net_vat }), { vat_collected: 0, vat_paid: 0, net_vat: 0 });
     res.json({ year, months, summary: { total_output_vat: totals.vat_collected, total_input_vat: totals.vat_paid, net_vat: totals.net_vat, tax_rate: taxRate } });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/ap-aging — accounts payable aging by supplier
@@ -1045,7 +1045,7 @@ router.get('/ap-aging', requirePermission('reports', 'view'), (req, res) => {
     const summary = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
     buckets.forEach(b => { summary[b.bucket] += b.outstanding; });
     res.json({ items: buckets, summary, total_outstanding: buckets.reduce((s, b) => s + b.outstanding, 0) });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/employee-productivity — per-employee metrics
@@ -1069,7 +1069,7 @@ router.get('/employee-productivity', requirePermission('reports', 'view'), (req,
       attendance_rate: emp.total_days > 0 ? Math.round((emp.days_present / emp.total_days) * 100) : 0,
     }));
     res.json({ employees: result });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/barcode-activity — recent barcode scan activity (from audit_log)
@@ -1080,7 +1080,7 @@ router.get('/barcode-activity', requirePermission('reports', 'view'), (req, res)
       WHERE al.action LIKE '%barcode%' OR al.action LIKE '%scan%' OR al.entity_type='barcode'
       ORDER BY al.created_at DESC LIMIT ?`).all(limit);
     res.json({ scans, total: scans.length });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/pl-monthly — monthly P&L (last 12 months)
@@ -1102,7 +1102,7 @@ router.get('/pl-monthly', requirePermission('reports', 'view'), (req, res) => {
       data.push({ month: monthLabel, revenue, expenses, maintenance, payroll, total_cost: totalCost, net_profit: revenue - totalCost });
     }
     res.json({ months: data.reverse() });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/pl-detail — detailed P&L with category breakdown
@@ -1139,7 +1139,7 @@ router.get('/pl-detail', requirePermission('reports', 'view'), (req, res) => {
       net_profit: totalRevenue - totalCost,
       profit_margin: totalRevenue > 0 ? Math.round((totalRevenue - totalCost) / totalRevenue * 10000) / 100 : 0
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/quality-by-model — rejection/rework rate per model
@@ -1178,7 +1178,7 @@ router.get('/quality-by-model', requirePermission('reports', 'view'), (req, res)
     `).all();
     
     res.json({ by_model: models, by_stage: byStage });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

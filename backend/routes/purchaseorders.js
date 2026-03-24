@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
@@ -27,7 +27,7 @@ router.get('/', requirePermission('purchase_orders', 'view'), (req, res) => {
       outstanding: orders.filter(o => o.status !== 'cancelled' && o.status !== 'draft').reduce((s, o) => s + (o.total_amount || 0) - (o.paid_amount || 0), 0),
     };
     res.json({ orders, totals });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/purchase-orders/next-number
@@ -38,7 +38,7 @@ router.get('/next-number', requirePermission('purchase_orders', 'view'), (req, r
     if (!last) return res.json({ next_number: `PO-${year}-001` });
     const num = parseInt(last.po_number.split('-')[2], 10) || 0;
     res.json({ next_number: `PO-${year}-${String(num + 1).padStart(3, '0')}` });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/purchase-orders/export — CSV export
@@ -51,7 +51,7 @@ router.get('/export', requirePermission('purchase_orders', 'view'), (req, res) =
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=purchase-orders.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/purchase-orders/import — bulk import
@@ -75,7 +75,7 @@ router.post('/import', requirePermission('purchase_orders', 'create'), (req, res
     })();
     logAudit(req, 'IMPORT', 'purchase_order', null, `imported:${imported}`);
     res.json({ imported, errors });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/purchase-orders/:id — full PO
@@ -90,7 +90,7 @@ router.get('/:id', requirePermission('purchase_orders', 'view'), (req, res) => {
     po.payments = db.prepare('SELECT * FROM supplier_payments WHERE po_id=? ORDER BY payment_date DESC').all(po.id);
     po.balance = (po.total_amount || 0) - (po.paid_amount || 0);
     res.json(po);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/purchase-orders
@@ -170,7 +170,7 @@ router.put('/:id', requirePermission('purchase_orders', 'edit'), (req, res) => {
     const updated = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
     logAudit(req, 'UPDATE', 'purchase_order', poId, existing.po_number, existing, updated);
     res.json(updated);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/purchase-orders/:id/status
@@ -196,7 +196,7 @@ router.patch('/:id/status', requirePermission('purchase_orders', 'edit'), (req, 
     if (status === 'received' && !po.received_date) sets.push("received_date=datetime('now')");
     db.prepare(`UPDATE purchase_orders SET ${sets.join(',')} WHERE id=?`).run(...params, po.id);
     res.json(db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(po.id));
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/purchase-orders/:id/payments
@@ -219,7 +219,7 @@ router.post('/:id/payments', requirePermission('purchase_orders', 'edit'), (req,
     updated.payments = db.prepare('SELECT * FROM supplier_payments WHERE po_id=? ORDER BY payment_date DESC').all(poId);
     updated.balance = (updated.total_amount || 0) - (updated.paid_amount || 0);
     res.status(201).json(updated);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PATCH /api/purchase-orders/:id/receive — receive items and create fabric batches
@@ -301,7 +301,10 @@ router.patch('/:id/receive', requirePermission('purchase_orders', 'edit'), (req,
     updated.payments = db.prepare('SELECT * FROM supplier_payments WHERE po_id=? ORDER BY payment_date DESC').all(poId);
     updated.balance = (updated.total_amount || 0) - (updated.paid_amount || 0);
     res.json(updated);
-  } catch (err) { res.status(400).json({ error: err.message }); }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'حدث خطأ أثناء استلام أمر الشراء' });
+  }
 });
 
 // DELETE /api/purchase-orders/:id
@@ -311,7 +314,7 @@ router.delete('/:id', requirePermission('purchase_orders', 'delete'), (req, res)
     db.prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?").run(id);
     logAudit(req, 'DELETE', 'purchase_order', id, `PO#${id}`);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;

@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
 const db = require('../database');
@@ -52,7 +52,7 @@ router.post('/login', (req, res) => {
       token,
       user: { id: user.id, username: user.username, full_name: user.full_name, role: user.role, department: user.department, must_change_password: !!user.must_change_password }
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/auth/refresh — issue new token if current token still valid
@@ -63,7 +63,7 @@ router.post('/refresh', requireAuth, (req, res) => {
     if (!user) return res.status(401).json({ error: 'المستخدم غير نشط' });
     const token = generateToken(user);
     res.json({ token });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/auth/logout
@@ -71,7 +71,7 @@ router.post('/logout', requireAuth, (req, res) => {
   try {
     logAudit(req, 'LOGOUT', 'user', req.user.id, req.user.full_name);
     res.json({ message: 'تم تسجيل الخروج' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/auth/me
@@ -80,7 +80,7 @@ router.get('/me', requireAuth, (req, res) => {
     const user = db.prepare('SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, must_change_password FROM users WHERE id = ? AND status = ?').get(req.user.id, 'active');
     if (!user) return res.status(401).json({ error: 'الحساب معطل أو غير موجود' });
     res.json(user);
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // PUT /api/auth/change-password
@@ -113,7 +113,7 @@ router.put('/change-password', requireAuth, (req, res) => {
     db.prepare('INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)').run(req.user.id, hash);
     logAudit(req, 'UPDATE', 'user', req.user.id, 'change-password');
     res.json({ message: 'تم تغيير كلمة المرور بنجاح' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/auth/profile — detailed profile with recent activity
@@ -127,7 +127,7 @@ router.get('/profile', requireAuth, (req, res) => {
     if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
     const recentActivity = db.prepare('SELECT action, entity_type, entity_label, created_at FROM audit_log WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(req.user.id);
     res.json({ ...user, recent_activity: recentActivity });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/auth/create-admin — first-run only
@@ -146,7 +146,7 @@ router.post('/create-admin', (req, res) => {
     ).run(username, full_name, hash, 'superadmin', 'active');
 
     res.json({ message: 'تم إنشاء حساب مدير النظام', user_id: result.lastInsertRowid });
-  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 module.exports = router;
