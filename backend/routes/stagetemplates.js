@@ -4,7 +4,7 @@ const db = require('../database');
 const { requirePermission } = require('../middleware/auth');
 
 // GET /api/stage-templates
-router.get('/', (req, res) => {
+router.get('/', requirePermission('settings', 'view'), (req, res) => {
   try {
     res.json(db.prepare('SELECT * FROM stage_templates ORDER BY sort_order').all());
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }

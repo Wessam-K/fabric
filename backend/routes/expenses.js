@@ -102,6 +102,8 @@ router.post('/', requirePermission('expenses', 'create'), (req, res) => {
     if (!expense_type || !amount || !description || !expense_date) {
       return res.status(400).json({ error: 'النوع والمبلغ والوصف والتاريخ مطلوبون' });
     }
+    const validExpenseTypes = ['machine','maintenance','salary','utilities','raw_material','production','transport','other'];
+    if (!validExpenseTypes.includes(expense_type)) return res.status(400).json({ error: 'نوع المصروف غير صالح' });
     if (parseFloat(amount) <= 0) {
       return res.status(400).json({ error: 'المبلغ يجب أن يكون أكبر من صفر' });
     }
@@ -185,18 +187,25 @@ router.post('/import', requirePermission('expenses', 'create'), (req, res) => {
   try {
     const items = req.body;
     if (!Array.isArray(items)) return res.status(400).json({ error: 'يجب إرسال مصفوفة' });
-    let inserted = 0; const errors = [];
+    const errors = [];
+    // Validate first, then insert all in one transaction
+    const valid = [];
     for (let i = 0; i < items.length; i++) {
-      try {
-        const r = items[i];
-        if (!r.amount || !r.description) { errors.push({ row: i+1, error: 'المبلغ والوصف مطلوبان' }); continue; }
-        db.prepare(`INSERT INTO expenses (expense_type, amount, description, expense_date, reference_type, reference_id, notes, created_by, status)
-          VALUES (?,?,?,?,?,?,?,?,'pending')`)
-          .run(r.expense_type||'other', r.amount, r.description, r.expense_date||new Date().toISOString().slice(0,10),
-            r.reference_type||null, r.reference_id||null, r.notes||null, req.user.id);
-        inserted++;
-      } catch (e) { errors.push({ row: i+1, error: e.message }); }
+      const r = items[i];
+      if (!r.amount || !r.description) { errors.push({ row: i+1, error: 'المبلغ والوصف مطلوبان' }); continue; }
+      valid.push(r);
     }
+    const inserted = db.transaction(() => {
+      const ins = db.prepare(`INSERT INTO expenses (expense_type, amount, description, expense_date, reference_type, reference_id, notes, created_by, status)
+        VALUES (?,?,?,?,?,?,?,?,'pending')`);
+      let count = 0;
+      for (const r of valid) {
+        ins.run(r.expense_type||'other', r.amount, r.description, r.expense_date||new Date().toISOString().slice(0,10),
+          r.reference_type||null, r.reference_id||null, r.notes||null, req.user.id);
+        count++;
+      }
+      return count;
+    })();
     res.json({ inserted, errors });
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });

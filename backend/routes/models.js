@@ -60,6 +60,7 @@ router.post('/', requirePermission('models', 'create'), (req, res) => {
   try {
     const { serial_number, model_code, model_name, category, gender, notes } = req.body;
     if (!model_code) return res.status(400).json({ error: 'كود الموديل مطلوب' });
+    if (gender && !['male','female','kids','unisex'].includes(gender)) return res.status(400).json({ error: 'قيمة الجنس غير صالحة' });
     const r = db.prepare(`INSERT INTO models (serial_number,model_code,model_name,category,gender,notes) VALUES (?,?,?,?,?,?)`)
       .run(serial_number || null, model_code, model_name || null, category || null, gender || 'unisex', notes || null);
     const model = db.prepare('SELECT * FROM models WHERE id=?').get(r.lastInsertRowid);
@@ -87,6 +88,7 @@ router.put('/:code', requirePermission('models', 'edit'), (req, res) => {
     const existing = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { model_name, category, gender, notes } = req.body;
+    if (gender && !['male','female','kids','unisex'].includes(gender)) return res.status(400).json({ error: 'قيمة الجنس غير صالحة' });
     db.prepare(`UPDATE models SET model_name=COALESCE(?,model_name),category=COALESCE(?,category),gender=COALESCE(?,gender),notes=COALESCE(?,notes),updated_at=datetime('now') WHERE model_code=?`)
       .run(model_name || null, category || null, gender || null, notes || null, req.params.code);
     const updated = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);

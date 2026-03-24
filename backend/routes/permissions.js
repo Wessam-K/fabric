@@ -18,7 +18,7 @@ router.get('/definitions', (req, res) => {
 });
 
 // GET /api/permissions/roles — all role permissions
-router.get('/roles', (req, res) => {
+router.get('/roles', requireRole('superadmin'), (req, res) => {
   try {
     const perms = db.prepare('SELECT * FROM role_permissions ORDER BY role, module, action').all();
     // Group by role

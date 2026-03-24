@@ -64,6 +64,8 @@ router.post('/employees', requirePermission('hr', 'create'), (req, res) => {
   try {
     const d = req.body;
     if (!d.emp_code || !d.full_name) return res.status(400).json({ error: 'كود الموظف والاسم مطلوبان' });
+    if (d.employment_type && !['full_time','part_time','daily','piece_work'].includes(d.employment_type)) return res.status(400).json({ error: 'نوع التوظيف غير صالح' });
+    if (d.salary_type && !['monthly','daily','hourly','piece_work'].includes(d.salary_type)) return res.status(400).json({ error: 'نوع الراتب غير صالح' });
 
     const existing = db.prepare('SELECT id FROM employees WHERE emp_code = ?').get(d.emp_code);
     if (existing) return res.status(400).json({ error: 'كود الموظف مستخدم بالفعل' });
@@ -100,19 +102,22 @@ router.post('/employees/import', requirePermission('hr', 'create'), (req, res) =
   try {
     const items = req.body;
     if (!Array.isArray(items)) return res.status(400).json({ error: 'يجب إرسال مصفوفة من الموظفين' });
-    let inserted = 0, updated = 0, errors = [];
+    const errors = [];
+    // Validate first
+    const valid = [];
     for (let i = 0; i < items.length; i++) {
-      try {
-        const d = items[i];
-        if (!d.full_name) { errors.push({ row: i + 1, error: 'اسم الموظف مطلوب' }); continue; }
-        
-        // Check if employee exists by emp_code or national_id
+      const d = items[i];
+      if (!d.full_name) { errors.push({ row: i + 1, error: 'اسم الموظف مطلوب' }); continue; }
+      valid.push(d);
+    }
+    const { inserted, updated } = db.transaction(() => {
+      let ins = 0, upd = 0;
+      for (const d of valid) {
         const existing = d.emp_code 
           ? db.prepare('SELECT id FROM employees WHERE emp_code = ?').get(d.emp_code)
           : (d.national_id ? db.prepare('SELECT id FROM employees WHERE national_id = ?').get(d.national_id) : null);
         
         if (existing) {
-          // Update existing employee
           db.prepare(`UPDATE employees SET full_name=?, national_id=COALESCE(?,national_id), department=COALESCE(?,department), 
             job_title=COALESCE(?,job_title), employment_type=COALESCE(?,employment_type), salary_type=COALESCE(?,salary_type),
             base_salary=COALESCE(?,base_salary), hire_date=COALESCE(?,hire_date), phone=COALESCE(?,phone), 
@@ -120,9 +125,8 @@ router.post('/employees/import', requirePermission('hr', 'create'), (req, res) =
             .run(d.full_name, d.national_id || null, d.department || null, d.job_title || null,
               d.employment_type || null, d.salary_type || null, d.base_salary || null,
               d.hire_date || null, d.phone || null, d.address || null, d.bank_account || null, existing.id);
-          updated++;
+          upd++;
         } else {
-          // Generate emp_code if not provided
           let empCode = d.emp_code;
           if (!empCode) {
             const last = db.prepare("SELECT emp_code FROM employees ORDER BY id DESC LIMIT 1").get();
@@ -130,18 +134,18 @@ router.post('/employees/import', requirePermission('hr', 'create'), (req, res) =
             if (last) { nextNum = parseInt(last.emp_code.replace('EMP-', '')) + 1; }
             empCode = `EMP-${String(nextNum).padStart(3, '0')}`;
           }
-          
-          const result = db.prepare(`INSERT INTO employees (emp_code, full_name, national_id, department, job_title,
+          db.prepare(`INSERT INTO employees (emp_code, full_name, national_id, department, job_title,
             employment_type, salary_type, base_salary, hire_date, phone, address, bank_account, notes)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
             empCode, d.full_name, d.national_id || null, d.department || null, d.job_title || null,
             d.employment_type || 'full_time', d.salary_type || 'monthly', d.base_salary || 0,
             d.hire_date || null, d.phone || null, d.address || null, d.bank_account || null, d.notes || null
           );
-          inserted++;
+          ins++;
         }
-      } catch (e) { errors.push({ row: i + 1, error: e.message }); }
-    }
+      }
+      return { inserted: ins, updated: upd };
+    })();
     res.json({ inserted, updated, errors, message: `تم استيراد ${inserted} موظف جديد وتحديث ${updated}` });
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });

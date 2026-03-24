@@ -277,7 +277,7 @@ router.get('/next-number', requirePermission('work_orders', 'view'), (req, res) 
 });
 
 // GET /api/work-orders/by-stage
-router.get('/by-stage', (req, res) => {
+router.get('/by-stage', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const data = db.prepare(`
       SELECT ws.stage_name, ws.status, COUNT(*) as count
@@ -411,7 +411,8 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
     res.status(201).json(getFullWO(woId));
   } catch (err) {
     if (err.message?.includes('UNIQUE')) return res.status(409).json({ error: 'رقم أمر الشغل موجود بالفعل' });
-    res.status(400).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'حدث خطأ أثناء إنشاء أمر العمل' });
   }
 });
 
@@ -429,7 +430,7 @@ router.get('/export', requirePermission('work_orders', 'view'), (req, res) => {
 });
 
 // GET /api/work-orders/:id
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     if (req.params.id === 'next-number' || req.params.id === 'by-stage') return;
     const wo = getFullWO(parseInt(req.params.id));
@@ -439,7 +440,7 @@ router.get('/:id', (req, res) => {
 });
 
 // GET /api/work-orders/:id/cost-summary
-router.get('/:id/cost-summary', (req, res) => {
+router.get('/:id/cost-summary', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const cost = calculateWOCost(parseInt(req.params.id));
     if (!cost) return res.status(404).json({ error: 'غير موجود' });
@@ -522,7 +523,10 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
     const updated = getFullWO(woId);
     logAudit(req, 'UPDATE', 'work_order', woId, existing.wo_number);
     res.json(updated);
-  } catch (err) { res.status(400).json({ error: err.message }); }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'حدث خطأ أثناء تحديث أمر العمل' });
+  }
 });
 
 // PATCH /api/work-orders/:id/status
@@ -1019,7 +1023,7 @@ router.patch('/:id/stage-start', requirePermission('work_orders', 'edit'), (req,
 // ═══════════════════════════════════════════════
 // V7 — Movement Log
 // ═══════════════════════════════════════════════
-router.get('/:id/movement-log', (req, res) => {
+router.get('/:id/movement-log', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const logs = db.prepare('SELECT * FROM stage_movement_log WHERE wo_id=? ORDER BY moved_at DESC').all(woId);
@@ -1032,7 +1036,7 @@ router.get('/:id/movement-log', (req, res) => {
 // ═══════════════════════════════════════════════
 
 // GET /api/work-orders/:id/fabric-consumption
-router.get('/:id/fabric-consumption', (req, res) => {
+router.get('/:id/fabric-consumption', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
@@ -1178,7 +1182,7 @@ router.delete('/:id/fabric-consumption/:consumptionId', requirePermission('work_
 // ═══════════════════════════════════════════════
 
 // GET /api/work-orders/:id/accessory-consumption
-router.get('/:id/accessory-consumption', (req, res) => {
+router.get('/:id/accessory-consumption', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const consumption = db.prepare(`
@@ -1279,7 +1283,7 @@ router.delete('/:id/accessory-consumption/:consumptionId', requirePermission('wo
 });
 
 // GET /api/work-orders/:id/waste
-router.get('/:id/waste', (req, res) => {
+router.get('/:id/waste', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
     const waste = db.prepare('SELECT * FROM wo_waste WHERE work_order_id=? ORDER BY recorded_at DESC').all(woId);

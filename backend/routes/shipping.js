@@ -69,6 +69,7 @@ router.post('/', requirePermission('shipping', 'create'), (req, res) => {
     const { shipment_number, shipment_type, customer_id, supplier_id, work_order_id, invoice_id,
       carrier_name, tracking_number, shipping_method, shipping_cost, weight, packages_count,
       ship_date, expected_delivery, shipping_address, notes, items } = req.body;
+    if (shipment_type && !['outbound','inbound','return'].includes(shipment_type)) return res.status(400).json({ error: 'نوع الشحنة غير صالح' });
 
     const created = db.transaction(() => {
       const num = shipment_number || nextNumber('SHP');
@@ -98,7 +99,7 @@ router.post('/', requirePermission('shipping', 'create'), (req, res) => {
       return ship;
     })();
 
-    logAudit(req, 'create', 'shipment', created.id, num);
+    logAudit(req, 'create', 'shipment', created.id, created.shipment_number);
     res.status(201).json(created);
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
@@ -146,8 +147,12 @@ router.patch('/:id/status', requirePermission('shipping', 'edit'), (req, res) =>
   try {
     const id = parseInt(req.params.id);
     const { status } = req.body;
+    const validStatuses = ['draft', 'ready', 'shipped', 'in_transit', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) return res.status(400).json({ error: 'حالة غير صالحة' });
     const old = db.prepare('SELECT * FROM shipments WHERE id=?').get(id);
     if (!old) return res.status(404).json({ error: 'غير موجود' });
+    if (old.status === 'delivered') return res.status(400).json({ error: 'لا يمكن تغيير حالة شحنة تم تسليمها' });
+    if (old.status === 'cancelled' && status !== 'draft') return res.status(400).json({ error: 'لا يمكن تغيير حالة شحنة ملغاة إلا إلى مسودة' });
 
     const updates = { status };
     if (status === 'delivered') updates.actual_delivery = new Date().toISOString().slice(0, 10);

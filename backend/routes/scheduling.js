@@ -124,6 +124,7 @@ router.put('/:id', requirePermission('scheduling', 'edit'), (req, res) => {
 
     const { production_line_id, machine_id, stage_id, planned_start, planned_end,
       actual_start, actual_end, priority, status, notes } = req.body;
+    if (status && !['planned','in_progress','completed','delayed','cancelled'].includes(status)) return res.status(400).json({ error: 'الحالة غير صالحة' });
 
     db.prepare(`UPDATE production_schedule SET 
       production_line_id=COALESCE(?,production_line_id), machine_id=COALESCE(?,machine_id),

@@ -438,3 +438,67 @@
 
 - **Post all fixes (R5-01 to R5-08)**: 58/58 passing ✅
 - **Frontend build**: Success (0 errors, 2545 modules) ✅
+
+---
+
+## Round 6 — Transaction Safety, Authorization Hardening, Error Leak Fixes, Enum Validation
+
+### R6-01: Shipping POST `num` scope bug (P1 — RUNTIME)
+- **File**: `backend/routes/shipping.js`
+- **Change**: `logAudit(req, 'create', 'shipment', created.id, num)` → `created.shipment_number`
+- **Reason**: `num` was `const`-scoped inside `db.transaction()` callback but referenced outside → ReferenceError on every shipment creation. Shipment saved but client got 500, no audit log written.
+
+### R6-02: Shipping PATCH status validation
+- **File**: `backend/routes/shipping.js`
+- **Change**: Added `validStatuses` whitelist, blocks changes to delivered shipments, blocks cancelled→anything except draft.
+
+### R6-03: PO status transitions (added 'partial' + transition graph)
+- **File**: `backend/routes/purchaseorders.js`
+- **Change**: Added `'partial'` to valid statuses. Replaced ad-hoc validation with transition graph: `{draft:['sent','cancelled'], sent:['partial','received','cancelled'], partial:['received','cancelled'], received:[], cancelled:['draft']}`.
+
+### R6-04–R6-06: Quality.js transaction wrappers
+- **File**: `backend/routes/quality.js`
+- **Change**: Wrapped templates POST (INSERT template + INSERT items), templates PUT (UPDATE + DELETE + INSERT), inspections POST (INSERT inspection + INSERT items) in `db.transaction()`.
+
+### R6-07: autojournal `createJournalEntry()` transaction
+- **File**: `backend/routes/autojournal.js`
+- **Change**: Wrapped INSERT journal_entries + loop INSERT journal_entry_lines in `db.transaction()`. Affects 5 calling routes.
+
+### R6-08: Invoices POST transaction unification
+- **File**: `backend/routes/invoices.js`
+- **Change**: Moved header INSERT INTO invoices inside the items transaction. Previously header was outside — if items failed, orphaned invoice header remained.
+
+### R6-09: Expenses import transaction
+- **File**: `backend/routes/expenses.js`
+- **Change**: Wrapped loop of INSERTs in `db.transaction()` for atomic bulk import.
+
+### R6-10: HR employees import transaction
+- **File**: `backend/routes/hr.js`
+- **Change**: Wrapped loop of INSERT/UPDATE in `db.transaction()` for atomic bulk import.
+
+### R6-11: PO payments transaction
+- **File**: `backend/routes/purchaseorders.js`
+- **Change**: Wrapped INSERT supplier_payments + UPDATE purchase_orders paid_amount in `db.transaction()`.
+
+### R6-12: requirePermission on 7 unprotected workorders GET endpoints
+- **File**: `backend/routes/workorders.js`
+- **Change**: Added `requirePermission('work_orders', 'view')` to `/:id`, `/:id/cost-summary`, `/by-stage`, `/:id/movement-log`, `/:id/fabric-consumption`, `/:id/accessory-consumption`, `/:id/waste`.
+
+### R6-13: requirePermission on barcode, stage-templates, permissions GETs
+- **Files**: `backend/routes/barcode.js`, `backend/routes/stagetemplates.js`, `backend/routes/permissions.js`
+- **Change**: barcode `/:code` → `requirePermission('work_orders', 'view')`, stage-templates `/` → `requirePermission('settings', 'view')`, permissions `/roles` → `requireRole('superadmin')`.
+
+### R6-14: Error message leak fixes
+- **File**: `backend/routes/workorders.js`
+- **Change**: POST and PUT catch blocks leaked `err.message` to client. Replaced with generic Arabic error messages + `console.error(err)`.
+
+### R6-15: Enum validation (8 fields across 6 files)
+- **Files**: `models.js`, `shipping.js`, `maintenance.js`, `hr.js`, `expenses.js`, `scheduling.js`
+- **Change**: Added server-side validation for `gender`, `shipment_type`, `maintenance_type`, `priority`, `employment_type`, `salary_type`, `expense_type`, scheduling `status` — all against DB CHECK constraints.
+
+---
+
+## Test Results — Round 6
+
+- **Post all fixes (R6-01 to R6-15)**: 58/58 passing ✅
+- **Frontend build**: Success (0 errors, 2545 modules) ✅

@@ -29,28 +29,30 @@ function getAccount(type) {
 }
 
 function createJournalEntry(req, description, lines, refType, refId) {
-  // Generate JE number
-  const last = db.prepare('SELECT entry_number FROM journal_entries ORDER BY id DESC LIMIT 1').get();
-  const num = last ? parseInt(String(last.entry_number).replace(/\D/g, '')) + 1 : 1;
-  const entryNumber = `JE-${String(num).padStart(5, '0')}`;
+  return db.transaction(() => {
+    // Generate JE number
+    const last = db.prepare('SELECT entry_number FROM journal_entries ORDER BY id DESC LIMIT 1').get();
+    const num = last ? parseInt(String(last.entry_number).replace(/\D/g, '')) + 1 : 1;
+    const entryNumber = `JE-${String(num).padStart(5, '0')}`;
 
-  const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
-  const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
+    const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
+    const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
 
-  if (Math.abs(totalDebit - totalCredit) > 0.01) return null; // Unbalanced
+    if (Math.abs(totalDebit - totalCredit) > 0.01) return null; // Unbalanced
 
-  const result = db.prepare(`INSERT INTO journal_entries 
-    (entry_number, entry_date, description, reference_type, reference_id, status, total_debit, total_credit, created_by)
-    VALUES (?, datetime('now','localtime'), ?, ?, ?, 'draft', ?, ?, ?)`)
-  .run(entryNumber, description, refType || null, refId || null, totalDebit, totalCredit, req.user?.id || null);
+    const result = db.prepare(`INSERT INTO journal_entries 
+      (entry_number, entry_date, description, reference_type, reference_id, status, total_debit, total_credit, created_by)
+      VALUES (?, datetime('now','localtime'), ?, ?, ?, 'draft', ?, ?, ?)`)
+    .run(entryNumber, description, refType || null, refId || null, totalDebit, totalCredit, req.user?.id || null);
 
-  const jeId = result.lastInsertRowid;
-  const insLine = db.prepare('INSERT INTO journal_entry_lines (journal_entry_id, account_id, description, debit, credit) VALUES (?,?,?,?,?)');
-  for (const l of lines) {
-    insLine.run(jeId, l.account_id, l.description || description, l.debit || 0, l.credit || 0);
-  }
+    const jeId = result.lastInsertRowid;
+    const insLine = db.prepare('INSERT INTO journal_entry_lines (journal_entry_id, account_id, description, debit, credit) VALUES (?,?,?,?,?)');
+    for (const l of lines) {
+      insLine.run(jeId, l.account_id, l.description || description, l.debit || 0, l.credit || 0);
+    }
 
-  return { id: jeId, entry_number: entryNumber };
+    return { id: jeId, entry_number: entryNumber };
+  })();
 }
 
 // ═══════════════════════════════════════════════

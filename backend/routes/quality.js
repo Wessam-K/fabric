@@ -23,14 +23,18 @@ router.post('/templates', requirePermission('quality', 'create'), (req, res) => 
     const { name, description, product_type, items } = req.body;
     if (!name) return res.status(400).json({ error: 'اسم القالب مطلوب' });
 
-    const result = db.prepare('INSERT INTO qc_templates (name, description, inspection_type) VALUES (?,?,?)')
-      .run(name, description || null, product_type || 'inline');
-    const templateId = result.lastInsertRowid;
+    const templateId = db.transaction(() => {
+      const result = db.prepare('INSERT INTO qc_templates (name, description, inspection_type) VALUES (?,?,?)')
+        .run(name, description || null, product_type || 'inline');
+      const tid = result.lastInsertRowid;
 
-    if (items?.length) {
-      const ins = db.prepare('INSERT INTO qc_template_items (template_id, check_point, category, accept_criteria, sort_order) VALUES (?,?,?,?,?)');
-      items.forEach((it, i) => ins.run(templateId, it.check_point, it.category || it.check_type || null, it.accept_criteria || it.acceptable_range || null, it.sort_order ?? i));
-    }
+      if (items?.length) {
+        const ins = db.prepare('INSERT INTO qc_template_items (template_id, check_point, category, accept_criteria, sort_order) VALUES (?,?,?,?,?)');
+        items.forEach((it, i) => ins.run(tid, it.check_point, it.category || it.check_type || null, it.accept_criteria || it.acceptable_range || null, it.sort_order ?? i));
+      }
+
+      return tid;
+    })();
 
     logAudit(req, 'CREATE', 'qc_template', templateId, name);
     res.status(201).json({ id: templateId });
@@ -55,14 +59,16 @@ router.put('/templates/:id', requirePermission('quality', 'edit'), (req, res) =>
     if (!old) return res.status(404).json({ error: 'القالب غير موجود' });
     const { name, description, product_type, items } = req.body;
 
-    db.prepare('UPDATE qc_templates SET name=COALESCE(?,name), description=COALESCE(?,description), inspection_type=COALESCE(?,inspection_type) WHERE id=?')
-      .run(name, description, product_type, id);
+    db.transaction(() => {
+      db.prepare('UPDATE qc_templates SET name=COALESCE(?,name), description=COALESCE(?,description), inspection_type=COALESCE(?,inspection_type) WHERE id=?')
+        .run(name, description, product_type, id);
 
-    if (items) {
-      db.prepare('DELETE FROM qc_template_items WHERE template_id=?').run(id);
-      const ins = db.prepare('INSERT INTO qc_template_items (template_id, check_point, category, accept_criteria, sort_order) VALUES (?,?,?,?,?)');
-      items.forEach((it, i) => ins.run(id, it.check_point, it.category || it.check_type || null, it.accept_criteria || it.acceptable_range || null, it.sort_order ?? i));
-    }
+      if (items) {
+        db.prepare('DELETE FROM qc_template_items WHERE template_id=?').run(id);
+        const ins = db.prepare('INSERT INTO qc_template_items (template_id, check_point, category, accept_criteria, sort_order) VALUES (?,?,?,?,?)');
+        items.forEach((it, i) => ins.run(id, it.check_point, it.category || it.check_type || null, it.accept_criteria || it.acceptable_range || null, it.sort_order ?? i));
+      }
+    })();
 
     logAudit(req, 'UPDATE', 'qc_template', id, name || old.name, old, { name, description, product_type });
     res.json({ success: true });
@@ -134,22 +140,26 @@ router.post('/inspections', requirePermission('quality', 'create'), (req, res) =
     const { work_order_id, template_id, inspection_type, sample_size, items } = req.body;
     if (!work_order_id) return res.status(400).json({ error: 'أمر العمل مطلوب' });
 
-    const num = `QC-${String(Date.now()).slice(-8)}`;
-    const result = db.prepare(`INSERT INTO qc_inspections 
-      (inspection_number, work_order_id, template_id, inspector_id, lot_size, sample_size)
-      VALUES (?,?,?,?,?,?)`)
-      .run(num, work_order_id, template_id || null, req.user.id, sample_size || 0, sample_size || 0);
-    const inspId = result.lastInsertRowid;
+    const inspResult = db.transaction(() => {
+      const num = `QC-${String(Date.now()).slice(-8)}`;
+      const result = db.prepare(`INSERT INTO qc_inspections 
+        (inspection_number, work_order_id, template_id, inspector_id, lot_size, sample_size)
+        VALUES (?,?,?,?,?,?)`)
+        .run(num, work_order_id, template_id || null, req.user.id, sample_size || 0, sample_size || 0);
+      const inspId = result.lastInsertRowid;
 
-    if (items?.length) {
-      const ins = db.prepare('INSERT INTO qc_inspection_items (inspection_id, check_point, result, defect_code, defect_count, notes) VALUES (?,?,?,?,?,?)');
-      for (const it of items) {
-        ins.run(inspId, it.check_point, it.result || 'pending', it.defect_code || null, it.defect_count || 0, it.notes || null);
+      if (items?.length) {
+        const ins = db.prepare('INSERT INTO qc_inspection_items (inspection_id, check_point, result, defect_code, defect_count, notes) VALUES (?,?,?,?,?,?)');
+        for (const it of items) {
+          ins.run(inspId, it.check_point, it.result || 'pending', it.defect_code || null, it.defect_count || 0, it.notes || null);
+        }
       }
-    }
 
-    logAudit(req, 'CREATE', 'qc_inspection', inspId, num);
-    res.status(201).json({ id: inspId, inspection_number: num });
+      return { id: inspId, inspection_number: num };
+    })();
+
+    logAudit(req, 'CREATE', 'qc_inspection', inspResult.id, inspResult.inspection_number);
+    res.status(201).json(inspResult);
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 

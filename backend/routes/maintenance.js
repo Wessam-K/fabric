@@ -107,6 +107,8 @@ router.post('/', requirePermission('maintenance', 'create'), (req, res) => {
   try {
     const { machine_id, maintenance_type, title, description, priority, scheduled_date, performed_by, cost, parts_used, notes } = req.body;
     if (!title) return res.status(400).json({ error: 'عنوان أمر الصيانة مطلوب' });
+    if (maintenance_type && !['preventive','corrective','emergency','routine'].includes(maintenance_type)) return res.status(400).json({ error: 'نوع الصيانة غير صالح' });
+    if (priority && !['low','medium','high','critical'].includes(priority)) return res.status(400).json({ error: 'الأولوية غير صالحة' });
     const barcode = 'MNT-' + Date.now().toString().slice(-8);
     const result = db.prepare(`INSERT INTO maintenance_orders (machine_id, maintenance_type, title, description, priority, scheduled_date, performed_by, cost, parts_used, notes, barcode, created_by, status)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'pending')`)
@@ -127,6 +129,8 @@ router.put('/:id', requirePermission('maintenance', 'edit'), (req, res) => {
     if (!old) return res.status(404).json({ error: 'أمر الصيانة غير موجود' });
     if (['completed', 'cancelled'].includes(old.status)) return res.status(400).json({ error: 'لا يمكن تعديل أمر صيانة مكتمل أو ملغي' });
     const { machine_id, maintenance_type, title, description, priority, status, scheduled_date, completed_date, performed_by, cost, parts_used, notes } = req.body;
+    if (maintenance_type && !['preventive','corrective','emergency','routine'].includes(maintenance_type)) return res.status(400).json({ error: 'نوع الصيانة غير صالح' });
+    if (priority && !['low','medium','high','critical'].includes(priority)) return res.status(400).json({ error: 'الأولوية غير صالحة' });
 
     let finalCompletedDate = completed_date !== undefined ? completed_date : old.completed_date;
     if (status === 'completed' && !finalCompletedDate) {

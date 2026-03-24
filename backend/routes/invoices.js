@@ -100,24 +100,25 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
     const taxAmt = (subtotal - discountAmt) * ((parseFloat(tax_pct) || 0) / 100);
     const total = subtotal - discountAmt + taxAmt;
 
-    const ins = db.prepare(`INSERT INTO invoices (invoice_number, customer_name, customer_phone, customer_email, customer_id, notes, subtotal, tax_pct, discount, total, status, due_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const invoiceId = db.transaction(() => {
+      const result = db.prepare(`INSERT INTO invoices (invoice_number, customer_name, customer_phone, customer_email, customer_id, notes, subtotal, tax_pct, discount, total, status, due_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(invoice_number, customer_name, customer_phone || null, customer_email || null, customer_id || null, notes || null,
+          subtotal, parseFloat(tax_pct) || 0, parseFloat(discount) || 0, total, status || 'draft', due_date || null);
 
-    const result = ins.run(invoice_number, customer_name, customer_phone || null, customer_email || null, customer_id || null, notes || null,
-      subtotal, parseFloat(tax_pct) || 0, parseFloat(discount) || 0, total, status || 'draft', due_date || null);
+      const id = result.lastInsertRowid;
 
-    const invoiceId = result.lastInsertRowid;
+      if (items?.length) {
+        const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, model_code, description, variant, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?,?)');
+        items.forEach((item, i) => {
+          const qty = parseFloat(item.quantity) || 0;
+          const price = parseFloat(item.unit_price) || 0;
+          insItem.run(id, item.model_code || null, item.description, item.variant || null, qty, price, qty * price, i);
+        });
+      }
 
-    // Insert items
-    const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, model_code, description, variant, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?,?)');
-    const insertItems = db.transaction((items) => {
-      items.forEach((item, i) => {
-        const qty = parseFloat(item.quantity) || 0;
-        const price = parseFloat(item.unit_price) || 0;
-        insItem.run(invoiceId, item.model_code || null, item.description, item.variant || null, qty, price, qty * price, i);
-      });
-    });
-    if (items?.length) insertItems(items);
+      return id;
+    })();
 
     const created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
     created.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoiceId);

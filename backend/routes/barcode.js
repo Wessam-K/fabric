@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { requirePermission } = require('../middleware/auth');
 
 // ═══════════════════════════════════════════════════════════════
 // Universal Barcode Lookup
 // GET /api/barcode/:code — searches ALL barcode-enabled entities
 // Returns { type, id, data } or 404
 // ═══════════════════════════════════════════════════════════════
-router.get('/:code', (req, res) => {
+router.get('/:code', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const { code } = req.params;
     if (!code || code.length < 3) {

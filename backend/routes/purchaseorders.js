@@ -177,12 +177,20 @@ router.put('/:id', requirePermission('purchase_orders', 'edit'), (req, res) => {
 router.patch('/:id/status', requirePermission('purchase_orders', 'edit'), (req, res) => {
   try {
     const { status } = req.body;
-    const valid = ['draft', 'sent', 'received', 'cancelled'];
+    const valid = ['draft', 'sent', 'partial', 'received', 'cancelled'];
     if (!valid.includes(status)) return res.status(400).json({ error: 'حالة غير صالحة' });
     const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(parseInt(req.params.id));
     if (!po) return res.status(404).json({ error: 'غير موجود' });
-    if (po.status === 'received' && status !== 'received') return res.status(400).json({ error: 'لا يمكن تغيير حالة أمر شراء مستلم' });
-    if (po.status === 'cancelled' && status !== 'draft') return res.status(400).json({ error: 'لا يمكن تغيير حالة أمر شراء ملغي إلا إلى مسودة' });
+    // Status transition rules
+    const transitions = {
+      draft: ['sent', 'cancelled'],
+      sent: ['partial', 'received', 'cancelled'],
+      partial: ['received', 'cancelled'],
+      received: [],
+      cancelled: ['draft']
+    };
+    const allowed = transitions[po.status] || [];
+    if (!allowed.includes(status)) return res.status(400).json({ error: `لا يمكن تغيير الحالة من ${po.status} إلى ${status}` });
     const sets = ['status=?'];
     const params = [status];
     if (status === 'received' && !po.received_date) sets.push("received_date=datetime('now')");
@@ -200,10 +208,12 @@ router.post('/:id/payments', requirePermission('purchase_orders', 'edit'), (req,
     const { amount, payment_method, reference, notes } = req.body;
     if (!amount || amount <= 0) return res.status(400).json({ error: 'المبلغ المطلوب غير صالح' });
 
-    db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,reference,notes) VALUES (?,?,?,?,?,?)`)
-      .run(po.supplier_id, poId, parseFloat(amount), payment_method || 'cash', reference || null, notes || null);
-    const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE po_id=?').get(poId).v;
-    db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(totalPaid, poId);
+    db.transaction(() => {
+      db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,reference,notes) VALUES (?,?,?,?,?,?)`)
+        .run(po.supplier_id, poId, parseFloat(amount), payment_method || 'cash', reference || null, notes || null);
+      const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE po_id=?').get(poId).v;
+      db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(totalPaid, poId);
+    })();
 
     const updated = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
     updated.payments = db.prepare('SELECT * FROM supplier_payments WHERE po_id=? ORDER BY payment_date DESC').all(poId);
