@@ -131,7 +131,7 @@ router.post('/:code/image', requirePermission('accessories', 'edit'), upload.sin
 });
 
 // Stock management
-router.get('/:code/stock', (req, res) => {
+router.get('/:code/stock', requirePermission('accessories', 'view'), (req, res) => {
   try {
     const acc = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     if (!acc) return res.status(404).json({ error: 'الاكسسوار غير موجود' });

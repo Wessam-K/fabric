@@ -9,7 +9,7 @@ const backupDir = path.join(__dirname, '..', 'backups');
 if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 
 // GET /api/backups
-router.get('/', requirePermission('backups', 'read'), (req, res) => {
+router.get('/', requirePermission('backups', 'view'), (req, res) => {
   try {
     const rows = db.prepare('SELECT b.*, u.full_name as created_by_name FROM backups b LEFT JOIN users u ON u.id=b.created_by ORDER BY b.created_at DESC').all();
     res.json(rows);

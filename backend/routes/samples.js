@@ -63,7 +63,7 @@ router.post('/', requirePermission('samples', 'create'), (req, res) => {
 });
 
 // PUT /api/samples/:id
-router.put('/:id', requirePermission('samples', 'update'), (req, res) => {
+router.put('/:id', requirePermission('samples', 'edit'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const old = db.prepare('SELECT * FROM samples WHERE id=?').get(id);

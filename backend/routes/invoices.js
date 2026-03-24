@@ -149,26 +149,25 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
       total = subtotal - disc + taxAmt;
     }
 
-    db.prepare(`UPDATE invoices SET customer_name=?, customer_phone=?, customer_email=?, customer_id=?, notes=?, subtotal=?, tax_pct=?, discount=?, total=?, status=?, due_date=?, updated_at=datetime('now')
-      WHERE id=?`).run(
-      customer_name || invoice.customer_name, customer_phone ?? invoice.customer_phone, customer_email ?? invoice.customer_email,
-      customer_id !== undefined ? customer_id : invoice.customer_id, notes ?? invoice.notes, subtotal, parseFloat(tax_pct) ?? invoice.tax_pct, parseFloat(discount) ?? invoice.discount,
-      total, status || invoice.status, due_date ?? invoice.due_date, invoice.id
-    );
+    db.transaction(() => {
+      db.prepare(`UPDATE invoices SET customer_name=?, customer_phone=?, customer_email=?, customer_id=?, notes=?, subtotal=?, tax_pct=?, discount=?, total=?, status=?, due_date=?, updated_at=datetime('now')
+        WHERE id=?`).run(
+        customer_name || invoice.customer_name, customer_phone ?? invoice.customer_phone, customer_email ?? invoice.customer_email,
+        customer_id !== undefined ? customer_id : invoice.customer_id, notes ?? invoice.notes, subtotal, parseFloat(tax_pct) ?? invoice.tax_pct, parseFloat(discount) ?? invoice.discount,
+        total, status || invoice.status, due_date ?? invoice.due_date, invoice.id
+      );
 
-    // Only replace items if they were sent in the request
-    if (items) {
-      db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(invoice.id);
-      const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, model_code, description, variant, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?,?)');
-      const insertItems = db.transaction((items) => {
+      // Only replace items if they were sent in the request
+      if (items) {
+        db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(invoice.id);
+        const insItem = db.prepare('INSERT INTO invoice_items (invoice_id, model_code, description, variant, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?,?)');
         items.forEach((item, i) => {
           const qty = parseFloat(item.quantity) || 0;
           const price = parseFloat(item.unit_price) || 0;
           insItem.run(invoice.id, item.model_code || null, item.description, item.variant || null, qty, price, qty * price, i);
         });
-      });
-      if (items.length) insertItems(items);
-    }
+      }
+    })();
 
     const updated = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice.id);
     updated.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoice.id);

@@ -201,6 +201,59 @@ All 42 fixes across Rounds 1+2 pass the full 58-test regression suite. Frontend 
 
 ---
 
+## Round 4 — Permission Action Fixes, Missing Guards & Transaction Safety
+
+### Test Suite Results
+
+| Phase | Tests | Pass | Fail | Status |
+|-------|-------|------|------|--------|
+| Post Permission Action Fixes (R4-01) | 58 | 58 | 0 | ✅ |
+| Post Permission Guard Additions (R4-02–04) | 58 | 58 | 0 | ✅ |
+| Post Transaction Wrappers (R4-05–08) | 58 | 58 | 0 | ✅ |
+| Post PO Validation (R4-09) | 58 | 58 | 0 | ✅ |
+| Frontend Build | — | — | — | ✅ 0 errors, 2545 modules |
+
+### Files Changed (Round 4)
+
+| File | Changes |
+|------|---------|
+| `backend/routes/returns.js` | 4× 'read'→'view', 2× 'update'→'edit', 2 POST endpoints wrapped in transaction |
+| `backend/routes/documents.js` | 2× 'read'→'view', 1× 'update'→'edit' |
+| `backend/routes/backups.js` | 1× 'read'→'view' |
+| `backend/routes/samples.js` | 1× 'update'→'edit' |
+| `backend/routes/models.js` | 5 GET endpoints + requirePermission |
+| `backend/routes/machines.js` | 5 GET endpoints + requirePermission |
+| `backend/routes/fabrics.js` | 2 GET endpoints + requirePermission |
+| `backend/routes/accessories.js` | 1 GET endpoint + requirePermission |
+| `backend/routes/purchaseorders.js` | GET /:id + requirePermission, item_type validation |
+| `backend/routes/quotations.js` | POST + PUT wrapped in db.transaction() |
+| `backend/routes/shipping.js` | POST + PUT wrapped in db.transaction() |
+| `backend/routes/invoices.js` | PUT: unified UPDATE+DELETE+INSERT into single transaction |
+
+### New Behavioral Changes (Round 4)
+
+22. **Returns, documents, backups** now accessible to non-superadmin users with proper permissions (was silently blocking).
+23. **Samples editing** now accessible to non-superadmin users with proper permissions.
+24. **Models** detail, BOM matrix, BOM templates require `models:view` permission.
+25. **Machines** stats, barcode lookup, detail, maintenance/expenses history require `machines:view` permission.
+26. **Fabric** PO batches and inventory batches require `fabrics:view` permission.
+27. **Accessory** stock requires `accessories:view` permission.
+28. **PO detail** requires `purchase_orders:view` permission.
+29. **PO item_type** validated against `['fabric', 'accessory']` whitelist.
+30. **Quotations, shipping, returns, invoices** write operations are now fully transactional (atomic).
+
+### Updated Issue Resolution Summary (Cumulative)
+
+| Severity | Found R1–R4 | Fixed R1 | Fixed R2 | Fixed R3 | Fixed R4 | Deferred |
+|----------|-------------|----------|----------|----------|----------|----------|
+| CRITICAL | 7 | 3 | 2 | 0 | 1 | 1 |
+| HIGH | 40 | 10 | 9 | 6 | 14 | 1 |
+| MEDIUM | 45 | 13 | 4 | 3 | 5 | 20 |
+| LOW | 22 | 0 | 1 | 1 | 0 | 20 |
+| **Total** | **114** | **26** | **16** | **10** | **20** | **42** |
+
+---
+
 ## Final Conclusion
 
-All 52 fixes across Rounds 1–3 pass the full 58-test regression suite. Frontend builds clean. V25 migration is backward-compatible (indexes only). The system maintains full compatibility with existing data. N+1 query patterns eliminated in 5 critical hotspots for significant performance improvement at scale.
+All 72 fixes across Rounds 1–4 pass the full 58-test regression suite. Frontend builds clean (0 errors, 2545 modules). All database migrations (V23–V25) are backward-compatible. The system maintains full compatibility with existing data. Key achievements: complete permission coverage across all endpoints, all multi-step write operations wrapped in transactions, N+1 patterns eliminated, 8 performance indexes added.

@@ -45,7 +45,7 @@ router.get('/', requirePermission('models', 'view'), (req, res) => {
 });
 
 // GET /api/models/next-serial — suggest next serial
-router.get('/next-serial', (req, res) => {
+router.get('/next-serial', requirePermission('models', 'view'), (req, res) => {
   try {
     const last = db.prepare('SELECT serial_number FROM models WHERE serial_number IS NOT NULL ORDER BY id DESC LIMIT 1').get();
     if (!last) return res.json({ next_serial: '1-001' });
@@ -72,7 +72,7 @@ router.post('/', requirePermission('models', 'create'), (req, res) => {
 });
 
 // GET /api/models/:code — single model + BOM templates list
-router.get('/:code', (req, res) => {
+router.get('/:code', requirePermission('models', 'view'), (req, res) => {
   try {
     const model = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
     if (!model) return res.status(404).json({ error: 'غير موجود' });
@@ -136,7 +136,7 @@ function getFullTemplate(templateId) {
 }
 
 // GET /api/models/:code/bom-matrix — compare all BOM template variants side by side
-router.get('/:code/bom-matrix', (req, res) => {
+router.get('/:code/bom-matrix', requirePermission('models', 'view'), (req, res) => {
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
@@ -197,7 +197,7 @@ router.get('/:code/bom-matrix', (req, res) => {
 });
 
 // GET /api/models/:code/bom-templates — list all BOM templates
-router.get('/:code/bom-templates', (req, res) => {
+router.get('/:code/bom-templates', requirePermission('models', 'view'), (req, res) => {
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
@@ -246,7 +246,7 @@ router.post('/:code/bom-templates', requirePermission('models', 'edit'), (req, r
 });
 
 // GET /api/models/:code/bom-templates/:templateId — full template
-router.get('/:code/bom-templates/:templateId', (req, res) => {
+router.get('/:code/bom-templates/:templateId', requirePermission('models', 'view'), (req, res) => {
   try {
     const tmpl = getFullTemplate(parseInt(req.params.templateId));
     if (!tmpl) return res.status(404).json({ error: 'القالب غير موجود' });

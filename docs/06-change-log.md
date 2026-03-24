@@ -321,3 +321,61 @@
 
 - **Post all fixes (P1–P10)**: 58/58 passing ✅
 - **Frontend build**: Success (0 errors, 2545 modules) ✅
+
+---
+
+## Round 4 — Permission Action Fixes, Missing Permission Guards & Transaction Safety
+
+> Baseline commit: `e34e060`
+
+### R4-01: Fix wrong permission action names across 4 files (CRITICAL — 11 instances)
+- **Files**: `returns.js`, `documents.js`, `backups.js`, `samples.js`
+- **Change**: Replace `'read'` → `'view'` (7×) and `'update'` → `'edit'` (4×)
+- **Reason**: Actions `'read'`/`'update'` don't exist in `permission_definitions` table. All non-superadmin users were silently denied access to returns (6 endpoints), documents (3 endpoints), backups (1 endpoint), and sample editing.
+
+### R4-02: Add requirePermission to models.js GET endpoints (HIGH — 5 endpoints)
+- **File**: `backend/routes/models.js`
+- **Change**: Add `requirePermission('models', 'view')` to `/next-serial`, `/:code`, `/:code/bom-matrix`, `/:code/bom-templates`, `/:code/bom-templates/:templateId`
+- **Reason**: BOM matrix exposes manufacturing costs, profit margins, suggested prices. Any authenticated user could view. Other models GET (list) already had permission check.
+
+### R4-03: Add requirePermission to machines.js GET endpoints (HIGH — 5 endpoints)
+- **File**: `backend/routes/machines.js`
+- **Change**: Add `requirePermission('machines', 'view')` to `/stats`, `/barcode/:barcode`, `/:id`, `/:id/maintenance`, `/:id/expenses`
+- **Reason**: Exposes maintenance costs, production hours, expense details. List endpoint (GET /) already had permission check.
+
+### R4-04: Add requirePermission to fabrics.js, accessories.js, purchaseorders.js (HIGH — 4 endpoints)
+- **Files**: `fabrics.js`, `accessories.js`, `purchaseorders.js`
+- **Change**: Add `requirePermission('fabrics/accessories/purchase_orders', 'view')` to `/:code/po-batches`, `/:code/batches`, `/:code/stock`, `/:id`
+- **Reason**: Exposes supplier pricing history, inventory batch details, stock levels, PO amounts/payment details.
+
+### R4-05: Wrap quotations POST+PUT in db.transaction() (MEDIUM)
+- **File**: `backend/routes/quotations.js`
+- **Change**: Wrap header INSERT+items INSERT (POST) and UPDATE+DELETE items+INSERT items (PUT) in `db.transaction()`
+- **Reason**: PUT: if item re-insertion failed after DELETE, items were lost. POST: if item INSERT failed, orphaned header row.
+
+### R4-06: Wrap shipping POST+PUT in db.transaction() (MEDIUM)
+- **File**: `backend/routes/shipping.js`
+- **Change**: Wrap shipment INSERT+items INSERT (POST) and UPDATE+DELETE+INSERT (PUT) in `db.transaction()`
+- **Reason**: Same orphan/data-loss pattern as quotations.
+
+### R4-07: Wrap returns POST (sales+purchases) in db.transaction() (MEDIUM)
+- **File**: `backend/routes/returns.js`
+- **Change**: Wrap return INSERT+items INSERT for both sales and purchase returns in `db.transaction()`
+- **Reason**: Same orphan pattern.
+
+### R4-08: Wrap invoice PUT in db.transaction() (MEDIUM)
+- **File**: `backend/routes/invoices.js`
+- **Change**: Unified UPDATE+DELETE items+INSERT items into single transaction. Previously the DELETE was outside the items-only transaction.
+- **Reason**: If item insertion failed after DELETE, customer invoice items were permanently lost.
+
+### R4-09: Add PO item_type whitelist validation (MEDIUM)
+- **File**: `backend/routes/purchaseorders.js`
+- **Change**: Validate `item_type` against `['fabric', 'accessory']` before insert
+- **Reason**: Arbitrary values could be inserted into `purchase_order_items.item_type` column, breaking downstream queries that filter by type.
+
+---
+
+## Test Results — Round 4
+
+- **Post all fixes (R4-01 to R4-09)**: 58/58 passing ✅
+- **Frontend build**: Success (0 errors, 2545 modules) ✅

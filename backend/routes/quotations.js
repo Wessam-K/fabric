@@ -62,16 +62,19 @@ router.post('/', requirePermission('quotations', 'create'), (req, res) => {
     const taxAmt = afterDiscount * (parseFloat(tax_percent) || 0) / 100;
     const total = afterDiscount + taxAmt;
 
-    const result = db.prepare(`INSERT INTO quotations 
-      (quotation_number, customer_id, valid_until, notes, subtotal, discount_percent, discount_amount, tax_percent, tax_amount, total, status, created_by)
-      VALUES (?,?,?,?,?,?,?,?,?,?,'draft',?)`)
-      .run(quotation_number, customer_id, valid_until || null, notes || null, subtotal, discount_percent || 0, discountAmt, tax_percent || 0, taxAmt, total, req.user.id);
+    const qId = db.transaction(() => {
+      const result = db.prepare(`INSERT INTO quotations 
+        (quotation_number, customer_id, valid_until, notes, subtotal, discount_percent, discount_amount, tax_percent, tax_amount, total, status, created_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,'draft',?)`)
+        .run(quotation_number, customer_id, valid_until || null, notes || null, subtotal, discount_percent || 0, discountAmt, tax_percent || 0, taxAmt, total, req.user.id);
 
-    const qId = result.lastInsertRowid;
-    const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit, unit_price, total_price, notes) VALUES (?,?,?,?,?,?,?)');
-    for (const it of items) {
-      ins.run(qId, it.description, it.quantity, it.unit || 'pc', it.unit_price, (it.quantity || 0) * (it.unit_price || 0), it.notes || null);
-    }
+      const id = result.lastInsertRowid;
+      const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit, unit_price, total_price, notes) VALUES (?,?,?,?,?,?,?)');
+      for (const it of items) {
+        ins.run(id, it.description, it.quantity, it.unit || 'pc', it.unit_price, (it.quantity || 0) * (it.unit_price || 0), it.notes || null);
+      }
+      return id;
+    })();
 
     logAudit(req, 'CREATE', 'quotation', qId, quotation_number);
     res.status(201).json({ id: qId });
@@ -90,29 +93,31 @@ router.put('/:id', requirePermission('quotations', 'edit'), (req, res) => {
     if (discount_percent != null && parseFloat(discount_percent) < 0) return res.status(400).json({ error: 'نسبة الخصم لا يمكن أن تكون سالبة' });
     if (tax_percent != null && parseFloat(tax_percent) < 0) return res.status(400).json({ error: 'نسبة الضريبة لا يمكن أن تكون سالبة' });
 
-    let subtotal = old.subtotal;
-    if (items?.length) {
-      subtotal = 0;
-      for (const it of items) { subtotal += (it.quantity || 0) * (it.unit_price || 0); }
-    }
-    const dp = discount_percent ?? old.discount_percent;
-    const tp = tax_percent ?? old.tax_percent;
-    const discountAmt = subtotal * dp / 100;
-    const taxAmt = (subtotal - discountAmt) * tp / 100;
-    const total = subtotal - discountAmt + taxAmt;
-
-    db.prepare(`UPDATE quotations SET customer_id=COALESCE(?,customer_id), valid_until=COALESCE(?,valid_until),
-      notes=COALESCE(?,notes), subtotal=?, discount_percent=?, discount_amount=?, tax_percent=?, tax_amount=?, total=?,
-      status=COALESCE(?,status), updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-      .run(customer_id, valid_until, notes, subtotal, dp, discountAmt, tp, taxAmt, total, status, id);
-
-    if (items?.length) {
-      db.prepare('DELETE FROM quotation_items WHERE quotation_id=?').run(id);
-      const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit, unit_price, total_price, notes) VALUES (?,?,?,?,?,?,?)');
-      for (const it of items) {
-        ins.run(id, it.description, it.quantity, it.unit || 'pc', it.unit_price, (it.quantity || 0) * (it.unit_price || 0), it.notes || null);
+    db.transaction(() => {
+      let subtotal = old.subtotal;
+      if (items?.length) {
+        subtotal = 0;
+        for (const it of items) { subtotal += (it.quantity || 0) * (it.unit_price || 0); }
       }
-    }
+      const dp = discount_percent ?? old.discount_percent;
+      const tp = tax_percent ?? old.tax_percent;
+      const discountAmt = subtotal * dp / 100;
+      const taxAmt = (subtotal - discountAmt) * tp / 100;
+      const total = subtotal - discountAmt + taxAmt;
+
+      db.prepare(`UPDATE quotations SET customer_id=COALESCE(?,customer_id), valid_until=COALESCE(?,valid_until),
+        notes=COALESCE(?,notes), subtotal=?, discount_percent=?, discount_amount=?, tax_percent=?, tax_amount=?, total=?,
+        status=COALESCE(?,status), updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .run(customer_id, valid_until, notes, subtotal, dp, discountAmt, tp, taxAmt, total, status, id);
+
+      if (items?.length) {
+        db.prepare('DELETE FROM quotation_items WHERE quotation_id=?').run(id);
+        const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit, unit_price, total_price, notes) VALUES (?,?,?,?,?,?,?)');
+        for (const it of items) {
+          ins.run(id, it.description, it.quantity, it.unit || 'pc', it.unit_price, (it.quantity || 0) * (it.unit_price || 0), it.notes || null);
+        }
+      }
+    })();
 
     logAudit(req, 'UPDATE', 'quotation', id, old.quotation_number, old, req.body);
     res.json({ success: true });

@@ -8,7 +8,7 @@ const { toCSV } = require('../utils/csv');
 // ═══════════════════════════════════════════════
 // GET /api/machines/stats
 // ═══════════════════════════════════════════════
-router.get('/stats', (req, res) => {
+router.get('/stats', requirePermission('machines', 'view'), (req, res) => {
   try {
     const total = db.prepare("SELECT COUNT(*) as c FROM machines").get().c;
     const active = db.prepare("SELECT COUNT(*) as c FROM machines WHERE status='active'").get().c;
@@ -39,7 +39,7 @@ router.get('/export', requirePermission('machines', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/machines/barcode/:barcode
 // ═══════════════════════════════════════════════
-router.get('/barcode/:barcode', (req, res) => {
+router.get('/barcode/:barcode', requirePermission('machines', 'view'), (req, res) => {
   try {
     const machine = db.prepare('SELECT * FROM machines WHERE barcode = ?').get(req.params.barcode);
     if (!machine) return notFound(res, 'الماكينة');
@@ -87,7 +87,7 @@ router.get('/', requirePermission('machines', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/machines/:id — single with stats
 // ═══════════════════════════════════════════════
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('machines', 'view'), (req, res) => {
   try {
     const machine = db.prepare('SELECT * FROM machines WHERE id = ?').get(req.params.id);
     if (!machine) return notFound(res, 'الماكينة');
@@ -218,7 +218,7 @@ router.delete('/:id', requirePermission('machines', 'delete'), (req, res) => {
 // ═══════════════════════════════════════════════
 
 // GET /api/machines/:id/maintenance
-router.get('/:id/maintenance', (req, res) => {
+router.get('/:id/maintenance', requirePermission('machines', 'view'), (req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM machine_maintenance WHERE machine_id = ? ORDER BY performed_at DESC').all(req.params.id);
     res.json(rows);
@@ -274,7 +274,7 @@ router.put('/:id/maintenance/:mid', requirePermission('machines', 'edit'), (req,
 // ═══════════════════════════════════════════════
 // GET /api/machines/:id/expenses
 // ═══════════════════════════════════════════════
-router.get('/:id/expenses', (req, res) => {
+router.get('/:id/expenses', requirePermission('machines', 'view'), (req, res) => {
   try {
     const rows = db.prepare("SELECT * FROM expenses WHERE reference_type='machine' AND reference_id=? AND is_deleted=0 ORDER BY expense_date DESC").all(req.params.id);
     res.json(rows);

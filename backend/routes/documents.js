@@ -28,7 +28,7 @@ const upload = multer({
 });
 
 // GET /api/documents
-router.get('/', requirePermission('documents', 'read'), (req, res) => {
+router.get('/', requirePermission('documents', 'view'), (req, res) => {
   try {
     const { entity_type, entity_id, category, search, page = 1, limit = 25 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -75,7 +75,7 @@ router.post('/upload', requirePermission('documents', 'create'), upload.single('
 });
 
 // GET /api/documents/:id
-router.get('/:id', requirePermission('documents', 'read'), (req, res) => {
+router.get('/:id', requirePermission('documents', 'view'), (req, res) => {
   try {
     const doc = db.prepare('SELECT d.*, u.full_name as uploaded_by_name FROM documents d LEFT JOIN users u ON u.id=d.uploaded_by WHERE d.id=?').get(req.params.id);
     if (!doc) return res.status(404).json({ error: 'المستند غير موجود' });
@@ -84,7 +84,7 @@ router.get('/:id', requirePermission('documents', 'read'), (req, res) => {
 });
 
 // PUT /api/documents/:id
-router.put('/:id', requirePermission('documents', 'update'), (req, res) => {
+router.put('/:id', requirePermission('documents', 'edit'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { title, category, notes } = req.body;

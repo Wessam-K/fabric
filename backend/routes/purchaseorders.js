@@ -79,7 +79,7 @@ router.post('/import', requirePermission('purchase_orders', 'create'), (req, res
 });
 
 // GET /api/purchase-orders/:id — full PO
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('purchase_orders', 'view'), (req, res) => {
   try {
     const po = db.prepare(`SELECT po.*, s.name as supplier_name, s.code as supplier_code
       FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.id=?`).get(req.params.id);
@@ -98,6 +98,15 @@ router.post('/', requirePermission('purchase_orders', 'create'), (req, res) => {
   try {
     const { po_number, supplier_id, po_type, expected_date, items, notes, tax_pct, discount } = req.body;
     if (!po_number || !supplier_id) return res.status(400).json({ error: 'رقم أمر الشراء ومعرف المورد مطلوبان' });
+
+    const validItemTypes = ['fabric', 'accessory'];
+    if (items?.length) {
+      for (const i of items) {
+        if (i.item_type && !validItemTypes.includes(i.item_type)) {
+          return res.status(400).json({ error: 'نوع الصنف غير صالح' });
+        }
+      }
+    }
 
     const transaction = db.transaction(() => {
       const subtotal = (items || []).reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);

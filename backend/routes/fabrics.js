@@ -127,7 +127,7 @@ router.delete('/:code', requirePermission('fabrics', 'delete'), (req, res) => {
 });
 
 // GET /api/fabrics/:code/po-batches — PO line items for this fabric
-router.get('/:code/po-batches', (req, res) => {
+router.get('/:code/po-batches', requirePermission('fabrics', 'view'), (req, res) => {
   try {
     const fabricCode = req.params.code;
     const batches = db.prepare(`
@@ -157,7 +157,7 @@ router.get('/:code/po-batches', (req, res) => {
 });
 
 // GET /api/fabrics/:code/batches — available inventory batches per fabric
-router.get('/:code/batches', (req, res) => {
+router.get('/:code/batches', requirePermission('fabrics', 'view'), (req, res) => {
   try {
     const { status } = req.query;
     let q = `SELECT fib.*, s.name as supplier_name, po.po_number

@@ -71,30 +71,34 @@ router.post('/', requirePermission('shipping', 'create'), (req, res) => {
       ship_date, expected_delivery, shipping_address, notes, items } = req.body;
 
     const num = shipment_number || nextNumber('SHP');
-    const result = db.prepare(`INSERT INTO shipments 
-      (shipment_number, shipment_type, customer_id, supplier_id, work_order_id, invoice_id,
-       carrier_name, tracking_number, shipping_method, shipping_cost, weight, packages_count,
-       ship_date, expected_delivery, shipping_address, notes, created_by)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(num, shipment_type || 'outbound', customer_id || null, supplier_id || null,
-      work_order_id || null, invoice_id || null, carrier_name || null, tracking_number || null,
-      shipping_method || null, parseFloat(shipping_cost) || 0, parseFloat(weight) || 0,
-      parseInt(packages_count) || 1, ship_date || null, expected_delivery || null,
-      shipping_address || null, notes || null, req.user?.id || null);
+    const created = db.transaction(() => {
+      const result = db.prepare(`INSERT INTO shipments 
+        (shipment_number, shipment_type, customer_id, supplier_id, work_order_id, invoice_id,
+         carrier_name, tracking_number, shipping_method, shipping_cost, weight, packages_count,
+         ship_date, expected_delivery, shipping_address, notes, created_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(num, shipment_type || 'outbound', customer_id || null, supplier_id || null,
+        work_order_id || null, invoice_id || null, carrier_name || null, tracking_number || null,
+        shipping_method || null, parseFloat(shipping_cost) || 0, parseFloat(weight) || 0,
+        parseInt(packages_count) || 1, ship_date || null, expected_delivery || null,
+        shipping_address || null, notes || null, req.user?.id || null);
 
-    const shipId = result.lastInsertRowid;
+      const shipId = result.lastInsertRowid;
 
-    if (items?.length) {
-      const ins = db.prepare('INSERT INTO shipment_items (shipment_id, description, model_code, variant, quantity, unit, weight, notes) VALUES (?,?,?,?,?,?,?,?)');
-      for (const it of items) {
-        ins.run(shipId, it.description, it.model_code || null, it.variant || null,
-          parseFloat(it.quantity) || 0, it.unit || 'pcs', parseFloat(it.weight) || 0, it.notes || null);
+      if (items?.length) {
+        const ins = db.prepare('INSERT INTO shipment_items (shipment_id, description, model_code, variant, quantity, unit, weight, notes) VALUES (?,?,?,?,?,?,?,?)');
+        for (const it of items) {
+          ins.run(shipId, it.description, it.model_code || null, it.variant || null,
+            parseFloat(it.quantity) || 0, it.unit || 'pcs', parseFloat(it.weight) || 0, it.notes || null);
+        }
       }
-    }
 
-    logAudit(req, 'create', 'shipment', shipId, num);
-    const created = db.prepare('SELECT * FROM shipments WHERE id=?').get(shipId);
-    created.items = db.prepare('SELECT * FROM shipment_items WHERE shipment_id=?').all(shipId);
+      const ship = db.prepare('SELECT * FROM shipments WHERE id=?').get(shipId);
+      ship.items = db.prepare('SELECT * FROM shipment_items WHERE shipment_id=?').all(shipId);
+      return ship;
+    })();
+
+    logAudit(req, 'create', 'shipment', created.id, num);
     res.status(201).json(created);
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
@@ -109,26 +113,28 @@ router.put('/:id', requirePermission('shipping', 'edit'), (req, res) => {
     const { carrier_name, tracking_number, shipping_method, shipping_cost, weight, packages_count,
       ship_date, expected_delivery, actual_delivery, shipping_address, notes, items } = req.body;
 
-    db.prepare(`UPDATE shipments SET 
-      carrier_name=COALESCE(?,carrier_name), tracking_number=COALESCE(?,tracking_number),
-      shipping_method=COALESCE(?,shipping_method), shipping_cost=COALESCE(?,shipping_cost),
-      weight=COALESCE(?,weight), packages_count=COALESCE(?,packages_count),
-      ship_date=COALESCE(?,ship_date), expected_delivery=COALESCE(?,expected_delivery),
-      actual_delivery=COALESCE(?,actual_delivery), shipping_address=COALESCE(?,shipping_address),
-      notes=COALESCE(?,notes), updated_at=datetime('now','localtime')
-      WHERE id=?`)
-    .run(carrier_name, tracking_number, shipping_method, shipping_cost !== undefined ? shipping_cost : null,
-      weight !== undefined ? weight : null, packages_count !== undefined ? packages_count : null,
-      ship_date, expected_delivery, actual_delivery, shipping_address, notes, id);
+    db.transaction(() => {
+      db.prepare(`UPDATE shipments SET 
+        carrier_name=COALESCE(?,carrier_name), tracking_number=COALESCE(?,tracking_number),
+        shipping_method=COALESCE(?,shipping_method), shipping_cost=COALESCE(?,shipping_cost),
+        weight=COALESCE(?,weight), packages_count=COALESCE(?,packages_count),
+        ship_date=COALESCE(?,ship_date), expected_delivery=COALESCE(?,expected_delivery),
+        actual_delivery=COALESCE(?,actual_delivery), shipping_address=COALESCE(?,shipping_address),
+        notes=COALESCE(?,notes), updated_at=datetime('now','localtime')
+        WHERE id=?`)
+      .run(carrier_name, tracking_number, shipping_method, shipping_cost !== undefined ? shipping_cost : null,
+        weight !== undefined ? weight : null, packages_count !== undefined ? packages_count : null,
+        ship_date, expected_delivery, actual_delivery, shipping_address, notes, id);
 
-    if (items) {
-      db.prepare('DELETE FROM shipment_items WHERE shipment_id=?').run(id);
-      const ins = db.prepare('INSERT INTO shipment_items (shipment_id, description, model_code, variant, quantity, unit, weight, notes) VALUES (?,?,?,?,?,?,?,?)');
-      for (const it of items) {
-        ins.run(id, it.description, it.model_code || null, it.variant || null,
-          parseFloat(it.quantity) || 0, it.unit || 'pcs', parseFloat(it.weight) || 0, it.notes || null);
+      if (items) {
+        db.prepare('DELETE FROM shipment_items WHERE shipment_id=?').run(id);
+        const ins = db.prepare('INSERT INTO shipment_items (shipment_id, description, model_code, variant, quantity, unit, weight, notes) VALUES (?,?,?,?,?,?,?,?)');
+        for (const it of items) {
+          ins.run(id, it.description, it.model_code || null, it.variant || null,
+            parseFloat(it.quantity) || 0, it.unit || 'pcs', parseFloat(it.weight) || 0, it.notes || null);
+        }
       }
-    }
+    })();
 
     logAudit(req, 'update', 'shipment', id, old.shipment_number, old, req.body);
     res.json(db.prepare('SELECT * FROM shipments WHERE id=?').get(id));
