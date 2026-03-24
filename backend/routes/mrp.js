@@ -31,18 +31,38 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
       .run(notes || null, req.user?.id || null);
     const runId = run.lastInsertRowid;
 
+    // Batch-load all sizes, fabrics, fabric batches, accessories for active WOs
+    const woIds = workOrders.map(w => w.id);
+    const woIdPlaceholders = woIds.map(() => '?').join(',');
+
+    const allSizes = db.prepare(`SELECT * FROM wo_sizes WHERE wo_id IN (${woIdPlaceholders})`).all(...woIds);
+    const sizesMap = {};
+    for (const s of allSizes) { (sizesMap[s.wo_id] ||= []).push(s); }
+
+    const allWoFabrics = db.prepare(`SELECT * FROM wo_fabrics WHERE wo_id IN (${woIdPlaceholders})`).all(...woIds);
+    const woFabricsMap = {};
+    for (const f of allWoFabrics) { (woFabricsMap[f.wo_id] ||= []).push(f); }
+
+    const allWoBatches = db.prepare(`SELECT * FROM wo_fabric_batches WHERE wo_id IN (${woIdPlaceholders})`).all(...woIds);
+    const woBatchesMap = {};
+    for (const b of allWoBatches) { (woBatchesMap[b.wo_id] ||= []).push(b); }
+
+    const allWoAcc = db.prepare(`SELECT * FROM wo_accessories_detail WHERE wo_id IN (${woIdPlaceholders})`).all(...woIds);
+    const woAccMap = {};
+    for (const a of allWoAcc) { (woAccMap[a.wo_id] ||= []).push(a); }
+
     const fabricNeeds = {};
     const accessoryNeeds = {};
 
     for (const wo of workOrders) {
       let totalPieces = wo.quantity || 0;
       if (wo.is_size_based) {
-        const sz = db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(wo.id);
+        const sz = sizesMap[wo.id] || [];
         if (sz.length) totalPieces = sz.reduce((s, r) => s + (r.qty_s||0) + (r.qty_m||0) + (r.qty_l||0) + (r.qty_xl||0) + (r.qty_2xl||0) + (r.qty_3xl||0), 0);
       }
 
       // Fabric requirements from wo_fabrics (V3 legacy)
-      const woFabrics = db.prepare('SELECT * FROM wo_fabrics WHERE wo_id=?').all(wo.id);
+      const woFabrics = woFabricsMap[wo.id] || [];
       for (const wf of woFabrics) {
         const key = wf.fabric_code || `id_${wf.fabric_id}`;
         if (!fabricNeeds[key]) fabricNeeds[key] = { id: wf.fabric_id, code: wf.fabric_code, required: 0, woIds: [] };
@@ -52,7 +72,7 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
 
       // Fabric requirements from wo_fabric_batches (V4 batch-based)
       if (!woFabrics.length) {
-        const woBatches = db.prepare('SELECT fabric_code, planned_meters_per_piece, planned_total_meters FROM wo_fabric_batches WHERE wo_id=?').all(wo.id);
+        const woBatches = woBatchesMap[wo.id] || [];
         for (const bf of woBatches) {
           const key = bf.fabric_code;
           if (!fabricNeeds[key]) fabricNeeds[key] = { id: 0, code: bf.fabric_code, required: 0, woIds: [] };
@@ -62,7 +82,7 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
       }
 
       // Accessory requirements
-      const woAcc = db.prepare('SELECT * FROM wo_accessories_detail WHERE wo_id=?').all(wo.id);
+      const woAcc = woAccMap[wo.id] || [];
       for (const wa of woAcc) {
         const key = wa.accessory_code || `id_${wa.accessory_id}`;
         if (!accessoryNeeds[key]) accessoryNeeds[key] = { id: wa.accessory_id, code: wa.accessory_code, required: 0, woIds: [] };

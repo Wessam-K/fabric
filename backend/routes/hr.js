@@ -571,24 +571,31 @@ router.post('/payroll/:periodId/calculate', requirePermission('hr', 'edit'), (re
     const calculate = db.transaction(() => {
       deleteOld.run(period.id);
 
+      // Batch-fetch attendance summaries for all employees at once
+      const attRows = db.prepare(`
+        SELECT employee_id,
+          COUNT(CASE WHEN attendance_status IN ('present','late','half_day') THEN 1 END) as days_worked,
+          COALESCE(SUM(actual_hours), 0) as total_hours,
+          COALESCE(SUM(overtime_hours), 0) as overtime_hours,
+          COUNT(CASE WHEN attendance_status = 'absent' THEN 1 END) as absent_days,
+          COALESCE(SUM(late_minutes), 0) as total_late_minutes
+        FROM attendance WHERE work_date LIKE ? GROUP BY employee_id
+      `).all(month + '%');
+      const attMap = Object.fromEntries(attRows.map(a => [a.employee_id, a]));
+
+      // Batch-fetch adjustments for all employees at once
+      const adjRows = db.prepare(`
+        SELECT * FROM hr_adjustments WHERE (period_id = ? OR period_id IS NULL) AND applied = 0
+      `).all(period.id);
+      const adjMap = {};
+      for (const adj of adjRows) {
+        if (!adjMap[adj.employee_id]) adjMap[adj.employee_id] = [];
+        adjMap[adj.employee_id].push(adj);
+      }
+
       for (const emp of employees) {
-        // Get attendance summary
-        const att = db.prepare(`
-          SELECT
-            COUNT(CASE WHEN attendance_status IN ('present','late','half_day') THEN 1 END) as days_worked,
-            COALESCE(SUM(actual_hours), 0) as total_hours,
-            COALESCE(SUM(overtime_hours), 0) as overtime_hours,
-            COUNT(CASE WHEN attendance_status = 'absent' THEN 1 END) as absent_days,
-            COALESCE(SUM(late_minutes), 0) as total_late_minutes
-          FROM attendance WHERE employee_id = ? AND work_date LIKE ?
-        `).get(emp.id, month + '%');
-
-        const summary = att || { days_worked: 0, total_hours: 0, overtime_hours: 0, absent_days: 0, total_late_minutes: 0 };
-
-        // Get adjustments for this period
-        const adjustments = db.prepare(`
-          SELECT * FROM hr_adjustments WHERE employee_id = ? AND (period_id = ? OR period_id IS NULL) AND applied = 0
-        `).all(emp.id, period.id);
+        const summary = attMap[emp.id] || { days_worked: 0, total_hours: 0, overtime_hours: 0, absent_days: 0, total_late_minutes: 0 };
+        const adjustments = adjMap[emp.id] || [];
 
         const pay = calculateEmployeePay(emp, summary, adjustments);
 

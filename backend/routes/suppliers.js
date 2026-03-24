@@ -50,7 +50,7 @@ router.get('/', requirePermission('suppliers', 'view'), (req, res) => {
 });
 
 // GET /api/suppliers/export — CSV export
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('suppliers', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT * FROM suppliers ORDER BY created_at DESC`).all();
     const header = 'code,name,supplier_type,phone,email,address,contact_name,payment_terms,rating,status,notes';

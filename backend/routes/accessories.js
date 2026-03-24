@@ -58,7 +58,7 @@ router.post('/', upload.single('image'), requirePermission('accessories', 'creat
 });
 
 // GET /api/accessories/export — CSV export
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('accessories', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT a.*, s.name as supplier_name FROM accessories a LEFT JOIN suppliers s ON s.id=a.supplier_id ORDER BY a.created_at DESC`).all();
     const header = 'code,acc_type,name,unit_price,unit,supplier_name,quantity_on_hand,low_stock_threshold,reorder_qty,status,notes';

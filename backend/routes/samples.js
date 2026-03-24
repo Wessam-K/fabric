@@ -4,7 +4,7 @@ const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 
 // GET /api/samples
-router.get('/', requirePermission('samples', 'read'), (req, res) => {
+router.get('/', requirePermission('samples', 'view'), (req, res) => {
   try {
     const { status, customer_id, search, page = 1, limit = 25 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -23,7 +23,7 @@ router.get('/', requirePermission('samples', 'read'), (req, res) => {
 });
 
 // GET /api/samples/next-number
-router.get('/next-number', requirePermission('samples', 'read'), (req, res) => {
+router.get('/next-number', requirePermission('samples', 'view'), (req, res) => {
   try {
     const prefix = db.prepare("SELECT value FROM settings WHERE key='sample_number_prefix'").get()?.value || 'SMP-';
     const last = db.prepare('SELECT sample_number FROM samples ORDER BY id DESC LIMIT 1').get();
@@ -33,7 +33,7 @@ router.get('/next-number', requirePermission('samples', 'read'), (req, res) => {
 });
 
 // GET /api/samples/:id
-router.get('/:id', requirePermission('samples', 'read'), (req, res) => {
+router.get('/:id', requirePermission('samples', 'view'), (req, res) => {
   try {
     const s = db.prepare(`SELECT s.*, c.name as customer_name, u.full_name as created_by_name
       FROM samples s LEFT JOIN customers c ON c.id=s.customer_id LEFT JOIN users u ON u.id=s.created_by

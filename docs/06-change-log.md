@@ -258,3 +258,66 @@
 - **Post security fixes (S1–S13)**: 58/58 passing ✅
 - **Post Phase D (D5–D9)**: 58/58 passing ✅
 - **Frontend build**: Success (0 errors) ✅
+
+---
+
+## Round 3 — Performance & Permission Hardening
+
+> Baseline commit: `e056738`
+
+### P1: Add missing export endpoint permission checks (HIGH — 7 files)
+- **Files**: `workorders.js`, `customers.js`, `machines.js`, `fabrics.js`, `accessories.js`, `suppliers.js`, `purchaseorders.js`
+- **Change**: Add `requirePermission('module', 'view')` to `GET /export` endpoints
+- **Reason**: Export endpoints bypassed permission checks, allowing any authenticated user to export data
+
+### P2: Add missing next-number permission checks (HIGH — 2 files)
+- **Files**: `workorders.js`, `purchaseorders.js`
+- **Change**: Add `requirePermission('module', 'view')` to `GET /next-number` endpoints
+- **Reason**: Next-number endpoints had no permission check
+
+### P3: Fix samples incorrect permission action (HIGH)
+- **File**: `backend/routes/samples.js`
+- **Change**: Replace 3 instances of `requirePermission('samples', 'read')` with `requirePermission('samples', 'view')`
+- **Reason**: `'read'` action doesn't exist in permission_definitions table; was silently denying all access
+
+### P4: Add audit log to notification DELETE (MEDIUM)
+- **File**: `backend/routes/notifications.js`
+- **Change**: Add `logAudit(req, 'DELETE', 'notification', id, title)` to DELETE handler
+- **Reason**: Notification deletions were not tracked in audit log
+
+### P5: Optimize generateNotifications N+1 (HIGH — perf)
+- **File**: `backend/routes/notifications.js`
+- **Change**: Batch-load all unread notifications into a Set; replace 8 categories × N items × M users individual `SELECT` queries with single in-memory lookup
+- **Reason**: Potentially hundreds of per-item queries reduced to 1 query + in-memory lookups
+
+### P6: Optimize check-overdue N+1 (HIGH — perf)
+- **File**: `backend/routes/notifications.js`
+- **Change**: Batch-load recent (24h) notifications into a Set; replace per-item duplicate-check queries with in-memory lookup
+- **Reason**: Same N+1 pattern as generateNotifications
+
+### P7: Optimize production-by-stage-detail N+1 (MEDIUM — perf)
+- **File**: `backend/routes/reports.js`
+- **Change**: Replace per-stage query loop with single query fetching all stage work orders, grouped in-memory via `stageMap`
+- **Reason**: Per-stage query loop generated O(stages) queries instead of 1
+
+### P8: Optimize payroll calculation N+1 (HIGH — perf)
+- **File**: `backend/routes/hr.js`
+- **Change**: Batch-fetch all attendance and adjustments before employee loop; map to dictionaries keyed by employee_id
+- **Reason**: Per-employee attendance + adjustment queries generated O(employees × 2) queries instead of 2
+
+### P9: Optimize MRP calculation N+1 (HIGH — perf)
+- **File**: `backend/routes/mrp.js`
+- **Change**: Batch-load all wo_sizes, wo_fabrics, wo_fabric_batches, wo_accessories_detail for active WOs before loop; map to dictionaries keyed by wo_id
+- **Reason**: Per-WO queries for sizes/fabrics/accessories generated O(WOs × 3) queries instead of 4
+
+### P10: Add V25 performance indexes (MEDIUM — perf)
+- **File**: `backend/database.js`
+- **Change**: V25 migration adds 8 indexes: `idx_notifications_user_read`, `idx_work_orders_status`, `idx_attendance_emp_date`, `idx_invoice_items_invoice`, `idx_po_items_po`, `idx_wo_stages_wo`, `idx_wo_stages_name`, `idx_invoices_status_due`
+- **Reason**: Common query patterns lacked index coverage
+
+---
+
+## Test Results — Round 3
+
+- **Post all fixes (P1–P10)**: 58/58 passing ✅
+- **Frontend build**: Success (0 errors, 2545 modules) ✅

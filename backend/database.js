@@ -2279,6 +2279,22 @@ function runMigrations() {
     } catch(e) {}
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (24)`);
   }
+
+  // ──── V25 — Audit Round 3: performance indexes ────
+  const v25 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 25').get();
+  if (!v25) {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read);
+      CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status);
+      CREATE INDEX IF NOT EXISTS idx_attendance_emp_date ON attendance(employee_id, work_date);
+      CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
+      CREATE INDEX IF NOT EXISTS idx_po_items_po ON purchase_order_items(po_id);
+      CREATE INDEX IF NOT EXISTS idx_wo_stages_wo ON wo_stages(wo_id);
+      CREATE INDEX IF NOT EXISTS idx_wo_stages_name ON wo_stages(stage_name);
+      CREATE INDEX IF NOT EXISTS idx_invoices_status_due ON invoices(status, due_date);
+    `);
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (25)`);
+  }
 }
 
 initializeDatabase();

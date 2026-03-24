@@ -145,3 +145,62 @@ Deferred items are tracked in Phase D (Maintainability) of `docs/05-improvement-
 ## Conclusion
 
 All 42 fixes across Rounds 1+2 pass the full 58-test regression suite. Frontend builds clean. V24 migration is backward-compatible. The system maintains full compatibility with existing data.
+
+---
+
+## Round 3 — Performance & Permission Hardening
+
+### Test Suite Results
+
+| Phase | Tests | Pass | Fail | Status |
+|-------|-------|------|------|--------|
+| Post Permission Fixes (P1–P4) | 58 | 58 | 0 | ✅ |
+| Post N+1 Optimizations (P5–P9) | 58 | 58 | 0 | ✅ |
+| Post V25 Indexes (P10) | 58 | 58 | 0 | ✅ |
+| Frontend Build | — | — | — | ✅ 0 errors, 2545 modules |
+
+### Files Changed (Round 3)
+
+| File | Changes |
+|------|---------|
+| `backend/routes/workorders.js` | Permission checks on /export, /next-number |
+| `backend/routes/customers.js` | Permission check on /export |
+| `backend/routes/machines.js` | Permission check on /export |
+| `backend/routes/fabrics.js` | Permission check on /export |
+| `backend/routes/accessories.js` | Permission check on /export |
+| `backend/routes/suppliers.js` | Permission check on /export |
+| `backend/routes/purchaseorders.js` | Permission checks on /export, /next-number |
+| `backend/routes/samples.js` | 3× 'read'→'view' action fix |
+| `backend/routes/notifications.js` | Audit log on DELETE, N+1 batch optimization (generateNotifications + check-overdue) |
+| `backend/routes/reports.js` | N+1 batch optimization (production-by-stage-detail) |
+| `backend/routes/hr.js` | N+1 batch optimization (payroll calculation) |
+| `backend/routes/mrp.js` | N+1 batch optimization (MRP calculation — sizes/fabrics/accessories) |
+| `backend/database.js` | V25 migration (8 performance indexes) |
+
+### New Behavioral Changes (Round 3)
+
+17. **Export endpoints** now require module `view` permission (was any authenticated user).
+18. **Next-number endpoints** (WO, PO) now require module `view` permission.
+19. **Samples routes** now correctly check `view` action (was `read` — silently denied all users).
+20. **Notification deletion** now logged in audit trail.
+21. **N+1 query patterns** eliminated in 5 hotspots: generateNotifications, check-overdue, reports stage-detail, payroll, MRP.
+
+### Database Schema (Round 3)
+
+- V25 migration adds 8 indexes for common query patterns (no data changes)
+
+### Updated Issue Resolution Summary (Cumulative)
+
+| Severity | Found R1–R3 | Fixed R1 | Fixed R2 | Fixed R3 | Deferred |
+|----------|-------------|----------|----------|----------|----------|
+| CRITICAL | 6 | 3 | 2 | 0 | 1 |
+| HIGH | 26 | 10 | 9 | 6 | 1 |
+| MEDIUM | 38 | 13 | 4 | 3 | 18 |
+| LOW | 22 | 0 | 1 | 1 | 20 |
+| **Total** | **92** | **26** | **16** | **10** | **40** |
+
+---
+
+## Final Conclusion
+
+All 52 fixes across Rounds 1–3 pass the full 58-test regression suite. Frontend builds clean. V25 migration is backward-compatible (indexes only). The system maintains full compatibility with existing data. N+1 query patterns eliminated in 5 critical hotspots for significant performance improvement at scale.

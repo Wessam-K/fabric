@@ -25,7 +25,7 @@ router.get('/stats', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/machines/export
 // ═══════════════════════════════════════════════
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('machines', 'view'), (req, res) => {
   try {
     const rows = db.prepare("SELECT * FROM machines WHERE status != 'inactive' ORDER BY sort_order, name").all();
     const columns = ['barcode','code','name','machine_type','status','location','purchase_date','machine_value','last_maintenance_date','next_maintenance_date','notes'];

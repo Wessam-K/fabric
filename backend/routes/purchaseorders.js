@@ -31,7 +31,7 @@ router.get('/', requirePermission('purchase_orders', 'view'), (req, res) => {
 });
 
 // GET /api/purchase-orders/next-number
-router.get('/next-number', (req, res) => {
+router.get('/next-number', requirePermission('purchase_orders', 'view'), (req, res) => {
   try {
     const year = new Date().getFullYear();
     const last = db.prepare(`SELECT po_number FROM purchase_orders WHERE po_number LIKE ? ORDER BY id DESC LIMIT 1`).get(`PO-${year}-%`);
@@ -42,7 +42,7 @@ router.get('/next-number', (req, res) => {
 });
 
 // GET /api/purchase-orders/export — CSV export
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('purchase_orders', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id ORDER BY po.created_at DESC`).all();
     const header = 'po_number,supplier_name,po_type,status,order_date,expected_date,total_amount,paid_amount,notes';

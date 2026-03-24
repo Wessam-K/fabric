@@ -494,16 +494,20 @@ router.get('/production-by-stage-detail', requirePermission('reports', 'view'), 
       ORDER BY MIN(ws.sort_order)
     `).all();
 
-    for (const stage of stages) {
-      stage.work_orders = db.prepare(`
-        SELECT wo.id, wo.wo_number, m.model_name, m.model_code,
-          ws.quantity_in_stage, ws.quantity_completed, ws.quantity_rejected, ws.status as stage_status
-        FROM wo_stages ws
-        JOIN work_orders wo ON wo.id=ws.wo_id AND wo.status IN ('in_progress','pending','draft')
-        LEFT JOIN models m ON m.id=wo.model_id
-        WHERE ws.stage_name=? AND (ws.quantity_in_stage > 0 OR ws.status='in_progress')
-        ORDER BY wo.wo_number
-      `).all(stage.stage_name);
+    for (const stage of stages) { stage.work_orders = []; }
+    const stageMap = Object.fromEntries(stages.map(s => [s.stage_name, s]));
+
+    const allStageWOs = db.prepare(`
+      SELECT ws.stage_name, wo.id, wo.wo_number, m.model_name, m.model_code,
+        ws.quantity_in_stage, ws.quantity_completed, ws.quantity_rejected, ws.status as stage_status
+      FROM wo_stages ws
+      JOIN work_orders wo ON wo.id=ws.wo_id AND wo.status IN ('in_progress','pending','draft')
+      LEFT JOIN models m ON m.id=wo.model_id
+      WHERE ws.quantity_in_stage > 0 OR ws.status='in_progress'
+      ORDER BY wo.wo_number
+    `).all();
+    for (const row of allStageWOs) {
+      if (stageMap[row.stage_name]) stageMap[row.stage_name].work_orders.push(row);
     }
 
     res.json(stages);

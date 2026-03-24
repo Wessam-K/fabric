@@ -58,7 +58,7 @@ router.post('/', upload.single('image'), requirePermission('fabrics', 'create'),
 });
 
 // GET /api/fabrics/export — CSV export
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('fabrics', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT f.*, s.name as supplier_name FROM fabrics f LEFT JOIN suppliers s ON s.id=f.supplier_id ORDER BY f.created_at DESC`).all();
     const header = 'code,name,fabric_type,color,price_per_m,supplier_name,available_meters,low_stock_threshold,status,notes';

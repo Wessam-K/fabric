@@ -266,7 +266,7 @@ router.get('/', requirePermission('work_orders', 'view'), (req, res) => {
 });
 
 // GET /api/work-orders/next-number
-router.get('/next-number', (req, res) => {
+router.get('/next-number', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const year = new Date().getFullYear();
     const last = db.prepare(`SELECT wo_number FROM work_orders WHERE wo_number LIKE ? ORDER BY id DESC LIMIT 1`).get(`WO-${year}-%`);
@@ -416,7 +416,7 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
 });
 
 // GET /api/work-orders/export — CSV export
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT wo.*, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id ORDER BY wo.created_at DESC`).all();
     const header = 'wo_number,model_code,model_name,quantity,status,priority,start_date,due_date,notes';

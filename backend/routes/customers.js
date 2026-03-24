@@ -30,7 +30,7 @@ router.get('/', requirePermission('customers', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/customers/export — CSV export
 // ═══════════════════════════════════════════════
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('customers', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT * FROM customers ORDER BY created_at DESC`).all();
     const header = 'code,name,customer_type,phone,email,address,city,tax_number,credit_limit,contact_name,payment_terms,status,notes';
