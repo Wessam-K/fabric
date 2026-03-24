@@ -96,9 +96,10 @@ router.post('/:id/convert-to-wo', requirePermission('work_orders', 'create'), (r
     const { quantity: targetQty } = req.body;
 
     const woResult = db.transaction(() => {
+      const woPrefix = db.prepare("SELECT value FROM settings WHERE key='wo_prefix'").get()?.value || 'WO-';
       const lastWo = db.prepare('SELECT wo_number FROM work_orders ORDER BY id DESC LIMIT 1').get();
       const woNum = lastWo ? parseInt(String(lastWo.wo_number).replace(/\D/g, '')) + 1 : 1;
-      const woNumber = `WO-${String(woNum).padStart(5, '0')}`;
+      const woNumber = `${woPrefix}${String(woNum).padStart(5, '0')}`;
 
       const result = db.prepare(`INSERT INTO work_orders 
         (wo_number, customer_id, start_date, status, quantity, notes, created_by)

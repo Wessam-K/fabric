@@ -23,7 +23,8 @@ export default function Quotations() {
   const [showDetail, setShowDetail] = useState(false);
   const [selected, setSelected] = useState(null);
   const [customers, setCustomers] = useState([]);
-  const [form, setForm] = useState({ quotation_number: '', customer_id: '', valid_until: '', notes: '', discount_percent: 0, tax_percent: 15, items: [{ description: '', quantity: 1, unit: 'pc', unit_price: 0, notes: '' }] });
+  const [form, setForm] = useState({ quotation_number: '', customer_id: '', valid_until: '', notes: '', discount_percent: 0, tax_percent: 0, items: [{ description: '', quantity: 1, unit: 'pc', unit_price: 0, notes: '' }] });
+  const [defaultTax, setDefaultTax] = useState(0);
 
   const load = async () => {
     setLoading(true);
@@ -36,12 +37,15 @@ export default function Quotations() {
   };
 
   useEffect(() => { load(); }, [page, statusFilter]);
-  useEffect(() => { api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(() => {}); }, []);
+  useEffect(() => {
+    api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(() => {});
+    api.get('/settings').then(r => { const tax = parseFloat(r.data?.tax_rate) || 0; setDefaultTax(tax); }).catch(() => {});
+  }, []);
 
   const openNew = async () => {
     try {
       const { data } = await api.get('/quotations/next-number');
-      setForm({ quotation_number: data.next_number, customer_id: '', valid_until: '', notes: '', discount_percent: 0, tax_percent: 15, items: [{ description: '', quantity: 1, unit: 'pc', unit_price: 0, notes: '' }] });
+      setForm({ quotation_number: data.next_number, customer_id: '', valid_until: '', notes: '', discount_percent: 0, tax_percent: defaultTax, items: [{ description: '', quantity: 1, unit: 'pc', unit_price: 0, notes: '' }] });
       setShowModal(true);
     } catch { setShowModal(true); }
   };

@@ -268,11 +268,13 @@ router.get('/', requirePermission('work_orders', 'view'), (req, res) => {
 // GET /api/work-orders/next-number
 router.get('/next-number', requirePermission('work_orders', 'view'), (req, res) => {
   try {
+    const prefix = db.prepare("SELECT value FROM settings WHERE key='wo_prefix'").get()?.value || 'WO-';
     const year = new Date().getFullYear();
-    const last = db.prepare(`SELECT wo_number FROM work_orders WHERE wo_number LIKE ? ORDER BY id DESC LIMIT 1`).get(`WO-${year}-%`);
-    if (!last) return res.json({ next_number: `WO-${year}-001` });
-    const num = parseInt(last.wo_number.split('-')[2], 10) || 0;
-    res.json({ next_number: `WO-${year}-${String(num + 1).padStart(3, '0')}` });
+    const last = db.prepare(`SELECT wo_number FROM work_orders WHERE wo_number LIKE ? ORDER BY id DESC LIMIT 1`).get(`${prefix}${year}-%`);
+    if (!last) return res.json({ next_number: `${prefix}${year}-001` });
+    const parts = last.wo_number.split('-');
+    const num = parseInt(parts[parts.length - 1], 10) || 0;
+    res.json({ next_number: `${prefix}${year}-${String(num + 1).padStart(3, '0')}` });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -1350,11 +1352,15 @@ router.post('/:id/create-invoice', requirePermission('work_orders', 'edit'), (re
 
     const transaction = db.transaction(() => {
       // Generate invoice number
+      const invPrefix = db.prepare("SELECT value FROM settings WHERE key='invoice_prefix'").get()?.value || 'INV-';
       const year = new Date().getFullYear();
-      const last = db.prepare("SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1").get(`INV-${year}-%`);
+      const last = db.prepare("SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1").get(`${invPrefix}${year}-%`);
       let nextNum = 1;
-      if (last) nextNum = (parseInt(last.invoice_number.split('-')[2], 10) || 0) + 1;
-      const invoiceNumber = `INV-${year}-${String(nextNum).padStart(3, '0')}`;
+      if (last) {
+        const parts = last.invoice_number.split('-');
+        nextNum = (parseInt(parts[parts.length - 1], 10) || 0) + 1;
+      }
+      const invoiceNumber = `${invPrefix}${year}-${String(nextNum).padStart(3, '0')}`;
 
       // Create invoice
       const inv = db.prepare(`INSERT INTO invoices (invoice_number, customer_name, wo_id, status, subtotal, total, notes) VALUES (?,?,?,'draft',?,?,?)`)

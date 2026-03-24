@@ -31,6 +31,7 @@ export default function PurchaseOrders() {
 
   const emptyItem = { item_type: 'fabric', item_code: '', description: '', quantity: '', unit_price: '' };
   const [form, setForm] = useState({ po_number: '', supplier_id: '', tax_pct: '0', discount: '0', expected_date: '', notes: '', items: [{ ...emptyItem }] });
+  const [defaultTax, setDefaultTax] = useState('0');
 
   // Receive workflow
   const [showReceive, setShowReceive] = useState(null);
@@ -50,6 +51,7 @@ export default function PurchaseOrders() {
   };
 
   useEffect(() => { load(); }, [search, statusFilter]);
+  useEffect(() => { api.get('/settings').then(r => { const t = r.data?.tax_rate; if (t) setDefaultTax(String(t)); }).catch(() => {}); }, []);
 
   const openCreate = async () => {
     try {
@@ -62,7 +64,7 @@ export default function PurchaseOrders() {
       setSuppliers(supRes.data);
       setFabrics(fabRes.data);
       setAccessories(accRes.data);
-      setForm({ po_number: nextRes.data.next_number, supplier_id: '', tax_pct: '0', discount: '0', expected_date: '', notes: '', items: [{ ...emptyItem }] });
+      setForm({ po_number: nextRes.data.next_number, supplier_id: '', tax_pct: defaultTax, discount: '0', expected_date: '', notes: '', items: [{ ...emptyItem }] });
       setShowCreate(true);
     } catch { toast.error('فشل تحميل البيانات'); }
   };

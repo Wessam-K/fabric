@@ -42,12 +42,13 @@ router.get('/', requirePermission('invoices', 'view'), (req, res) => {
 // GET /api/invoices/next-number — suggest next invoice number
 router.get('/next-number', requirePermission('invoices', 'view'), (req, res) => {
   try {
+    const prefix = db.prepare("SELECT value FROM settings WHERE key='invoice_prefix'").get()?.value || 'INV-';
     const last = db.prepare("SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1").get();
-    let next = 'INV-001';
+    let next = `${prefix}001`;
     if (last) {
       const trailingDigits = last.invoice_number.match(/(\d+)$/);
       const num = (trailingDigits ? parseInt(trailingDigits[1], 10) : 0) + 1;
-      next = `INV-${String(num).padStart(3, '0')}`;
+      next = `${prefix}${String(num).padStart(3, '0')}`;
     }
     res.json({ next_number: next });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

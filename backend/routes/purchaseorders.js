@@ -33,11 +33,13 @@ router.get('/', requirePermission('purchase_orders', 'view'), (req, res) => {
 // GET /api/purchase-orders/next-number
 router.get('/next-number', requirePermission('purchase_orders', 'view'), (req, res) => {
   try {
+    const prefix = db.prepare("SELECT value FROM settings WHERE key='po_prefix'").get()?.value || 'PO-';
     const year = new Date().getFullYear();
-    const last = db.prepare(`SELECT po_number FROM purchase_orders WHERE po_number LIKE ? ORDER BY id DESC LIMIT 1`).get(`PO-${year}-%`);
-    if (!last) return res.json({ next_number: `PO-${year}-001` });
-    const num = parseInt(last.po_number.split('-')[2], 10) || 0;
-    res.json({ next_number: `PO-${year}-${String(num + 1).padStart(3, '0')}` });
+    const last = db.prepare(`SELECT po_number FROM purchase_orders WHERE po_number LIKE ? ORDER BY id DESC LIMIT 1`).get(`${prefix}${year}-%`);
+    if (!last) return res.json({ next_number: `${prefix}${year}-001` });
+    const parts = last.po_number.split('-');
+    const num = parseInt(parts[parts.length - 1], 10) || 0;
+    res.json({ next_number: `${prefix}${year}-${String(num + 1).padStart(3, '0')}` });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

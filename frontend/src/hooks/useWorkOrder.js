@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 
-const emptyFabric = (role = 'main', wastePct = 3) => ({
+const emptyFabric = (role = 'main', wastePct = 5) => ({
   fabric_code: '', meters_per_piece: '', waste_pct: role === 'main' ? wastePct : 0, role
 });
 const emptySize = () => ({ size: '', color_breakdown: '{}' });

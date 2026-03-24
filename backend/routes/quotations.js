@@ -208,9 +208,10 @@ router.post('/sales-orders/:id/convert-to-wo', requirePermission('work_orders', 
     if (!so) return res.status(404).json({ error: 'أمر البيع غير موجود' });
     if (!['confirmed','draft'].includes(so.status)) return res.status(400).json({ error: 'لا يمكن التحويل إلا من حالة مؤكد أو مسودة' });
 
+    const woPrefix = db.prepare("SELECT value FROM settings WHERE key='wo_prefix'").get()?.value || 'WO-';
     const lastWo = db.prepare('SELECT wo_number FROM work_orders ORDER BY id DESC LIMIT 1').get();
     const woNum = lastWo ? parseInt(String(lastWo.wo_number).replace(/\D/g, '')) + 1 : 1;
-    const woNumber = `WO-${String(woNum).padStart(5, '0')}`;
+    const woNumber = `${woPrefix}${String(woNum).padStart(5, '0')}`;
 
     const soItems = db.prepare('SELECT * FROM sales_order_items WHERE sales_order_id=?').all(id);
     const totalQty = soItems.reduce((s, i) => s + (i.quantity || 0), 0);

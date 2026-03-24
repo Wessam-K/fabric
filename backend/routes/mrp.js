@@ -186,9 +186,10 @@ router.post('/:id/auto-po', requirePermission('mrp', 'create'), (req, res) => {
     const createdPOs = [];
     const transaction = db.transaction(() => {
       for (const [sid, group] of Object.entries(bySupplier)) {
+        const poPrefix = db.prepare("SELECT value FROM settings WHERE key='po_prefix'").get()?.value || 'PO-';
         const lastPO = db.prepare('SELECT po_number FROM purchase_orders ORDER BY id DESC LIMIT 1').get();
         const nextNum = lastPO ? parseInt(String(lastPO.po_number).replace(/\D/g, '')) + 1 : 1;
-        const poNumber = `PO-${String(nextNum).padStart(5, '0')}`;
+        const poNumber = `${poPrefix}${String(nextNum).padStart(5, '0')}`;
 
         const totalAmount = group.items.reduce((s, i) => s + i.total_cost, 0);
         const poResult = db.prepare(`INSERT INTO purchase_orders (po_number, supplier_id, status, total_amount, notes, created_by) VALUES (?,?,?,?,?,?)`)
