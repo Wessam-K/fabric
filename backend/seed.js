@@ -960,13 +960,403 @@ function seed() {
   insCustPay.run(custIds.c4, inv5.lastInsertRowid, 37828, 'bank', 'TRF-C-2026-002', 'سداد كامل — فاتورة INV-005');
   insCustPay.run(custIds.c4, inv5.lastInsertRowid, 10000, 'check', 'CHQ-2026-0045', 'دفعة على الحساب');
 
+  // ══════════════════════════════════════════════════════════════
+  //  ENHANCED REAL-LIFE SCENARIOS — Multiple POs, Batch Tracking,
+  //  Full Pipeline Tests, QC Issues, Rush Orders, Bulk Orders
+  // ══════════════════════════════════════════════════════════════
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().replace('T', ' ').slice(0, 19);
+  const fortyDaysAgo = new Date(Date.now() - 40 * 86400000).toISOString().replace('T', ' ').slice(0, 19);
+  const inThirtyDays = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+
+  // ──────────── Additional Work Orders (WO-005 to WO-010) ────────────
+
+  // WO-005: URGENT Blazer order — full pipeline from quotation to delivery
+  const wo5 = insWO.run('WO-2026-005', modelIds.m3, null, 'in_progress', 'urgent', 'ورشة 1', 120, 60, 30, 650, 500, 'طلبية عاجلة — بليزر رسمي لمؤسسة النخبة', fiveDaysAgo, ws(5), custIds.c4);
+  const wo5id = wo5.lastInsertRowid;
+  insWF.run(wo5id, 'WOL-001', 'main', 2.8, 5, 'رمادي', 0);
+  insWF.run(wo5id, 'LNG-003', 'lining', 2.5, 0, 'بيج', 1);
+  insWA.run(wo5id, 'BTN-002', 'زرار معدني فضي', 4, 2);
+  insWA.run(wo5id, 'PAD-001', 'حشو كتف', 2, 3);
+  insWA.run(wo5id, 'ITF-001', 'فازلين لاصق', 1.5, 20);
+  insWA.run(wo5id, 'LBL-001', 'ليبل ماركة', 1, 1.5);
+  insWA.run(wo5id, 'LBL-002', 'ليبل مقاس', 1, 0.3);
+  insWA.run(wo5id, 'THR-001', 'خيط بوليستر', 1, 15);
+  insWS.run(wo5id, 'رمادي', 5, 10, 15, 12, 6, 2);
+  insWS.run(wo5id, 'كحلي', 3, 8, 12, 10, 5, 2);
+  stageTemplates.forEach((s, i) => {
+    const st = i < 3 ? 'completed' : i === 3 ? 'in_progress' : 'pending';
+    insWSt.run(wo5id, s.name, s.sort_order, st, 'ورشة 1', i <= 3 ? fiveDaysAgo : null, i < 3 ? fiveDaysAgo : null);
+  });
+
+  // WO-006: Abaya rush order — with QC issues
+  const wo6 = insWO.run('WO-2026-006', modelIds.m6, null, 'in_progress', 'urgent', 'ورشة 2', 100, 45, 20, 550, 420, 'طلبية عاجلة — عبايات مطرزة لبوتيك الورد', tenDaysAgo, ws(3), custIds.c2);
+  const wo6id = wo6.lastInsertRowid;
+  insWF.run(wo6id, 'CRP-001', 'main', 3.5, 4, 'أسود', 0);
+  insWF.run(wo6id, 'LNG-002', 'lining', 3.0, 0, 'أسود', 1);
+  insWA.run(wo6id, 'OTH-001', 'شريط ساتان تزيين', 2, 5);
+  insWA.run(wo6id, 'BTN-004', 'كبس مخفي', 3, 1);
+  insWA.run(wo6id, 'LBL-001', 'ليبل ماركة', 1, 1.5);
+  insWA.run(wo6id, 'LBL-002', 'ليبل مقاس', 1, 0.3);
+  insWA.run(wo6id, 'THR-002', 'خيط حرير', 1, 25);
+  insWS.run(wo6id, 'أسود/ذهبي', 10, 20, 30, 20, 10, 5);
+  insWS.run(wo6id, 'أسود/فضي', 5, 12, 18, 12, 6, 3);
+  stageTemplates.forEach((s, i) => {
+    const st = i < 5 ? 'completed' : i === 5 ? 'in_progress' : 'pending';
+    insWSt.run(wo6id, s.name, s.sort_order, st, 'ورشة 2', i <= 5 ? tenDaysAgo : null, i < 5 ? tenDaysAgo : null);
+  });
+
+  // WO-007: Bulk shirt order — completed with full batch tracking
+  const wo7 = insWO.run('WO-2026-007', modelIds.m4, null, 'completed', 'normal', 'ورشة 1', 60, 35, 25, 220, 170, 'طلبية شهرية كبيرة — قمصان رسمية', thirtyDaysAgo, null, custIds.c4);
+  const wo7id = wo7.lastInsertRowid;
+  insWF.run(wo7id, 'CTN-001', 'main', 1.6, 4, 'أبيض', 0);
+  insWA.run(wo7id, 'BTN-001', 'زرار بلاستيك', 8, 0.5);
+  insWA.run(wo7id, 'ITF-001', 'فازلين ياقة', 0.3, 20);
+  insWA.run(wo7id, 'LBL-001', 'ليبل ماركة', 1, 1.5);
+  insWA.run(wo7id, 'LBL-002', 'ليبل مقاس', 1, 0.3);
+  insWA.run(wo7id, 'THR-001', 'خيط بوليستر', 0.5, 15);
+  insWS.run(wo7id, 'أبيض', 15, 30, 40, 30, 15, 5);
+  insWS.run(wo7id, 'أزرق فاتح', 10, 20, 30, 20, 10, 5);
+  insWS.run(wo7id, 'وردي', 5, 12, 18, 12, 6, 2);
+  stageTemplates.forEach(s => insWSt.run(wo7id, s.name, s.sort_order, 'completed', 'ورشة 1', thirtyDaysAgo, thirtyDaysAgo));
+
+  // WO-008: Winter coat — in_progress, early stages
+  const wo8 = insWO.run('WO-2026-008', modelIds.m10, null, 'in_progress', 'high', 'ورشة 2', 150, 70, 25, 900, 700, 'مجموعة شتاء — معاطف فاخرة', fiveDaysAgo, inTwentyDays, custIds.c1);
+  const wo8id = wo8.lastInsertRowid;
+  insWF.run(wo8id, 'WOL-002', 'main', 3.5, 5, 'بيج', 0);
+  insWF.run(wo8id, 'LNG-004', 'lining', 3.2, 0, 'كحلي', 1);
+  insWA.run(wo8id, 'BTN-002', 'زرار معدني', 6, 2);
+  insWA.run(wo8id, 'PAD-001', 'حشو كتف', 2, 3);
+  insWA.run(wo8id, 'PAD-002', 'حشو صدر', 2, 5);
+  insWA.run(wo8id, 'ITF-001', 'فازلين', 2, 20);
+  insWA.run(wo8id, 'LBL-001', 'ليبل ماركة', 1, 1.5);
+  insWA.run(wo8id, 'THR-002', 'خيط حرير', 1.5, 25);
+  insWS.run(wo8id, 'بيج', 3, 6, 10, 8, 4, 2);
+  insWS.run(wo8id, 'أسود', 3, 5, 8, 6, 3, 1);
+  stageTemplates.forEach((s, i) => {
+    const st = i === 0 ? 'completed' : i === 1 ? 'in_progress' : 'pending';
+    insWSt.run(wo8id, s.name, s.sort_order, st, 'ورشة 2', i <= 1 ? fiveDaysAgo : null, i === 0 ? fiveDaysAgo : null);
+  });
+
+  // WO-009: Summer dress — draft, pending delivery of fabric
+  const wo9 = insWO.run('WO-2026-009', modelIds.m9, null, 'draft', 'normal', null, 65, 30, 20, 320, 250, 'مجموعة صيف — فساتين كتان', null, inThirtyDays, custIds.c5);
+  const wo9id = wo9.lastInsertRowid;
+  insWF.run(wo9id, 'LNN-001', 'main', 2.2, 4, 'أوف وايت', 0);
+  insWF.run(wo9id, 'LNG-005', 'lining', 1.8, 0, 'أبيض', 1);
+  insWA.run(wo9id, 'BTN-003', 'زرار خشب', 6, 3.5);
+  insWA.run(wo9id, 'LBL-001', 'ليبل ماركة', 1, 1.5);
+  insWA.run(wo9id, 'LBL-002', 'ليبل مقاس', 1, 0.3);
+  insWA.run(wo9id, 'OTH-001', 'شريط حزام', 1.2, 5);
+  insWS.run(wo9id, 'أوف وايت', 5, 10, 15, 10, 5, 2);
+  insWS.run(wo9id, 'بيج', 3, 8, 12, 8, 4, 2);
+  stageTemplates.forEach(s => insWSt.run(wo9id, s.name, s.sort_order, 'pending', null, null, null));
+
+  // WO-010: Vest completed — fully tracked and delivered
+  const wo10 = insWO.run('WO-2026-010', modelIds.m8, null, 'completed', 'low', 'ورشة 1', 80, 40, 25, 400, 310, 'فيست كشمير — طلبية مؤسسة النخبة', fortyDaysAgo, null, custIds.c4);
+  const wo10id = wo10.lastInsertRowid;
+  insWF.run(wo10id, 'WOL-002', 'main', 1.2, 4, 'بيج', 0);
+  insWF.run(wo10id, 'LNG-003', 'lining', 1.0, 0, 'بيج', 1);
+  insWA.run(wo10id, 'BTN-003', 'زرار خشب', 5, 3.5);
+  insWA.run(wo10id, 'ITF-001', 'فازلين', 0.5, 20);
+  insWA.run(wo10id, 'LBL-001', 'ليبل ماركة', 1, 1.5);
+  insWA.run(wo10id, 'LBL-002', 'ليبل مقاس', 1, 0.3);
+  insWS.run(wo10id, 'بيج', 4, 8, 12, 10, 5, 2);
+  insWS.run(wo10id, 'رمادي غامق', 3, 6, 10, 8, 4, 2);
+  stageTemplates.forEach(s => insWSt.run(wo10id, s.name, s.sort_order, 'completed', 'ورشة 1', fortyDaysAgo, fortyDaysAgo));
+
+  // ──────────── Additional Purchase Orders (PO-005 to PO-010) ────────────
+
+  // PO-005: Partially received silk
+  const po5 = insPO.run('PO-2026-005', sup5.lastInsertRowid, 'fabric', 8750, 5000, 'partial', '2026-03-10', 'طلبية حرير — وصل جزء');
+  insPOI.run(po5.lastInsertRowid, 'fabric', 'SLK-001', null, 'حرير شيفون — كحلي', 20, 'meter', 250);
+  insPOI.run(po5.lastInsertRowid, 'fabric', 'SLK-002', null, 'حرير طبيعي — أوف وايت', 15, 'meter', 320);
+
+  // PO-006: Received wool for blazers and coats
+  const po6 = insPO.run('PO-2026-006', sup1.lastInsertRowid, 'fabric', 14400, 14400, 'received', '2026-03-01', 'طلبية صوف — بليزرات ومعاطف');
+  insPOI.run(po6.lastInsertRowid, 'fabric', 'WOL-001', null, 'صوف مخلوط — رمادي', 40, 'meter', 200);
+  insPOI.run(po6.lastInsertRowid, 'fabric', 'WOL-002', null, 'صوف كشمير — بيج', 20, 'meter', 350);
+
+  // PO-007: Received cotton (second batch)
+  const po7 = insPO.run('PO-2026-007', sup1.lastInsertRowid, 'fabric', 8025, 8025, 'received', '2026-02-10', 'طلبية أقمشة قطنية — الدفعة الثانية');
+  insPOI.run(po7.lastInsertRowid, 'fabric', 'CTN-001', null, 'قطن مصري ممتاز — أبيض', 40, 'meter', 120);
+  insPOI.run(po7.lastInsertRowid, 'fabric', 'CTN-003', null, 'قطن لايكرا — أسود', 25, 'meter', 130);
+
+  // PO-008: Sent zipper order (awaiting delivery)
+  const po8 = insPO.run('PO-2026-008', sup4.lastInsertRowid, 'accessory', 2640, 0, 'sent', '2026-03-25', 'طلبية سوست — خط الإنتاج');
+  insPOI.run(po8.lastInsertRowid, 'accessory', null, 'ZPR-001', 'سوستة معدنية 20سم', 100, 'piece', 8);
+  insPOI.run(po8.lastInsertRowid, 'accessory', null, 'ZPR-002', 'سوستة مخفية 50سم', 80, 'piece', 12);
+  insPOI.run(po8.lastInsertRowid, 'accessory', null, 'ZPR-003', 'سوستة بلاستيك 15سم', 60, 'piece', 5);
+  insPOI.run(po8.lastInsertRowid, 'accessory', null, 'BTN-004', 'زرار كبس معدني', 200, 'piece', 1);
+
+  // PO-009: Received buttons and labels (stock replenishment)
+  const po9 = insPO.run('PO-2026-009', sup3.lastInsertRowid, 'accessory', 2225, 2225, 'received', '2026-02-25', 'طلبية أزرار وليبلات — مخزون احتياطي');
+  insPOI.run(po9.lastInsertRowid, 'accessory', null, 'BTN-001', 'زرار بلاستيك صغير', 1000, 'piece', 0.5);
+  insPOI.run(po9.lastInsertRowid, 'accessory', null, 'BTN-002', 'زرار معدني فضي', 300, 'piece', 2);
+  insPOI.run(po9.lastInsertRowid, 'accessory', null, 'BTN-003', 'زرار خشب طبيعي', 200, 'piece', 3.5);
+  insPOI.run(po9.lastInsertRowid, 'accessory', null, 'LBL-001', 'ليبل ماركة منسوج', 500, 'piece', 1.5);
+
+  // PO-010: Partially received lining
+  const po10 = insPO.run('PO-2026-010', sup6.lastInsertRowid, 'fabric', 3500, 2000, 'partial', '2026-03-15', 'طلبية بطائن — وصلت بطانة القطن فقط');
+  insPOI.run(po10.lastInsertRowid, 'fabric', 'LNG-001', null, 'بطانة قطن', 30, 'meter', 45);
+  insPOI.run(po10.lastInsertRowid, 'fabric', 'LNG-003', null, 'بطانة ساتان', 25, 'meter', 55);
+  insPOI.run(po10.lastInsertRowid, 'fabric', 'LNG-004', null, 'بطانة حرير', 15, 'meter', 90);
+
+  // ──────────── Additional Supplier Payments ────────────
+  insPayment.run(sup5.lastInsertRowid, po5.lastInsertRowid, 5000, 'bank', 'TRF-2026-005', 'دفعة أولى — طلبية حرير');
+  insPayment.run(sup1.lastInsertRowid, po6.lastInsertRowid, 14400, 'bank', 'TRF-2026-006', 'سداد كامل — طلبية صوف');
+  insPayment.run(sup1.lastInsertRowid, po7.lastInsertRowid, 8025, 'bank', 'TRF-2026-007', 'سداد كامل — طلبية قطن');
+  insPayment.run(sup3.lastInsertRowid, po9.lastInsertRowid, 2225, 'cash', null, 'سداد كامل — أزرار وليبلات');
+  insPayment.run(sup6.lastInsertRowid, po10.lastInsertRowid, 2000, 'bank', 'TRF-2026-010', 'دفعة أولى — طلبية بطائن');
+
+  // ──────────── Additional Fabric Batches (from new POs) ────────────
+  // PO-005 partial: 12m silk received out of 20m ordered
+  const batch6 = insBatch.run('FB-2026-0006', 'SLK-001', sup5.lastInsertRowid, po5.lastInsertRowid, null, 12, 250, 5, 0.3, 'available', '2026-03-10', 'دفعة جزئية من PO-2026-005 — 12 من 20 متر');
+  // PO-006: wool received
+  const batch7 = insBatch.run('FB-2026-0007', 'WOL-001', sup1.lastInsertRowid, po6.lastInsertRowid, null, 40, 200, 15, 1.2, 'available', '2026-03-01', 'دفعة صوف مخلوط من PO-2026-006');
+  const batch8 = insBatch.run('FB-2026-0008', 'WOL-002', sup1.lastInsertRowid, po6.lastInsertRowid, null, 20, 350, 8, 0.5, 'available', '2026-03-01', 'دفعة كشمير من PO-2026-006');
+  // PO-007: cotton received and partially used
+  const batch9 = insBatch.run('FB-2026-0009', 'CTN-001', sup1.lastInsertRowid, po7.lastInsertRowid, null, 40, 120, 25, 2.0, 'available', '2026-02-10', 'دفعة قطن — WO-007 استهلكت 25م');
+  const batch10 = insBatch.run('FB-2026-0010', 'CTN-003', sup1.lastInsertRowid, po7.lastInsertRowid, null, 25, 130, 0, 0, 'available', '2026-02-10', 'دفعة قطن لايكرا');
+  // PO-010 partial: lining received
+  const batch11 = insBatch.run('FB-2026-0011', 'LNG-001', sup6.lastInsertRowid, po10.lastInsertRowid, null, 30, 45, 0, 0, 'available', '2026-03-15', 'بطانة قطن من PO-2026-010');
+  // Old depleted batch
+  const batch12 = insBatch.run('FB-2026-0012', 'CRP-001', null, null, null, 50, 150, 48, 2, 'depleted', '2025-12-01', 'دفعة كريب قديمة — مستهلكة بالكامل');
+
+  // ──────────── Additional Fabric Stock Movements ────────────
+  insFSM.run('SLK-001', 'in', 12, batch6.lastInsertRowid, 'po', po5.lastInsertRowid, 'استلام جزئي من PO-2026-005');
+  insFSM.run('SLK-001', 'out', 5, batch6.lastInsertRowid, 'work_order', wo6id, 'صرف لعبايات WO-006');
+  insFSM.run('WOL-001', 'in', 40, batch7.lastInsertRowid, 'po', po6.lastInsertRowid, 'استلام من PO-2026-006');
+  insFSM.run('WOL-001', 'out', 15, batch7.lastInsertRowid, 'work_order', wo5id, 'صرف لبليزرات WO-005');
+  insFSM.run('WOL-002', 'in', 20, batch8.lastInsertRowid, 'po', po6.lastInsertRowid, 'استلام من PO-2026-006');
+  insFSM.run('WOL-002', 'out', 8, batch8.lastInsertRowid, 'work_order', wo8id, 'صرف لمعاطف WO-008');
+  insFSM.run('CTN-001', 'in', 40, batch9.lastInsertRowid, 'po', po7.lastInsertRowid, 'استلام من PO-2026-007');
+  insFSM.run('CTN-001', 'out', 25, batch9.lastInsertRowid, 'work_order', wo7id, 'صرف لقمصان WO-007');
+  insFSM.run('CTN-003', 'in', 25, batch10.lastInsertRowid, 'po', po7.lastInsertRowid, 'استلام من PO-2026-007');
+  insFSM.run('LNG-001', 'in', 30, batch11.lastInsertRowid, 'po', po10.lastInsertRowid, 'استلام جزئي من PO-2026-010');
+  insFSM.run('CRP-001', 'out', 48, batch12.lastInsertRowid, 'work_order', null, 'استهلاك دفعة كريب قديمة');
+
+  // ──────────── Additional Accessory Stock Movements ────────────
+  insASM.run('BTN-001', 'in', 1000, 'po', po9.lastInsertRowid, 'استلام من PO-2026-009');
+  insASM.run('BTN-002', 'in', 300, 'po', po9.lastInsertRowid, 'استلام من PO-2026-009');
+  insASM.run('BTN-003', 'in', 200, 'po', po9.lastInsertRowid, 'استلام من PO-2026-009');
+  insASM.run('LBL-001', 'in', 500, 'po', po9.lastInsertRowid, 'استلام من PO-2026-009');
+  insASM.run('BTN-002', 'out', 200, 'work_order', wo5id, 'صرف لبليزرات WO-005');
+  insASM.run('PAD-001', 'out', 100, 'work_order', wo5id, 'حشو كتف لبليزرات WO-005');
+  insASM.run('BTN-001', 'out', 1920, 'work_order', wo7id, 'أزرار قمصان WO-007');
+  insASM.run('THR-002', 'out', 3, 'work_order', wo6id, 'خيط حرير لعبايات WO-006');
+  insASM.run('BTN-003', 'out', 205, 'work_order', wo10id, 'أزرار خشب لفيست WO-010');
+
+  // ──────────── Additional Invoices ────────────
+  const inv7 = insInv.run('INV-007', 'مؤسسة النخبة للأزياء', '01077788899', 'elite@fashion.com',
+    'طلبية قمصان رسمية — WO-007', 52800, 14, 0, 60192, 'paid', '2026-03-15', wo7id, custIds.c4, thirtyDaysAgo);
+  insII.run(inv7.lastInsertRowid, 'SHR-001', 'قميص رسمي قطن — أبيض', 'أبيض', 135, 220, 29700, 0);
+  insII.run(inv7.lastInsertRowid, 'SHR-001', 'قميص رسمي قطن — أزرق فاتح', 'أزرق فاتح', 95, 220, 20900, 1);
+  insII.run(inv7.lastInsertRowid, 'SHR-001', 'قميص رسمي قطن — وردي', 'وردي', 55, 220, 12100, 2);
+
+  const inv8 = insInv.run('INV-008', 'مؤسسة النخبة للأزياء', '01077788899', 'elite@fashion.com',
+    'فيست كشمير — WO-010', 16400, 14, 500, 18196, 'sent', '2026-03-20', wo10id, custIds.c4, fortyDaysAgo);
+  insII.run(inv8.lastInsertRowid, 'VES-001', 'فيست صوف كشمير — بيج', 'بيج', 41, 400, 16400, 0);
+
+  const inv9 = insInv.run('INV-009', 'بوتيك الورد', '01198765432', 'ward@example.com',
+    'فاتورة مبدئية — عبايات مطرزة', 82500, 14, 3000, 91050, 'draft', '2026-04-01', wo6id, custIds.c2, now);
+  insII.run(inv9.lastInsertRowid, 'ABY-001', 'عباية كريب مطرزة — أسود/ذهبي', 'أسود/ذهبي', 95, 550, 52250, 0);
+  insII.run(inv9.lastInsertRowid, 'ABY-001', 'عباية كريب مطرزة — أسود/فضي', 'أسود/فضي', 56, 550, 30800, 1);
+
+  // ──────────── Additional Quotations ────────────
+  const quot4 = insQuot.run('QTN-2026-004', custIds.c1, 'sent', '2026-05-01', 120000, 14, 16800, 5000, 131800,
+    'عرض سعر عقد سنوي — صيف وشتاء', 'الأسعار تشمل التوصيل — صلاحية 45 يوم', admin_id);
+  insQI.run(quot4.lastInsertRowid, 'JKT-001', 'جاكيت صوف رسمي', 'كحلي', 50, 650, 32500, null);
+  insQI.run(quot4.lastInsertRowid, 'SHR-001', 'قميص رسمي قطن', 'أبيض', 100, 220, 22000, null);
+  insQI.run(quot4.lastInsertRowid, 'PNT-001', 'بنطلون جينز', 'أسود', 60, 280, 16800, null);
+  insQI.run(quot4.lastInsertRowid, 'TSH-001', 'تيشيرت قطن', 'أسود', 80, 120, 9600, null);
+  insQI.run(quot4.lastInsertRowid, 'DRS-002', 'فستان كتان صيفي', 'أوف وايت', 40, 320, 12800, null);
+  insQI.run(quot4.lastInsertRowid, 'COT-001', 'معطف شتوي', 'بيج', 30, 900, 27000, null);
+
+  const quot5 = insQuot.run('QTN-2026-005', custIds.c5, 'rejected', '2026-03-15', 9000, 0, 0, 0, 9000,
+    'عرض سعر فساتين خطوبة — رفض', 'رفض العميل — يريد أسعار أقل', admin_id);
+  insQI.run(quot5.lastInsertRowid, 'DRS-001', 'فستان سهرة كلاسيك', 'عنابي', 10, 450, 4500, null);
+  insQI.run(quot5.lastInsertRowid, 'ABY-001', 'عباية كريب مطرزة', 'أسود/ذهبي', 5, 550, 2750, null);
+  insQI.run(quot5.lastInsertRowid, null, 'تعديلات تطريز خاصة', null, 1, 1750, 1750, null);
+
+  // ──────────── Additional Sales Orders ────────────
+  const so3 = insSO.run('SO-2026-003', null, custIds.c2, 'in_production', '2026-03-10', '2026-04-05', 82500, 14, 11550, 3000, 91050,
+    'أمر بيع عبايات مطرزة — بوتيك الورد', admin_id);
+  insSOI.run(so3.lastInsertRowid, 'ABY-001', 'عباية كريب مطرزة', 'أسود/ذهبي', 95, 550, 52250, 60, 0, wo6id, 'قيد الإنتاج');
+  insSOI.run(so3.lastInsertRowid, 'ABY-001', 'عباية كريب مطرزة', 'أسود/فضي', 56, 550, 30800, 30, 0, wo6id, 'قيد الإنتاج');
+
+  const so4 = insSO.run('SO-2026-004', null, custIds.c4, 'completed', '2026-02-15', '2026-03-10', 52800, 14, 7392, 0, 60192,
+    'أمر بيع قمصان رسمية — تم التسليم', admin_id);
+  insSOI.run(so4.lastInsertRowid, 'SHR-001', 'قميص رسمي قطن', 'أبيض', 135, 220, 29700, 135, 135, wo7id, 'تم التسليم');
+  insSOI.run(so4.lastInsertRowid, 'SHR-001', 'قميص رسمي قطن', 'أزرق فاتح', 95, 220, 20900, 95, 95, wo7id, 'تم التسليم');
+  insSOI.run(so4.lastInsertRowid, 'SHR-001', 'قميص رسمي قطن', 'وردي', 55, 220, 12100, 55, 55, wo7id, 'تم التسليم');
+
+  // ──────────── Additional Shipments ────────────
+  const ship4 = insShip.run('SHP-2026-004', 'outbound', 'delivered', custIds.c4, wo7id,
+    'شركة النقل الموحد', 'TRK-2026-20088', 'road', 650, 85.5, 6,
+    '2026-03-08', '2026-03-10', '2026-03-10',
+    'شارع التحرير — وسط البلد', 'تم التسليم — 285 قميص رسمي', admin_id);
+  insShipItem.run(ship4.lastInsertRowid, 'قميص رسمي — أبيض', 'SHR-001', 'أبيض', 135, 40.5, null);
+  insShipItem.run(ship4.lastInsertRowid, 'قميص رسمي — أزرق فاتح', 'SHR-001', 'أزرق فاتح', 95, 28.5, null);
+  insShipItem.run(ship4.lastInsertRowid, 'قميص رسمي — وردي', 'SHR-001', 'وردي', 55, 16.5, null);
+  insPackList.run(ship4.lastInsertRowid, 1, 'قمصان أبيض S-L', 60, 18, '70x45x35');
+  insPackList.run(ship4.lastInsertRowid, 2, 'قمصان أبيض XL-3XL', 75, 22.5, '70x45x35');
+  insPackList.run(ship4.lastInsertRowid, 3, 'قمصان أزرق S-L', 45, 13.5, '70x45x30');
+  insPackList.run(ship4.lastInsertRowid, 4, 'قمصان أزرق XL-3XL', 50, 15, '70x45x30');
+  insPackList.run(ship4.lastInsertRowid, 5, 'قمصان وردي S-L', 30, 9, '60x40x25');
+  insPackList.run(ship4.lastInsertRowid, 6, 'قمصان وردي XL-3XL', 25, 7.5, '60x40x25');
+
+  const ship5 = insShip.run('SHP-2026-005', 'outbound', 'shipped', custIds.c4, wo10id,
+    'Aramex', 'ARX-EG-2026-55544', 'express', 550, 12, 2,
+    '2026-03-20', '2026-03-22', null,
+    'شارع التحرير — وسط البلد', 'شحنة جزئية — 25 فيست', admin_id);
+  insShipItem.run(ship5.lastInsertRowid, 'فيست كشمير — بيج', 'VES-001', 'بيج', 25, 7.5, 'الدفعة الأولى');
+  insPackList.run(ship5.lastInsertRowid, 1, 'فيست بيج S/M/L', 15, 4.5, '60x40x25');
+  insPackList.run(ship5.lastInsertRowid, 2, 'فيست بيج XL/2XL/3XL', 10, 3, '50x35x20');
+
+  // ──────────── Additional Sales Returns ────────────
+  const sr3 = insSR.run('SR-2026-003', inv7.lastInsertRowid, custIds.c4,
+    '2026-03-18', 'مقاس خاطئ', 'approved', 2200, 308, 2508,
+    'مرتجع 10 قمصان — مقاسات خاطئة', admin_id);
+  insSRI.run(sr3.lastInsertRowid, 'قميص رسمي — أبيض (مقاس خاطئ)', 'SHR-001', 6, 220, 1320);
+  insSRI.run(sr3.lastInsertRowid, 'قميص رسمي — أزرق فاتح (مقاس خاطئ)', 'SHR-001', 4, 220, 880);
+
+  const sr4 = insSR.run('SR-2026-004', null, custIds.c2,
+    '2026-03-22', 'تغيير رأي العميل', 'draft', 2750, 385, 3135,
+    'إرجاع 5 عبايات — العميل غير التصميم', admin_id);
+  insSRI.run(sr4.lastInsertRowid, 'عباية كريب مطرزة — أسود/فضي', 'ABY-001', 5, 550, 2750);
+
+  // ──────────── Additional Purchase Returns ────────────
+  const pr2 = insPURet.run('PR-2026-002', po6.lastInsertRowid, sup1.lastInsertRowid,
+    '2026-03-08', 'عيب في الصباغة', 'draft', 1000, 1000,
+    'صوف مخلوط 5 أمتار — لون غير متطابق', admin_id);
+  insPURetI.run(pr2.lastInsertRowid, 'fabric', 'WOL-001', 'صوف مخلوط — رمادي (اختلاف لون)', 5, 200, 1000);
+
+  // ──────────── Additional QC Inspections ────────────
+  // QC on abaya — FAILED (rework needed)
+  const qci4 = insQCI.run(wo6id, qct1.lastInsertRowid, 'QCI-2026-004', admin_id, '2026-03-18', 150, 30, 22, 8, 'fail', 'فشل — 8 عبايات بعيوب تطريز');
+  insQCII.run(qci4.lastInsertRowid, 'فحص القماش الخارجي', 'pass', null, 0, null);
+  insQCII.run(qci4.lastInsertRowid, 'فحص الخياطة الجانبية', 'pass', null, 0, null);
+  insQCII.run(qci4.lastInsertRowid, 'فحص التطريز', 'fail', 'D001', 5, 'تطريز غير منتظم على الأكمام');
+  insQCII.run(qci4.lastInsertRowid, 'فحص البطانة', 'pass', null, 0, null);
+  insQCII.run(qci4.lastInsertRowid, 'فحص الليبل', 'fail', 'D010', 3, 'ليبل مقلوب');
+  insQCII.run(qci4.lastInsertRowid, 'فحص التشطيب النهائي', 'pass', null, 0, null);
+
+  // QC on blazer — PASSED
+  const qci5 = insQCI.run(wo5id, qct2.lastInsertRowid, 'QCI-2026-005', admin_id, '2026-03-20', 50, 15, 14, 1, 'pass', 'جودة ممتازة — عيب طفيف واحد');
+  insQCII.run(qci5.lastInsertRowid, 'فحص القماش', 'pass', null, 0, null);
+  insQCII.run(qci5.lastInsertRowid, 'فحص الخياطة', 'pass', null, 0, null);
+  insQCII.run(qci5.lastInsertRowid, 'فحص الأزرار', 'fail', 'D006', 1, 'زرار واحد غير محكم');
+  insQCII.run(qci5.lastInsertRowid, 'قياس عرض الصدر', 'pass', null, 0, null);
+  insQCII.run(qci5.lastInsertRowid, 'فحص الأكمام', 'pass', null, 0, null);
+
+  // QC on shirt order — PASSED
+  const qci6 = insQCI.run(wo7id, qct2.lastInsertRowid, 'QCI-2026-006', admin_id, '2026-02-25', 285, 40, 39, 1, 'pass', 'جودة ممتازة');
+
+  // QC re-inspection on abaya after rework — PASSED
+  const qci7 = insQCI.run(wo6id, qct1.lastInsertRowid, 'QCI-2026-007', admin_id, '2026-03-22', 150, 30, 29, 1, 'pass', 'إعادة فحص بعد إصلاح — مقبول');
+
+  // ──────────── Additional NCR Reports ────────────
+  insNCR.run('NCR-2026-003', qci4.lastInsertRowid, wo6id, 'major',
+    'عيوب تطريز في عبايات — 5 قطع بتطريز غير منتظم + 3 بليبل مقلوب',
+    'عامل التطريز جديد — لم يتم تدريبه', 'إعادة تطريز القطع المعيبة',
+    'تدريب العمال الجدد — فحص أولي بعد 10 قطع', 'closed', admin_id, '2026-03-22', admin_id);
+  insNCR.run('NCR-2026-004', qci5.lastInsertRowid, wo5id, 'minor',
+    'زرار غير محكم في بليزر واحد',
+    'خلل في ضبط ماكينة الأزرار', 'إعادة تثبيت الزرار',
+    'فحص ضبط الماكينة يومياً', 'closed', admin_id, '2026-03-20', admin_id);
+
+  // ──────────── Additional MRP Run ────────────
+  const mrp2 = insMRP.run(new Date().toISOString(), 'draft', 'تشغيل MRP — فحص متطلبات أوامر العمل الجديدة', admin_id);
+  insMRPS.run(mrp2.lastInsertRowid, 'fabric', 13, 'CRP-001', 'كريب ثقيل', 200, 50, 0, 150, 160, null, null, 150, 24000);
+  insMRPS.run(mrp2.lastInsertRowid, 'fabric', 19, 'LNG-004', 'بطانة حرير', 96, 20, 15, 61, 65, sup6.lastInsertRowid, 'مصنع البطائن', 90, 5850);
+  insMRPS.run(mrp2.lastInsertRowid, 'fabric', 8, 'LNN-001', 'كتان طبيعي', 103, 35, 0, 68, 70, null, null, 180, 12600);
+  insMRPS.run(mrp2.lastInsertRowid, 'accessory', 2, 'BTN-002', 'زرار معدني فضي', 350, 200, 0, 150, 200, sup3.lastInsertRowid, 'مصنع الأزرار', 2, 400);
+  insMRPS.run(mrp2.lastInsertRowid, 'accessory', 13, 'PAD-002', 'حشو صدر', 66, 30, 0, 36, 40, null, null, 5, 200);
+  insMRPS.run(mrp2.lastInsertRowid, 'accessory', 6, 'ZPR-002', 'سوستة مخفية', 120, 60, 80, 0, 0, null, null, 12, 0);
+
+  // ──────────── Additional Production Schedule ────────────
+  insSched.run(wo5id, line1.lastInsertRowid, ws(-3), ws(2), ws(-3), null, 'in_progress', 'بليزر رسمي — خياطة عاجلة', admin_id);
+  insSched.run(wo5id, line2.lastInsertRowid, ws(2), ws(4), null, null, 'planned', 'بليزر رسمي — تشطيب', admin_id);
+  insSched.run(wo6id, line1.lastInsertRowid, ws(-7), ws(0), ws(-7), ws(-1), 'completed', 'عبايات — خياطة', admin_id);
+  insSched.run(wo6id, line2.lastInsertRowid, ws(-1), ws(2), ws(-1), null, 'in_progress', 'عبايات — تشطيب بعد إصلاح QC', admin_id);
+  insSched.run(wo8id, line3.lastInsertRowid, ws(0), ws(1), ws(0), null, 'in_progress', 'معاطف — قص', admin_id);
+  insSched.run(wo8id, line1.lastInsertRowid, ws(2), ws(8), null, null, 'planned', 'معاطف — خياطة', admin_id);
+  insSched.run(wo9id, line3.lastInsertRowid, ws(5), ws(6), null, null, 'planned', 'فساتين صيف — قص (انتظار القماش)', admin_id);
+
+  // ──────────── Additional Samples ────────────
+  insSample.run('SMP-2026-005', 'COT-001', custIds.c1, 'approved',
+    'عينة معطف شتوي — صوف كشمير بيج مع بطانة حرير',
+    'صوف كشمير WOL-002 + بطانة حرير LNG-004',
+    'أزرار معدنية 6 قطع + حشو كتف وصدر + فازلين',
+    1200, '2026-02-20', '2026-03-10',
+    'معتمد — تصميم ممتاز', wo8id, admin_id);
+
+  insSample.run('SMP-2026-006', 'DRS-002', custIds.c5, 'rejected',
+    'عينة فستان كتان — رفض التصميم',
+    'كتان طبيعي LNN-001 — أوف وايت',
+    'أزرار خشب + شريط حزام',
+    350, '2026-03-01', '2026-03-12',
+    'رفض — يريد قصة أضيق', null, admin_id);
+
+  // ──────────── Maintenance Orders ────────────
+  const insMO = db.prepare('INSERT INTO maintenance_orders (machine_id, maintenance_type, title, description, priority, status, scheduled_date, completed_date, performed_by, cost, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+  insMO.run(mach7.lastInsertRowid, 'corrective', 'إصلاح محرك ماكينة العراوي', 'توقف أثناء الإنتاج — محرك يحتاج إعادة لف', 'high', 'in_progress', ws(2), null, 'فني خارجي — كريم', 1500, null, admin_id);
+  insMO.run(mach8.lastInsertRowid, 'corrective', 'إصلاح ماكينة قص ليزر', 'معطلة — قطع غيار من الخارج', 'high', 'pending', null, null, null, 5000, null, admin_id);
+  insMO.run(mach1.lastInsertRowid, 'preventive', 'صيانة دورية — ماكينة خياطة', 'تنظيف وتزييت وتغيير إبرة', 'medium', 'completed', twentyDaysAgo, twentyDaysAgo, 'فني الصيانة أحمد', 180, null, admin_id);
+  insMO.run(mach4.lastInsertRowid, 'preventive', 'فحص دوري — مكبس البخار', 'فحص خطوط البخار والصمامات', 'low', 'pending', ws(7), null, 'فني الصيانة أحمد', 150, null, admin_id);
+
+  // ──────────── Additional Customer Payments ────────────
+  insCustPay.run(custIds.c4, inv7.lastInsertRowid, 60192, 'bank', 'TRF-C-2026-003', 'سداد كامل — قمصان INV-007');
+  insCustPay.run(custIds.c4, inv8.lastInsertRowid, 10000, 'bank', 'TRF-C-2026-004', 'دفعة أولى — فيست INV-008');
+  insCustPay.run(custIds.c2, null, 25000, 'check', 'CHQ-2026-1234', 'دفعة مقدمة — عبايات مطرزة');
+
+  // ──────────── Additional Expenses ────────────
+  insExp.run('other', 'مستلزمات تغليف وشحن', 1800, '2026-03-10', 'cash', 'شركة التغليف المتحدة', 'approved', admin_id, 'كراتين + فوم + ستيكرز', admin_id);
+  insExp.run('maintenance', 'قطع غيار ماكينة عراوي', 3500, '2026-03-15', 'bank', 'مورد قطع غيار Juki', 'pending', null, 'في انتظار وصول القطعة', admin_id);
+  insExp.run('other', 'فاتورة مياه المصنع', 850, '2026-03-01', 'bank', 'شركة المياه', 'approved', admin_id, 'فاتورة شهر فبراير', admin_id);
+  insExp.run('other', 'تدريب عمال جدد', 2000, '2026-03-20', 'cash', null, 'approved', admin_id, 'تدريب 3 عمال على التطريز', admin_id);
+
+  // ──────────── Additional Journal Entries ────────────
+  const je5 = insJE.run('JE-2025-005', '2025-06-15', 'شراء أقمشة صوف — PO-2026-006', 'PO-2026-006', 'posted', admin_id);
+  if (accCash && accInventory) {
+    insJEL.run(je5.lastInsertRowid, accInventory, 'مخزون أقمشة صوف', 14400, 0);
+    insJEL.run(je5.lastInsertRowid, accCash, 'نقدية — بنك', 0, 14400);
+  }
+
+  const je6 = insJE.run('JE-2025-006', '2025-06-20', 'إيراد مبيعات — INV-007 قمصان', 'INV-007', 'posted', admin_id);
+  if (accAR && accRevenue) {
+    insJEL.run(je6.lastInsertRowid, accAR, 'حسابات العملاء', 60192, 0);
+    insJEL.run(je6.lastInsertRowid, accRevenue.id, 'إيرادات مبيعات قمصان', 0, 60192);
+  }
+
+  const je7 = insJE.run('JE-2025-007', '2025-06-22', 'مردودات مبيعات — SR-2026-003', 'SR-2026-003', 'posted', admin_id);
+  if (accAR && accRevenue) {
+    insJEL.run(je7.lastInsertRowid, accRevenue.id, 'مردودات مبيعات', 2508, 0);
+    insJEL.run(je7.lastInsertRowid, accAR, 'حسابات العملاء — تخفيض', 0, 2508);
+  }
+
+  // ──────────── Additional Notifications ────────────
+  insNotif.run(admin_id, 'low_stock', 'فشل فحص الجودة — WO-006', 'فشل QCI-2026-004: 8 عبايات بعيوب تطريز', 'work_order', wo6id, 0);
+  insNotif.run(admin_id, 'low_stock', 'استلام جزئي — PO-2026-005', 'تم استلام 12 من 20 متر حرير', 'purchase_order', po5.lastInsertRowid, 0);
+  insNotif.run(admin_id, 'wo_overdue', 'أمر تشغيل عاجل — WO-005', 'طلبية بليزرات — الموعد خلال 5 أيام', 'work_order', wo5id, 0);
+  insNotif.run(admin_id, 'low_stock', 'مخزون منخفض: صوف كشمير', 'WOL-002 أقل من الحد الأدنى بعد صرف WO-008', 'fabric', null, 0);
+  insNotif.run(admin_id, 'invoice_overdue', 'مرتجع جديد — SR-003', 'مرتجع 10 قمصان بمقاسات خاطئة', 'return', null, 0);
+
+  // ──────────── Additional Audit Log ────────────
+  insAudit.run(admin_id, 'admin', 'create', 'work_order', 'WO-2026-005', 'بليزر رسمي — عاجل', new Date(Date.now() - 86400000 * 5).toISOString());
+  insAudit.run(admin_id, 'admin', 'create', 'work_order', 'WO-2026-006', 'عبايات مطرزة', new Date(Date.now() - 86400000 * 10).toISOString());
+  insAudit.run(admin_id, 'admin', 'update', 'qc_inspection', 'QCI-2026-004', 'فحص فاشل — عبايات', new Date(Date.now() - 86400000 * 4).toISOString());
+  insAudit.run(admin_id, 'admin', 'create', 'purchase_order', 'PO-2026-006', 'طلبية صوف', new Date(Date.now() - 86400000 * 20).toISOString());
+  insAudit.run(admin_id, 'admin', 'create', 'shipment', 'SHP-2026-004', 'شحن قمصان', new Date(Date.now() - 86400000 * 14).toISOString());
+  insAudit.run(admin_id, 'admin', 'create', 'sales_return', 'SR-2026-003', 'مرتجع قمصان', new Date(Date.now() - 86400000 * 3).toISOString());
+
   // ──────────── Summary ────────────
   const counts = {};
-  for (const [key, table] of [['settings','settings'],['stageTemplates','stage_templates'],['customers','customers'],['suppliers','suppliers'],['fabrics','fabrics'],['accessories','accessories'],['models','models'],['bomTemplates','bom_templates'],['workOrders','work_orders'],['woStages','wo_stages'],['purchaseOrders','purchase_orders'],['invoices','invoices'],['fabricBatches','fabric_inventory_batches'],['employees','employees'],['users','users'],['attendance','attendance'],['payrollPeriods','payroll_periods'],['payrollRecords','payroll_records'],['hrAdjustments','hr_adjustments'],['notifications','notifications'],['accStockMvts','accessory_stock_movements'],['fabStockMvts','fabric_stock_movements'],['auditLog','audit_log'],['machines','machines'],['maintenance','machine_maintenance'],['leaveRequests','leave_requests'],['journalEntries','journal_entries'],['journalLines','journal_entry_lines'],['expenses','expenses'],['productionLines','production_lines'],['productionSchedule','production_schedule'],['qcTemplates','qc_templates'],['qcInspections','qc_inspections'],['qcNCR','qc_ncr'],['qcDefectCodes','qc_defect_codes'],['quotations','quotations'],['salesOrders','sales_orders'],['samples','samples'],['shipments','shipments'],['packingLists','packing_lists'],['salesReturns','sales_returns'],['purchaseReturns','purchase_returns'],['mrpRuns','mrp_runs'],['mrpSuggestions','mrp_suggestions'],['customerPayments','customer_payments']]) {
+  for (const [key, table] of [['settings','settings'],['stageTemplates','stage_templates'],['customers','customers'],['suppliers','suppliers'],['fabrics','fabrics'],['accessories','accessories'],['models','models'],['bomTemplates','bom_templates'],['workOrders','work_orders'],['woStages','wo_stages'],['purchaseOrders','purchase_orders'],['invoices','invoices'],['fabricBatches','fabric_inventory_batches'],['employees','employees'],['users','users'],['attendance','attendance'],['payrollPeriods','payroll_periods'],['payrollRecords','payroll_records'],['hrAdjustments','hr_adjustments'],['notifications','notifications'],['accStockMvts','accessory_stock_movements'],['fabStockMvts','fabric_stock_movements'],['auditLog','audit_log'],['machines','machines'],['maintenance','machine_maintenance'],['maintenanceOrders','maintenance_orders'],['leaveRequests','leave_requests'],['journalEntries','journal_entries'],['journalLines','journal_entry_lines'],['expenses','expenses'],['productionLines','production_lines'],['productionSchedule','production_schedule'],['qcTemplates','qc_templates'],['qcInspections','qc_inspections'],['qcNCR','qc_ncr'],['qcDefectCodes','qc_defect_codes'],['quotations','quotations'],['salesOrders','sales_orders'],['samples','samples'],['shipments','shipments'],['packingLists','packing_lists'],['salesReturns','sales_returns'],['purchaseReturns','purchase_returns'],['mrpRuns','mrp_runs'],['mrpSuggestions','mrp_suggestions'],['customerPayments','customer_payments'],['supplierPayments','supplier_payments']]) {
     counts[key] = db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get().c;
   }
 
-  console.log(`Seed complete! (v23 — all modules)
+  console.log(`Seed complete! (v23 — all modules — enhanced scenarios)
   ─── Core Data ───
   - ${counts.settings} settings
   - ${counts.stageTemplates} stage templates
@@ -977,18 +1367,19 @@ function seed() {
   - ${counts.models} models
   - ${counts.bomTemplates} BOM templates (1 per model)
   ─── Production ───
-  - ${counts.workOrders} work orders (incl. 1 cancelled)
+  - ${counts.workOrders} work orders (draft/in_progress/completed/cancelled)
   - ${counts.woStages} wo_stages total
   - ${counts.productionLines} production lines
   - ${counts.productionSchedule} production schedule entries
   ─── Procurement ───
-  - ${counts.purchaseOrders} purchase orders with items
-  - ${counts.fabricBatches} fabric inventory batches
+  - ${counts.purchaseOrders} purchase orders (draft/sent/partial/received)
+  - ${counts.fabricBatches} fabric inventory batches (available/in_use/depleted)
+  - ${counts.supplierPayments} supplier payments
   ─── Sales ───
   - ${counts.invoices} invoices with items
-  - ${counts.quotations} quotations
+  - ${counts.quotations} quotations (draft/sent/accepted/rejected)
   - ${counts.salesOrders} sales orders
-  - ${counts.samples} samples
+  - ${counts.samples} samples (requested/in_progress/completed/approved/rejected)
   - ${counts.shipments} shipments
   - ${counts.packingLists} packing lists
   ─── Returns ───
@@ -996,7 +1387,7 @@ function seed() {
   - ${counts.purchaseReturns} purchase returns
   ─── Quality ───
   - ${counts.qcTemplates} QC templates
-  - ${counts.qcInspections} QC inspections
+  - ${counts.qcInspections} QC inspections (pass/fail/pending)
   - ${counts.qcNCR} NCR reports
   - ${counts.qcDefectCodes} defect codes
   ─── MRP ───
@@ -1014,9 +1405,14 @@ function seed() {
   - ${counts.payrollPeriods} payroll periods
   - ${counts.payrollRecords} payroll records
   - ${counts.hrAdjustments} HR adjustments
-  ─── Other ───
+  ─── Machines ───
   - ${counts.machines} machines
   - ${counts.maintenance} machine maintenance records
+  - ${counts.maintenanceOrders} maintenance orders
+  ─── Inventory Tracking ───
+  - ${counts.accStockMvts} accessory stock movements
+  - ${counts.fabStockMvts} fabric stock movements
+  ─── Other ───
   - ${counts.leaveRequests} leave requests
   - ${counts.notifications} notifications
   - ${counts.auditLog} audit log entries`);

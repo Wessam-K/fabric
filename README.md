@@ -11,6 +11,7 @@
 | Phase 10 | 10 وحدات Backend جديدة — MRP, Scheduling, Quality, Quotations, Samples, Shipping, Returns, Documents, Backups |
 | Phase 11 | 10 صفحات Frontend جديدة — واجهات كاملة لجميع الوحدات |
 | Phase 12 | إصلاح SQL شامل — مطابقة كل الاستعلامات مع المخطط الفعلي V23 |
+| Phase 13 | بيانات تجريبية شاملة — 10 أوامر عمل، 10 أوامر شراء، 12 دفعة قماش، سيناريوهات حقيقية كاملة |
 
 ## إحصائيات المشروع
 
@@ -60,7 +61,7 @@ factory-system/
 ├── backend/                              # 22 ملف — 4,683 سطر
 │   ├── server.js             (142 سطر)  # Express server + JWT auth + routes
 │   ├── database.js           (797 سطر)  # SQLite schema v5 — 35 جدول
-│   ├── seed.js               (346 سطر)  # بيانات تجريبية
+│   ├── seed.js               (1258 سطر) # بيانات تجريبية شاملة — 10 أوامر عمل، 10 أوامر شراء
 │   ├── middleware/
 │   │   └── auth.js           (58 سطر)   # JWT + requireAuth + requireRole + logAudit
 │   ├── routes/
