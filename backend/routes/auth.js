@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
 const db = require('../database');
-const { generateToken, requireAuth, logAudit, JWT_SECRET } = require('../middleware/auth');
+const { generateToken, requireAuth, logAudit } = require('../middleware/auth');
 const jwt = require('jsonwebtoken');
 
 // POST /api/auth/login
@@ -52,7 +52,7 @@ router.post('/login', (req, res) => {
       token,
       user: { id: user.id, username: user.username, full_name: user.full_name, role: user.role, department: user.department, must_change_password: !!user.must_change_password }
     });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/auth/refresh — issue new token if current token still valid
@@ -63,7 +63,7 @@ router.post('/refresh', requireAuth, (req, res) => {
     if (!user) return res.status(401).json({ error: 'المستخدم غير نشط' });
     const token = generateToken(user);
     res.json({ token });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/auth/logout
@@ -71,7 +71,7 @@ router.post('/logout', requireAuth, (req, res) => {
   try {
     logAudit(req, 'LOGOUT', 'user', req.user.id, req.user.full_name);
     res.json({ message: 'تم تسجيل الخروج' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/auth/me
@@ -80,7 +80,7 @@ router.get('/me', requireAuth, (req, res) => {
     const user = db.prepare('SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, must_change_password FROM users WHERE id = ? AND status = ?').get(req.user.id, 'active');
     if (!user) return res.status(401).json({ error: 'الحساب معطل أو غير موجود' });
     res.json(user);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/auth/change-password
@@ -113,7 +113,7 @@ router.put('/change-password', requireAuth, (req, res) => {
     db.prepare('INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)').run(req.user.id, hash);
     logAudit(req, 'UPDATE', 'user', req.user.id, 'change-password');
     res.json({ message: 'تم تغيير كلمة المرور بنجاح' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/auth/profile — detailed profile with recent activity
@@ -127,7 +127,7 @@ router.get('/profile', requireAuth, (req, res) => {
     if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
     const recentActivity = db.prepare('SELECT action, entity_type, entity_label, created_at FROM audit_log WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(req.user.id);
     res.json({ ...user, recent_activity: recentActivity });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/auth/create-admin — first-run only
@@ -138,7 +138,7 @@ router.post('/create-admin', (req, res) => {
 
     const { username, full_name, password } = req.body;
     if (!username || !full_name || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
-    if (password.length < 6) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' });
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/\d/.test(password)) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي حرف كبير ورقم' });
 
     const hash = bcrypt.hashSync(password, 12);
     const result = db.prepare(
@@ -146,7 +146,7 @@ router.post('/create-admin', (req, res) => {
     ).run(username, full_name, hash, 'superadmin', 'active');
 
     res.json({ message: 'تم إنشاء حساب مدير النظام', user_id: result.lastInsertRowid });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

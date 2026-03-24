@@ -39,7 +39,7 @@ router.get('/export', (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=customers.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/customers/import — bulk import
@@ -61,7 +61,7 @@ router.post('/import', requirePermission('customers', 'create'), (req, res) => {
       }
     })();
     res.json({ imported, updated, errors });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════

@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { requireRole } = require('../middleware/auth');
+const { requirePermission } = require('../middleware/auth');
 
-// GET /api/audit-log — filterable list (superadmin/manager only)
-router.get('/', requireRole('superadmin', 'manager'), (req, res) => {
+// GET /api/audit-log — filterable list
+router.get('/', requirePermission('audit', 'view'), (req, res) => {
   try {
     const { user_id, action, entity_type, date_from, date_to, search, page = 1, limit = 50 } = req.query;
     const conditions = [];
@@ -26,7 +26,7 @@ router.get('/', requireRole('superadmin', 'manager'), (req, res) => {
     `).all(...params, Number(limit), offset);
 
     res.json({ logs, total, page: Number(page), limit: Number(limit) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

@@ -2269,6 +2269,16 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (23)`);
   }
+
+  // ──── V24 — Audit Round 2: soft-delete documents, wholesale setting ────
+  const v24 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 24').get();
+  if (!v24) {
+    addColumnSafe('documents', 'deleted_at', 'TEXT DEFAULT NULL');
+    try {
+      db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").run('wholesale_discount_pct', '22');
+    } catch(e) {}
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (24)`);
+  }
 }
 
 initializeDatabase();

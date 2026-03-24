@@ -46,7 +46,7 @@ router.get('/', requirePermission('suppliers', 'view'), (req, res) => {
       return { ...s, total_ordered: ord.total_ordered, total_paid: pd.total_paid, balance: ord.total_ordered - pd.total_paid };
     });
     res.json(result);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/suppliers/export — CSV export
@@ -59,7 +59,7 @@ router.get('/export', (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=suppliers.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/suppliers/import — bulk import
@@ -82,7 +82,7 @@ router.post('/import', requirePermission('suppliers', 'create'), (req, res) => {
     })();
     logAudit(req, 'IMPORT', 'supplier', null, `imported:${imported} updated:${updated}`);
     res.json({ imported, updated, errors });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/suppliers/:id — single with stats
@@ -99,7 +99,7 @@ router.get('/:id', (req, res) => {
     supplier.balance = totOrd - totPaid;
     supplier.total_pos = db.prepare('SELECT COUNT(*) as c FROM purchase_orders WHERE supplier_id=?').get(supplier.id).c;
     res.json(supplier);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/suppliers
@@ -115,7 +115,7 @@ router.post('/', requirePermission('suppliers', 'create'), (req, res) => {
     res.status(201).json(created);
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'كود المورد موجود بالفعل' });
-    res.status(500).json({ error: err.message });
+    console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' });
   }
 });
 
@@ -131,7 +131,7 @@ router.put('/:id', requirePermission('suppliers', 'edit'), (req, res) => {
     const updated = db.prepare('SELECT * FROM suppliers WHERE id=?').get(req.params.id);
     logAudit(req, 'UPDATE', 'supplier', req.params.id, existing.name, existing, updated);
     res.json(updated);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/suppliers/:id/payments
@@ -158,7 +158,7 @@ router.post('/:id/payments', requirePermission('suppliers', 'edit'), (req, res) 
 
     logAudit(req, 'CREATE', 'supplier_payment', r.lastInsertRowid, `payment ${amount}`);
     res.status(201).json(db.prepare('SELECT * FROM supplier_payments WHERE id=?').get(r.lastInsertRowid));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/suppliers/:id/ledger — full financial ledger
@@ -191,7 +191,7 @@ router.get('/:id/ledger', (req, res) => {
     const totalOrdered = pos.reduce((s, p) => s + (p.total_amount || 0), 0);
     const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
     res.json({ supplier, entries, summary: { total_ordered: totalOrdered, total_paid: totalPaid, balance: totalOrdered - totalPaid } });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/suppliers/:id
@@ -200,7 +200,7 @@ router.delete('/:id', requirePermission('suppliers', 'delete'), (req, res) => {
     db.prepare("UPDATE suppliers SET status='inactive' WHERE id=?").run(parseInt(req.params.id));
     logAudit(req, 'DELETE', 'supplier', req.params.id, `supplier#${req.params.id}`);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

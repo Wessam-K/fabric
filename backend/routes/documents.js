@@ -32,7 +32,7 @@ router.get('/', requirePermission('documents', 'read'), (req, res) => {
   try {
     const { entity_type, entity_id, category, search, page = 1, limit = 25 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    let where = '1=1'; const params = [];
+    let where = '1=1 AND d.deleted_at IS NULL'; const params = [];
     if (entity_type) { where += ' AND d.entity_type=?'; params.push(entity_type); }
     if (entity_id) { where += ' AND d.entity_id=?'; params.push(entity_id); }
     if (category) { where += ' AND d.category=?'; params.push(category); }
@@ -44,7 +44,7 @@ router.get('/', requirePermission('documents', 'read'), (req, res) => {
       WHERE ${where} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
 
     res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/documents/upload
@@ -71,7 +71,7 @@ router.post('/upload', requirePermission('documents', 'create'), upload.single('
 
     logAudit(req, 'UPLOAD', 'document', result.lastInsertRowid, title || req.file.originalname);
     res.status(201).json({ id: result.lastInsertRowid, file_path: `/uploads/documents/${req.file.filename}` });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/documents/:id
@@ -80,7 +80,7 @@ router.get('/:id', requirePermission('documents', 'read'), (req, res) => {
     const doc = db.prepare('SELECT d.*, u.full_name as uploaded_by_name FROM documents d LEFT JOIN users u ON u.id=d.uploaded_by WHERE d.id=?').get(req.params.id);
     if (!doc) return res.status(404).json({ error: 'المستند غير موجود' });
     res.json(doc);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/documents/:id
@@ -92,7 +92,7 @@ router.put('/:id', requirePermission('documents', 'update'), (req, res) => {
       .run(title, category, notes, id);
     logAudit(req, 'UPDATE', 'document', id, title);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/documents/:id
@@ -100,11 +100,11 @@ router.delete('/:id', requirePermission('documents', 'delete'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const doc = db.prepare('SELECT * FROM documents WHERE id=?').get(id);
-    db.prepare('DELETE FROM documents WHERE id=?').run(id);
-    // Don't delete file from disk — soft delete only
+    if (!doc) return res.status(404).json({ error: 'المستند غير موجود' });
+    db.prepare("UPDATE documents SET deleted_at=datetime('now','localtime') WHERE id=?").run(id);
     logAudit(req, 'DELETE', 'document', id, doc?.title);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

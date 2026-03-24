@@ -151,3 +151,110 @@
 ---
 
 *All changes are backward-compatible. No DB schema changes required.*
+
+---
+
+## Round 2 — Deep Security Audit
+
+> Baseline commit: `609d2c2`
+
+### S1: Protect /uploads behind authentication (CRITICAL)
+- **File**: `backend/server.js`
+- **Change**: Move `express.static` for `/uploads` behind `requireAuth` middleware
+- **Reason**: Upload files (invoices, documents, images) were publicly accessible without auth
+
+### S2: Remove JWT_SECRET from module exports (CRITICAL)
+- **File**: `backend/middleware/auth.js`, `backend/routes/auth.js`
+- **Change**: Remove `JWT_SECRET` from auth.js exports; remove unused import in routes/auth.js
+- **Reason**: Exporting the JWT secret creates key-leakage risk
+
+### S3: Add permission checks to invoice GET endpoints (HIGH)
+- **File**: `backend/routes/invoices.js`
+- **Change**: Add `requirePermission('invoices', 'view')` to `/next-number`, `/export`, `/:id`
+- **Reason**: These endpoints returned data without permission check
+
+### S4: Add permission check to settings GET (HIGH)
+- **File**: `backend/routes/settings.js`
+- **Change**: Add `requirePermission('settings', 'view')` to `GET /`
+- **Reason**: Settings were readable by any authenticated user
+
+### S5: Add role guard to notifications check-overdue (HIGH)
+- **File**: `backend/routes/notifications.js`
+- **Change**: Add `requireRole('superadmin', 'manager')` to `POST /check-overdue`
+- **Reason**: Overdue checks should only be triggered by managers
+
+### S6: Convert HR routes to fine-grained permissions (HIGH)
+- **File**: `backend/routes/hr.js`
+- **Change**: Replace all 25 `requireRole()` calls with `requirePermission('hr', 'view/create/edit/delete')`
+- **Reason**: HR used coarse role-based auth instead of permission-based model
+
+### S7: Convert auditlog to requirePermission (HIGH)
+- **File**: `backend/routes/auditlog.js`
+- **Change**: Replace `requireRole('superadmin', 'manager')` with `requirePermission('audit', 'view')`
+- **Reason**: Consistent with permission-based model
+
+### S8: Remove file_path from backup restore response (HIGH)
+- **File**: `backend/routes/backups.js`
+- **Change**: Remove `file_path: backup.file_path` from restore response, keep only `file_name`
+- **Reason**: Server filesystem paths should not be exposed to clients
+
+### S9: Upgrade create-admin password policy (MEDIUM)
+- **File**: `backend/routes/auth.js`
+- **Change**: Require 8+ chars with uppercase and digit for create-admin endpoint
+- **Reason**: Align with the stricter register endpoint policy
+
+### S10: Fix HTML sanitization bypass (MEDIUM)
+- **File**: `backend/server.js`
+- **Change**: Update stripTags regex from `/<[^>]*>/g` to `/<[^>]*>?/g`
+- **Reason**: Unclosed tags like `<script` were not stripped
+
+### S11: Add existence check for samples DELETE (MEDIUM)
+- **File**: `backend/routes/samples.js`
+- **Change**: Check sample exists before soft-cancel; return 404 if missing
+- **Reason**: Silent no-op on missing record, audit log recorded phantom deletions
+
+### S12: Fix payroll NaN from null overtime_rate_multiplier (LOW)
+- **File**: `backend/routes/hr.js`
+- **Change**: Default `overtime_rate_multiplier` to 1.5 when null
+- **Reason**: `null * number = NaN` corrupts payroll calculations
+
+### S13: Eliminate error message leakage (HIGH — 31 files)
+- **Files**: All 31 route files
+- **Change**: Replace `res.status(500).json({ error: err.message })` with `console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' })`
+- **Reason**: Internal error details (SQL, stack traces) were exposed to clients
+
+---
+
+## Phase D — Maintainability Fixes
+
+### D3: Dead code identified (deferred deletion)
+- **Files**: `backend/validators.js`, `backend/utils/validators.js`
+- **Status**: Both are dead code (never imported). Deletion requires manual confirm.
+
+### D5: Convert document DELETE to soft-delete
+- **File**: `backend/routes/documents.js`, `backend/database.js`
+- **Change**: Add `deleted_at` column (V24 migration); UPDATE instead of DELETE; filter GET by `deleted_at IS NULL`
+- **Reason**: Hard DELETE permanently lost document records
+
+### D6: Fix quality rate to final stage only
+- **File**: `backend/routes/reports.js`
+- **Change**: Overall pass rate query now filters to highest `sort_order` per WO
+- **Reason**: Summing all stages double-counted rejections at intermediate stages
+
+### D7: Align frontend/backend fabric cost breakdown
+- **File**: `frontend/src/hooks/useCostCalc.js`
+- **Change**: Separate waste from `main_fabric_cost`, add `waste_cost` to `total_cost` explicitly
+- **Reason**: Frontend included waste in fabric cost; backend tracked separately. Total was correct but labels inconsistent.
+
+### D9: Make wholesale multiplier configurable
+- **File**: `backend/routes/workorders.js`, `backend/database.js`
+- **Change**: Read `wholesale_discount_pct` from settings table (default 22%). V24 migration seeds the setting.
+- **Reason**: Hardcoded `0.78` (22% discount) couldn't be adjusted
+
+---
+
+## Test Results — Round 2
+
+- **Post security fixes (S1–S13)**: 58/58 passing ✅
+- **Post Phase D (D5–D9)**: 58/58 passing ✅
+- **Frontend build**: Success (0 errors) ✅

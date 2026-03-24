@@ -84,7 +84,7 @@ router.post('/invoice/:id', requirePermission('accounting', 'create'), (req, res
 
     logAudit(req, 'AUTO_JOURNAL', 'invoice', id, `JE ${je.entry_number} for Invoice ${invoice.invoice_number}`);
     res.status(201).json(je);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -120,7 +120,7 @@ router.post('/po-receipt/:id', requirePermission('accounting', 'create'), (req, 
 
     logAudit(req, 'AUTO_JOURNAL', 'purchase_order', id, `JE ${je.entry_number} for PO ${po.po_number}`);
     res.status(201).json(je);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -147,7 +147,7 @@ router.post('/expense/:id', requirePermission('accounting', 'create'), (req, res
 
     logAudit(req, 'AUTO_JOURNAL', 'expense', id, `JE ${je.entry_number}`);
     res.status(201).json(je);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -178,7 +178,7 @@ router.post('/payroll/:periodId', requirePermission('accounting', 'create'), (re
 
     logAudit(req, 'AUTO_JOURNAL', 'payroll', periodId, `JE ${je.entry_number} for Payroll ${period.month}`);
     res.status(201).json(je);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -210,7 +210,7 @@ router.post('/payment', requirePermission('accounting', 'create'), (req, res) =>
     if (!je) return res.status(400).json({ error: 'القيد غير متوازن' });
 
     res.status(201).json(je);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

@@ -35,7 +35,7 @@ router.get('/', requirePermission('shipping', 'view'), (req, res) => {
       ORDER BY s.created_at DESC LIMIT ? OFFSET ?
     `).all(...params);
     res.json({ data, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/shipping/next-number
@@ -60,7 +60,7 @@ router.get('/:id', requirePermission('shipping', 'view'), (req, res) => {
     shipment.items = db.prepare('SELECT * FROM shipment_items WHERE shipment_id=?').all(id);
     shipment.packing_lists = db.prepare('SELECT * FROM packing_lists WHERE shipment_id=?').all(id);
     res.json(shipment);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/shipping
@@ -96,7 +96,7 @@ router.post('/', requirePermission('shipping', 'create'), (req, res) => {
     const created = db.prepare('SELECT * FROM shipments WHERE id=?').get(shipId);
     created.items = db.prepare('SELECT * FROM shipment_items WHERE shipment_id=?').all(shipId);
     res.status(201).json(created);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/shipping/:id
@@ -132,7 +132,7 @@ router.put('/:id', requirePermission('shipping', 'edit'), (req, res) => {
 
     logAudit(req, 'update', 'shipment', id, old.shipment_number, old, req.body);
     res.json(db.prepare('SELECT * FROM shipments WHERE id=?').get(id));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/shipping/:id/status
@@ -151,7 +151,7 @@ router.patch('/:id/status', requirePermission('shipping', 'edit'), (req, res) =>
 
     logAudit(req, 'update', 'shipment', id, old.shipment_number, { status: old.status }, { status });
     res.json(db.prepare('SELECT * FROM shipments WHERE id=?').get(id));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/shipping/:id/packing-list
@@ -167,7 +167,7 @@ router.post('/:id/packing-list', requirePermission('shipping', 'edit'), (req, re
 
     const lists = db.prepare('SELECT * FROM packing_lists WHERE shipment_id=?').all(shipId);
     res.status(201).json(lists);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/shipping/:id
@@ -179,7 +179,7 @@ router.delete('/:id', requirePermission('shipping', 'delete'), (req, res) => {
     db.prepare("UPDATE shipments SET status='cancelled', updated_at=datetime('now','localtime') WHERE id=?").run(id);
     logAudit(req, 'delete', 'shipment', id, old.shipment_number, old, null);
     res.json({ message: 'تم إلغاء الشحنة' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

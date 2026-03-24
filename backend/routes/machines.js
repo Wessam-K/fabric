@@ -222,7 +222,7 @@ router.get('/:id/maintenance', (req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM machine_maintenance WHERE machine_id = ? ORDER BY performed_at DESC').all(req.params.id);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/machines/:id/maintenance
@@ -247,7 +247,7 @@ router.post('/:id/maintenance', requirePermission('machines', 'edit'), (req, res
     const newRecord = db.prepare('SELECT * FROM machine_maintenance WHERE id = ?').get(result.lastInsertRowid);
     logAudit(req, 'CREATE', 'machine_maintenance', newRecord.id, maintenance_type);
     res.status(201).json(newRecord);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/machines/:id/maintenance/:mid

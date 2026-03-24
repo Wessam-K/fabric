@@ -12,7 +12,7 @@ router.get('/', requireRole('superadmin'), (req, res) => {
       FROM users ORDER BY created_at DESC
     `).all();
     res.json(users);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/users — create user (superadmin only)
@@ -32,7 +32,7 @@ router.post('/', requireRole('superadmin'), (req, res) => {
 
     logAudit(req, 'CREATE', 'user', result.lastInsertRowid, full_name, null, { username, full_name, role, department });
     res.json({ id: result.lastInsertRowid, message: 'تم إنشاء المستخدم بنجاح' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/users/:id
@@ -44,7 +44,7 @@ router.get('/:id', requireRole('superadmin'), (req, res) => {
     `).get(req.params.id);
     if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
     res.json(user);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/users/:id — update user (superadmin only)
@@ -66,7 +66,7 @@ router.put('/:id', requireRole('superadmin'), (req, res) => {
 
     logAudit(req, 'UPDATE', 'user', id, full_name || old.full_name, old, { full_name, email, role, department, status });
     res.json({ message: 'تم تحديث المستخدم بنجاح' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/users/:id/reset-password (superadmin only)
@@ -82,7 +82,7 @@ router.patch('/:id/reset-password', requireRole('superadmin'), (req, res) => {
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1, failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(hash, user.id);
     logAudit(req, 'UPDATE', 'user', user.id, user.full_name + ' (reset-password)');
     res.json({ message: 'تم إعادة تعيين كلمة المرور بنجاح' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/users/:id — soft delete (superadmin only)
@@ -101,7 +101,7 @@ router.delete('/:id', requireRole('superadmin'), (req, res) => {
     db.prepare("UPDATE users SET status='inactive' WHERE id=?").run(id);
     logAudit(req, 'DELETE', 'user', id, user.full_name);
     res.json({ message: 'تم تعطيل المستخدم' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

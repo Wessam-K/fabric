@@ -23,7 +23,7 @@ router.get('/', requirePermission('quotations', 'view'), (req, res) => {
       WHERE ${where} ORDER BY q.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
 
     res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/quotations/next-number
@@ -33,7 +33,7 @@ router.get('/next-number', requirePermission('quotations', 'view'), (req, res) =
     const last = db.prepare('SELECT quotation_number FROM quotations ORDER BY id DESC LIMIT 1').get();
     const num = last ? parseInt(String(last.quotation_number).replace(/\D/g, '')) + 1 : 1;
     res.json({ next_number: `${prefix}${String(num).padStart(5, '0')}` });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/quotations/:id
@@ -44,7 +44,7 @@ router.get('/:id', requirePermission('quotations', 'view'), (req, res) => {
     if (!q) return res.status(404).json({ error: 'عرض السعر غير موجود' });
     q.items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id=? ORDER BY id').all(q.id);
     res.json(q);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/quotations
@@ -75,7 +75,7 @@ router.post('/', requirePermission('quotations', 'create'), (req, res) => {
 
     logAudit(req, 'CREATE', 'quotation', qId, quotation_number);
     res.status(201).json({ id: qId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/quotations/:id
@@ -116,7 +116,7 @@ router.put('/:id', requirePermission('quotations', 'edit'), (req, res) => {
 
     logAudit(req, 'UPDATE', 'quotation', id, old.quotation_number, old, req.body);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/quotations/:id/convert-to-so
@@ -148,7 +148,7 @@ router.post('/:id/convert-to-so', requirePermission('sales_orders', 'create'), (
 
     logAudit(req, 'CONVERT', 'quotation', id, `${q.quotation_number} → ${soNumber}`);
     res.status(201).json({ id: soId, so_number: soNumber });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/quotations/:id
@@ -157,7 +157,7 @@ router.delete('/:id', requirePermission('quotations', 'delete'), (req, res) => {
     db.prepare('UPDATE quotations SET status=\'cancelled\', updated_at=CURRENT_TIMESTAMP WHERE id=?').run(req.params.id);
     logAudit(req, 'DELETE', 'quotation', req.params.id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -179,7 +179,7 @@ router.get('/sales-orders/list', requirePermission('sales_orders', 'view'), (req
       WHERE ${where} ORDER BY so.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
 
     res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/quotations/sales-orders/:id
@@ -189,7 +189,7 @@ router.get('/sales-orders/:id', requirePermission('sales_orders', 'view'), (req,
     if (!so) return res.status(404).json({ error: 'أمر البيع غير موجود' });
     so.items = db.prepare('SELECT * FROM sales_order_items WHERE sales_order_id=?').all(so.id);
     res.json(so);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/quotations/sales-orders/:id/convert-to-wo
@@ -216,7 +216,7 @@ router.post('/sales-orders/:id/convert-to-wo', requirePermission('work_orders', 
 
     logAudit(req, 'CONVERT', 'sales_order', id, `${so.so_number} → ${woNumber}`);
     res.status(201).json({ id: result.lastInsertRowid, wo_number: woNumber });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/quotations/sales-orders/:id/status
@@ -226,7 +226,7 @@ router.patch('/sales-orders/:id/status', requirePermission('sales_orders', 'edit
     db.prepare('UPDATE sales_orders SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, req.params.id);
     logAudit(req, 'STATUS_CHANGE', 'sales_order', req.params.id, status);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

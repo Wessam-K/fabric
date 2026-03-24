@@ -38,7 +38,7 @@ router.get('/', requirePermission('fabrics', 'view'), (req, res) => {
       return res.json({ data, total, page: pg, totalPages: Math.ceil(total / lim) });
     }
     res.json(db.prepare(q).all(...p));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 router.post('/', upload.single('image'), requirePermission('fabrics', 'create'), (req, res) => {
@@ -53,7 +53,7 @@ router.post('/', upload.single('image'), requirePermission('fabrics', 'create'),
     res.status(201).json(created);
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'كود القماش موجود بالفعل' });
-    res.status(500).json({ error: err.message });
+    console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' });
   }
 });
 
@@ -67,7 +67,7 @@ router.get('/export', (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=fabrics.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/fabrics/import — bulk import
@@ -90,7 +90,7 @@ router.post('/import', requirePermission('fabrics', 'create'), (req, res) => {
     })();
     logAudit(req, 'IMPORT', 'fabric', null, `imported:${imported} updated:${updated}`);
     res.json({ imported, updated, errors });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 router.put('/:code', upload.single('image'), requirePermission('fabrics', 'edit'), (req, res) => {
@@ -104,7 +104,7 @@ router.put('/:code', upload.single('image'), requirePermission('fabrics', 'edit'
     const updated = db.prepare('SELECT * FROM fabrics WHERE code=?').get(req.params.code);
     logAudit(req, 'UPDATE', 'fabric', req.params.code, existing.name, existing, updated);
     res.json(updated);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 router.post('/:code/image', requirePermission('fabrics', 'edit'), upload.single('image'), (req, res) => {
@@ -113,7 +113,7 @@ router.post('/:code/image', requirePermission('fabrics', 'edit'), upload.single(
     const image_path = `/uploads/fabrics/${req.file.filename}`;
     db.prepare('UPDATE fabrics SET image_path=? WHERE code=?').run(image_path, req.params.code);
     res.json({ image_path });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 router.delete('/:code', requirePermission('fabrics', 'delete'), (req, res) => {
@@ -123,7 +123,7 @@ router.delete('/:code', requirePermission('fabrics', 'delete'), (req, res) => {
     db.prepare("UPDATE fabrics SET status='inactive' WHERE code=?").run(req.params.code);
     logAudit(req, 'DELETE', 'fabric', req.params.code, existing.name);
     res.json({ message: 'تم التعطيل', code: req.params.code });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/fabrics/:code/po-batches — PO line items for this fabric
@@ -153,7 +153,7 @@ router.get('/:code/po-batches', (req, res) => {
       ORDER BY po.order_date DESC
     `).all(fabricCode);
     res.json({ batches, latest_price: batches[0]?.price_per_meter || 0 });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/fabrics/:code/batches — available inventory batches per fabric
@@ -170,7 +170,7 @@ router.get('/:code/batches', (req, res) => {
     else { q += " AND fib.batch_status IN ('available','reserved')"; }
     q += ' ORDER BY fib.received_date DESC';
     res.json(db.prepare(q).all(...p));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

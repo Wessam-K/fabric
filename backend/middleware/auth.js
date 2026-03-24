@@ -92,4 +92,4 @@ function logAudit(req, action, entityType, entityId, entityLabel, oldValues = nu
   } catch(e) { console.error('Audit log error:', e.message); }
 }
 
-module.exports = { generateToken, requireAuth, requireRole, requirePermission, logAudit, JWT_SECRET };
+module.exports = { generateToken, requireAuth, requireRole, requirePermission, logAudit };

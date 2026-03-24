@@ -119,7 +119,7 @@ router.get('/:code', (req, res) => {
     // Not found
     res.status(404).json({ error: 'لم يتم العثور على عنصر بهذا الباركود', code });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' });
   }
 });
 

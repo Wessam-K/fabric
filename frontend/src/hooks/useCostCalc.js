@@ -4,10 +4,11 @@ import { useMemo } from 'react';
  * Cost calculation hook.
  *
  * Formulas:
- *   main_fabric_cost  = SUM of each main fabric: meters × price × (1 + waste%/100)
+ *   main_fabric_cost  = SUM of each main fabric: meters × price  (waste tracked separately)
+ *   waste_cost         = SUM of each main fabric waste: meters × price × waste%/100
  *   lining_cost        = SUM of each lining fabric: meters × price  (NO waste)
  *   accessories_cost   = SUM of each accessory: quantity × price
- *   total_cost         = main_fabric_cost + lining_cost + accessories_cost + masnaiya + masrouf
+ *   total_cost         = main_fabric_cost + waste_cost + lining_cost + accessories_cost + masnaiya + masrouf
  *   cost_per_piece     = total_cost / grand_total_pieces  (if grand_total > 0)
  */
 export default function useCostCalc({ fabrics = [], accessories = [], masnaiya = 0, masrouf = 0, grandTotalPieces = 0, extraExpenses = [], marginPct = 25 }) {
@@ -31,7 +32,7 @@ export default function useCostCalc({ fabrics = [], accessories = [], masnaiya =
       } else {
         const wasteCostPart = baseCost * (waste / 100);
         waste_cost += wasteCostPart;
-        main_fabric_cost += baseCost + wasteCostPart;
+        main_fabric_cost += baseCost;
       }
     }
 
@@ -50,7 +51,7 @@ export default function useCostCalc({ fabrics = [], accessories = [], masnaiya =
     const margin = safeParse(marginPct);
     const masnaiya_total = m * gtp;
     const masrouf_total = r * gtp;
-    const total_cost = main_fabric_cost + lining_cost + accessories_cost + masnaiya_total + masrouf_total + extra_expenses_total;
+    const total_cost = main_fabric_cost + waste_cost + lining_cost + accessories_cost + masnaiya_total + masrouf_total + extra_expenses_total;
     const cost_per_piece = gtp > 0 ? total_cost / gtp : 0;
     const waste_cost_per_piece = gtp > 0 ? waste_cost / gtp : 0;
     const extra_cost_per_piece = gtp > 0 ? extra_expenses_total / gtp : 0;

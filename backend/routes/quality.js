@@ -14,7 +14,7 @@ router.get('/templates', requirePermission('quality', 'view'), (req, res) => {
       (SELECT COUNT(*) FROM qc_template_items WHERE template_id=qt.id) as item_count
       FROM qc_templates qt WHERE qt.is_active=1 ORDER BY qt.name`).all();
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/quality/templates
@@ -34,7 +34,7 @@ router.post('/templates', requirePermission('quality', 'create'), (req, res) => 
 
     logAudit(req, 'CREATE', 'qc_template', templateId, name);
     res.status(201).json({ id: templateId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/quality/templates/:id
@@ -44,7 +44,7 @@ router.get('/templates/:id', requirePermission('quality', 'view'), (req, res) =>
     if (!template) return res.status(404).json({ error: 'القالب غير موجود' });
     template.items = db.prepare('SELECT * FROM qc_template_items WHERE template_id=? ORDER BY sort_order').all(template.id);
     res.json(template);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/quality/templates/:id
@@ -66,7 +66,7 @@ router.put('/templates/:id', requirePermission('quality', 'edit'), (req, res) =>
 
     logAudit(req, 'UPDATE', 'qc_template', id, name || old.name, old, { name, description, product_type });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/quality/templates/:id
@@ -76,7 +76,7 @@ router.delete('/templates/:id', requirePermission('quality', 'delete'), (req, re
     db.prepare('UPDATE qc_templates SET is_active=0 WHERE id=?').run(id);
     logAudit(req, 'DELETE', 'qc_template', id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -87,7 +87,7 @@ router.delete('/templates/:id', requirePermission('quality', 'delete'), (req, re
 router.get('/defect-codes', requirePermission('quality', 'view'), (req, res) => {
   try {
     res.json(db.prepare('SELECT * FROM qc_defect_codes WHERE is_active=1 ORDER BY code').all());
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/quality/defect-codes
@@ -99,7 +99,7 @@ router.post('/defect-codes', requirePermission('quality', 'create'), (req, res) 
       .run(code, name_ar, name_en || null, severity || 'minor', category || null);
     logAudit(req, 'CREATE', 'qc_defect_code', result.lastInsertRowid, code);
     res.status(201).json({ id: result.lastInsertRowid });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -125,7 +125,7 @@ router.get('/inspections', requirePermission('quality', 'view'), (req, res) => {
       WHERE ${where} ORDER BY qi.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
 
     res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/quality/inspections
@@ -150,7 +150,7 @@ router.post('/inspections', requirePermission('quality', 'create'), (req, res) =
 
     logAudit(req, 'CREATE', 'qc_inspection', inspId, num);
     res.status(201).json({ id: inspId, inspection_number: num });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/quality/inspections/:id
@@ -168,7 +168,7 @@ router.get('/inspections/:id', requirePermission('quality', 'view'), (req, res) 
       FROM qc_inspection_items qii
       WHERE qii.inspection_id=?`).all(insp.id);
     res.json(insp);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/quality/inspections/:id/complete
@@ -183,7 +183,7 @@ router.patch('/inspections/:id/complete', requirePermission('quality', 'edit'), 
 
     logAudit(req, 'COMPLETE', 'qc_inspection', id, `Result: ${result}`);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -202,7 +202,7 @@ router.get('/ncr', requirePermission('quality', 'view'), (req, res) => {
       FROM qc_ncr n LEFT JOIN work_orders wo ON wo.id=n.work_order_id LEFT JOIN users u ON u.id=n.created_by
       WHERE ${where} ORDER BY n.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
     res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/quality/ncr
@@ -220,7 +220,7 @@ router.post('/ncr', requirePermission('quality', 'create'), (req, res) => {
 
     logAudit(req, 'CREATE', 'qc_ncr', result.lastInsertRowid, ncrNum);
     res.status(201).json({ id: result.lastInsertRowid, ncr_number: ncrNum });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/quality/ncr/:id
@@ -241,7 +241,7 @@ router.patch('/ncr/:id', requirePermission('quality', 'edit'), (req, res) => {
     db.prepare(`UPDATE qc_ncr SET ${sets.join(',')} WHERE id=?`).run(...vals, id);
     logAudit(req, 'UPDATE', 'qc_ncr', id, `Status: ${status}`);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

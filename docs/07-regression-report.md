@@ -84,6 +84,64 @@ Deferred items are tracked in Phase D (Maintainability) of `docs/05-improvement-
 
 ---
 
+## Round 2 — Security Audit + Phase D
+
+### Test Suite Results
+
+| Phase | Tests | Pass | Fail | Status |
+|-------|-------|------|------|--------|
+| Post Security Fixes (S1–S13) | 58 | 58 | 0 | ✅ |
+| Post Phase D (D5–D9) | 58 | 58 | 0 | ✅ |
+| Frontend Build | — | — | — | ✅ 0 errors |
+
+### Additional Files Changed (Round 2)
+
+| File | Changes |
+|------|---------|
+| `backend/server.js` | /uploads behind requireAuth, stripTags fix |
+| `backend/middleware/auth.js` | Removed JWT_SECRET export |
+| `backend/routes/auth.js` | Removed JWT_SECRET import, password policy 8+upper+digit |
+| `backend/routes/invoices.js` | Permission checks on 3 GET endpoints |
+| `backend/routes/settings.js` | Permission check on GET |
+| `backend/routes/notifications.js` | Role guard on check-overdue |
+| `backend/routes/hr.js` | 25× requireRole→requirePermission, payroll NaN fix |
+| `backend/routes/auditlog.js` | requireRole→requirePermission |
+| `backend/routes/backups.js` | Removed file_path from response |
+| `backend/routes/samples.js` | Existence check on DELETE |
+| `backend/routes/reports.js` | Quality rate: final stage only |
+| `backend/routes/workorders.js` | Wholesale multiplier from settings |
+| `backend/routes/documents.js` | Soft-delete (deleted_at) |
+| `backend/database.js` | V24 migration (deleted_at, wholesale setting) |
+| `frontend/src/hooks/useCostCalc.js` | Waste/fabric cost alignment |
+| All 31 route files | err.message → generic Arabic error |
+
+### New Behavioral Changes (Round 2)
+
+10. **/uploads** now requires authentication token. Public access blocked.
+11. **Document DELETE** now soft-deletes (sets `deleted_at`). Previously hard-deleted the row.
+12. **Quality overall pass rate** computed from final stage only (was all stages).
+13. **Wholesale suggested price** reads `wholesale_discount_pct` from settings (default 22%).
+14. **Frontend fabric cost** now excludes waste from `main_fabric_cost` label (total unchanged).
+15. **HR routes** require fine-grained permissions instead of role-based checks.
+16. **500 errors** return generic Arabic message instead of internal error details.
+
+### Database Schema (Round 2)
+
+- V24 migration added: `documents.deleted_at TEXT DEFAULT NULL`
+- V24 migration added: settings key `wholesale_discount_pct` = `22`
+
+### Updated Issue Resolution Summary
+
+| Severity | Found R1+R2 | Fixed R1 | Fixed R2 | Deferred |
+|----------|-------------|----------|----------|----------|
+| CRITICAL | 6 | 3 | 2 | 1 |
+| HIGH | 20 | 10 | 9 | 1 |
+| MEDIUM | 34 | 13 | 4 | 17 |
+| LOW | 20 | 0 | 1 | 19 |
+| **Total** | **80** | **26** | **16** | **38** |
+
+---
+
 ## Conclusion
 
-All 26 fixes across Phases A, B, and C pass the full 58-test regression suite. No breaking changes detected. The system maintains full backward compatibility with existing data and frontend.
+All 42 fixes across Rounds 1+2 pass the full 58-test regression suite. Frontend builds clean. V24 migration is backward-compatible. The system maintains full compatibility with existing data.

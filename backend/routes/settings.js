@@ -4,13 +4,13 @@ const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 
 // GET /api/settings — return all settings as object
-router.get('/', (req, res) => {
+router.get('/', requirePermission('settings', 'view'), (req, res) => {
   try {
     const rows = db.prepare('SELECT * FROM settings').all();
     const settings = {};
     rows.forEach(r => { settings[r.key] = r.value; });
     res.json(settings);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/settings — update settings
@@ -43,7 +43,7 @@ router.put('/', requirePermission('settings', 'edit'), (req, res) => {
     const response = { ...settings };
     if (rejected.length > 0) response._rejected_keys = rejected;
     res.json(response);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // NOTE: Stage template CRUD is handled by /api/stage-templates (stagetemplates.js)

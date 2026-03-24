@@ -18,7 +18,7 @@ router.get('/stats', requirePermission('maintenance', 'view'), (req, res) => {
     const overdue_count = db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0 AND scheduled_date < date('now') AND status='pending'").get().c;
     const total_orders = db.prepare("SELECT COUNT(*) as c FROM maintenance_orders WHERE is_deleted=0").get().c;
     res.json({ pending_count, in_progress_count, completed_this_month, critical_count, total_cost_this_month, avg_resolution_days: Math.round(avg_resolution_days * 10) / 10, overdue_count, total_orders });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -32,7 +32,7 @@ router.get('/export', requirePermission('maintenance', 'view'), (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="maintenance_orders.csv"');
     res.send('\uFEFF' + csv);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -45,7 +45,7 @@ router.get('/barcode/:barcode', requirePermission('maintenance', 'view'), (req, 
       WHERE mo.barcode=? AND mo.is_deleted=0`).get(req.params.barcode);
     if (!order) return res.status(404).json({ error: 'أمر الصيانة غير موجود' });
     res.json(order);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -74,7 +74,7 @@ router.get('/', requirePermission('maintenance', 'view'), (req, res) => {
     `).all(...params, parseInt(limit), offset);
 
     res.json({ data, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -87,7 +87,7 @@ router.get('/:id', requirePermission('maintenance', 'view'), (req, res) => {
       WHERE mo.id=? AND mo.is_deleted=0`).get(req.params.id);
     if (!order) return res.status(404).json({ error: 'أمر الصيانة غير موجود' });
     res.json(order);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -97,7 +97,7 @@ router.get('/:id/history', requirePermission('maintenance', 'view'), (req, res) 
   try {
     const rows = db.prepare("SELECT * FROM audit_log WHERE entity_type='maintenance_orders' AND entity_id=? ORDER BY created_at DESC").all(String(req.params.id));
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -115,7 +115,7 @@ router.post('/', requirePermission('maintenance', 'create'), (req, res) => {
     const order = db.prepare('SELECT * FROM maintenance_orders WHERE id=?').get(result.lastInsertRowid);
     logAudit(req, 'create', 'maintenance_orders', order.id, title, null, order);
     res.status(201).json(order);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -158,7 +158,7 @@ router.put('/:id', requirePermission('maintenance', 'edit'), (req, res) => {
     const updated = db.prepare('SELECT * FROM maintenance_orders WHERE id=?').get(req.params.id);
     logAudit(req, 'update', 'maintenance_orders', old.id, old.title, old, updated);
     res.json(updated);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -171,7 +171,7 @@ router.delete('/:id', requirePermission('maintenance', 'delete'), (req, res) => 
     db.prepare('UPDATE maintenance_orders SET is_deleted=1 WHERE id=?').run(req.params.id);
     logAudit(req, 'delete', 'maintenance_orders', old.id, old.title, old, null);
     res.json({ message: 'تم حذف أمر الصيانة بنجاح' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -196,7 +196,7 @@ router.post('/import', requirePermission('maintenance', 'create'), (req, res) =>
       } catch (e) { errors.push({ row: i+1, error: e.message }); }
     }
     res.json({ inserted, errors });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

@@ -38,7 +38,7 @@ router.get('/', requirePermission('accessories', 'view'), (req, res) => {
       return res.json({ data, total, page: pg, totalPages: Math.ceil(total / lim) });
     }
     res.json(db.prepare(q).all(...p));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 router.post('/', upload.single('image'), requirePermission('accessories', 'create'), (req, res) => {
@@ -53,7 +53,7 @@ router.post('/', upload.single('image'), requirePermission('accessories', 'creat
     res.status(201).json(created);
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'كود الاكسسوار موجود بالفعل' });
-    res.status(500).json({ error: err.message });
+    console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' });
   }
 });
 
@@ -67,7 +67,7 @@ router.get('/export', (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=accessories.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/accessories/import — bulk import
@@ -90,7 +90,7 @@ router.post('/import', requirePermission('accessories', 'create'), (req, res) =>
     })();
     logAudit(req, 'IMPORT', 'accessory', null, `imported:${imported} updated:${updated}`);
     res.json({ imported, updated, errors });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 router.put('/:code', upload.single('image'), requirePermission('accessories', 'edit'), (req, res) => {
@@ -104,7 +104,7 @@ router.put('/:code', upload.single('image'), requirePermission('accessories', 'e
     const updated = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     logAudit(req, 'UPDATE', 'accessory', req.params.code, existing.name, existing, updated);
     res.json(updated);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 router.delete('/:code', requirePermission('accessories', 'delete'), (req, res) => {
@@ -114,7 +114,7 @@ router.delete('/:code', requirePermission('accessories', 'delete'), (req, res) =
     db.prepare("UPDATE accessories SET status='inactive' WHERE code=?").run(req.params.code);
     logAudit(req, 'DELETE', 'accessory', req.params.code, existing.name);
     res.json({ message: 'تم التعطيل', code: req.params.code });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // Upload / replace accessory image
@@ -127,7 +127,7 @@ router.post('/:code/image', requirePermission('accessories', 'edit'), upload.sin
     db.prepare('UPDATE accessories SET image_path=? WHERE code=?').run(image_path, req.params.code);
     logAudit(req, 'UPDATE', 'accessory', req.params.code, existing.name, { image_path: existing.image_path }, { image_path });
     res.json({ image_path });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // Stock management
@@ -138,7 +138,7 @@ router.get('/:code/stock', (req, res) => {
     const movements = db.prepare(`SELECT asm.*, u.full_name as user_name FROM accessory_stock_movements asm LEFT JOIN users u ON u.id=asm.created_by WHERE asm.accessory_code=? ORDER BY asm.created_at DESC LIMIT 50`).all(acc.code);
     const low_stock = acc.quantity_on_hand <= acc.low_stock_threshold;
     res.json({ accessory: acc, movements, low_stock });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 router.post('/:code/stock/adjust', requirePermission('accessories', 'edit'), (req, res) => {
@@ -159,7 +159,7 @@ router.post('/:code/stock/adjust', requirePermission('accessories', 'edit'), (re
     const updated = db.prepare('SELECT * FROM accessories WHERE id=?').get(acc.id);
     logAudit(req, 'STOCK_ADJUST', 'accessory', acc.code, acc.name, { old_qty: acc.quantity_on_hand }, { new_qty: newQty });
     res.json(updated);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

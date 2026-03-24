@@ -68,7 +68,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // ═══ Input sanitization — strip HTML tags from string fields ═══
 function stripTags(str) {
-  return typeof str === 'string' ? str.replace(/<[^>]*>/g, '') : str;
+  return typeof str === 'string' ? str.replace(/<[^>]*>?/g, '') : str;
 }
 function sanitizeBody(obj) {
   if (!obj || typeof obj !== 'object') return obj;
@@ -84,7 +84,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', requireAuth, express.static(path.join(__dirname, 'uploads')));
 
 // ═══ Simple rate limiter for auth endpoints ═══
 const loginAttempts = new Map();

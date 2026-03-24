@@ -28,7 +28,7 @@ router.get('/fabric-stock', requirePermission('inventory', 'view'), (req, res) =
 
     const rows = db.prepare(q).all(...p);
     res.json({ rows, low_stock_threshold: lowThreshold });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/inventory/batches — all batches with filters
@@ -49,7 +49,7 @@ router.get('/batches', requirePermission('inventory', 'view'), (req, res) => {
     if (search) { q += ' AND (fib.batch_code LIKE ? OR f.name LIKE ? OR po.po_number LIKE ?)'; p.push(`%${search}%`, `%${search}%`, `%${search}%`); }
     q += ' ORDER BY fib.received_date DESC';
     res.json(db.prepare(q).all(...p));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/inventory/accessory-stock — aggregated accessory inventory
@@ -67,7 +67,7 @@ router.get('/accessory-stock', requirePermission('inventory', 'view'), (req, res
     if (low_stock_only === '1') q += ' AND a.quantity_on_hand <= a.low_stock_threshold';
     q += ' ORDER BY a.quantity_on_hand ASC';
     res.json(db.prepare(q).all(...p));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

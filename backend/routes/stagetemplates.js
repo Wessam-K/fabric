@@ -7,7 +7,7 @@ const { requirePermission } = require('../middleware/auth');
 router.get('/', (req, res) => {
   try {
     res.json(db.prepare('SELECT * FROM stage_templates ORDER BY sort_order').all());
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/stage-templates
@@ -19,7 +19,7 @@ router.post('/', requirePermission('settings', 'edit'), (req, res) => {
     const r = db.prepare('INSERT INTO stage_templates (name, sort_order, color, is_default) VALUES (?,?,?,1)')
       .run(name, sort_order ?? maxOrder + 1, color || '#6b7280');
     res.status(201).json(db.prepare('SELECT * FROM stage_templates WHERE id=?').get(r.lastInsertRowid));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/stage-templates/reorder — bulk update sort_order (MUST be before :id route)
@@ -32,7 +32,7 @@ router.put('/reorder', requirePermission('settings', 'edit'), (req, res) => {
     });
     transaction();
     res.json(db.prepare('SELECT * FROM stage_templates ORDER BY sort_order').all());
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/stage-templates/:id
@@ -42,7 +42,7 @@ router.put('/:id', requirePermission('settings', 'edit'), (req, res) => {
     db.prepare('UPDATE stage_templates SET name=COALESCE(?,name), color=COALESCE(?,color), sort_order=COALESCE(?,sort_order), is_default=COALESCE(?,is_default) WHERE id=?')
       .run(name || null, color || null, sort_order ?? null, is_default ?? null, req.params.id);
     res.json(db.prepare('SELECT * FROM stage_templates WHERE id=?').get(req.params.id));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/stage-templates/:id
@@ -50,7 +50,7 @@ router.delete('/:id', requirePermission('settings', 'delete'), (req, res) => {
   try {
     db.prepare('DELETE FROM stage_templates WHERE id=?').run(parseInt(req.params.id));
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

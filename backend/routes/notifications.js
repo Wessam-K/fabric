@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { requireRole } = require('../middleware/auth');
 
 // GET /api/notifications/count — unread count only (lightweight poll) — MUST be before /:id
 router.get('/count', (req, res) => {
@@ -8,7 +9,7 @@ router.get('/count', (req, res) => {
     const userId = req.user ? req.user.id : null;
     const count = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=0').get(userId).count;
     res.json({ unread_count: count });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/notifications/read-all — MUST be before /:id
@@ -17,11 +18,11 @@ router.patch('/read-all', (req, res) => {
     const userId = req.user ? req.user.id : null;
     db.prepare('UPDATE notifications SET is_read=1 WHERE user_id=? AND is_read=0').run(userId);
     res.json({ message: 'تم تحديث جميع الإشعارات' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/notifications/check-overdue
-router.post('/check-overdue', (req, res) => {
+router.post('/check-overdue', requireRole('superadmin', 'manager'), (req, res) => {
   try {
     const adminUsers = db.prepare("SELECT id FROM users WHERE role IN ('superadmin','admin','manager') AND status='active'").all();
     if (adminUsers.length === 0) return res.json({ message: 'لا يوجد مستخدمين', created: 0 });
@@ -83,7 +84,7 @@ router.post('/check-overdue', (req, res) => {
     } catch {}
 
     res.json({ message: `تم إنشاء ${created} إشعار جديد`, created });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // Get notifications for current user
@@ -99,7 +100,7 @@ router.get('/', (req, res) => {
     const notifications = db.prepare(q).all(...p);
     const unread_count = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=0').get(userId).count;
     res.json({ notifications, unread_count });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // Mark notification as read — after all string routes
@@ -110,7 +111,7 @@ router.patch('/:id/read', (req, res) => {
     if (!notif) return res.status(404).json({ error: 'الإشعار غير موجود' });
     db.prepare('UPDATE notifications SET is_read=1 WHERE id=?').run(req.params.id);
     res.json({ message: 'تم التحديث' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // Delete notification
@@ -121,7 +122,7 @@ router.delete('/:id', (req, res) => {
     if (!notif) return res.status(404).json({ error: 'الإشعار غير موجود' });
     db.prepare('DELETE FROM notifications WHERE id=?').run(req.params.id);
     res.json({ message: 'تم الحذف' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // Generate automatic notifications for low stock, overdue WOs, overdue invoices

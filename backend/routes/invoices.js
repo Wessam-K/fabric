@@ -36,11 +36,11 @@ router.get('/', requirePermission('invoices', 'view'), (req, res) => {
     FROM invoices`).get();
 
     res.json({ invoices, totals });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/invoices/next-number — suggest next invoice number
-router.get('/next-number', (req, res) => {
+router.get('/next-number', requirePermission('invoices', 'view'), (req, res) => {
   try {
     const last = db.prepare("SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1").get();
     let next = 'INV-001';
@@ -50,11 +50,11 @@ router.get('/next-number', (req, res) => {
       next = `INV-${String(num).padStart(3, '0')}`;
     }
     res.json({ next_number: next });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/invoices/export — CSV export
-router.get('/export', (req, res) => {
+router.get('/export', requirePermission('invoices', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT i.*, c.name as customer_name_linked FROM invoices i LEFT JOIN customers c ON c.id=i.customer_id ORDER BY i.created_at DESC`).all();
     const header = 'invoice_number,customer_name,status,subtotal,discount,tax_pct,total,due_date,notes,created_at';
@@ -63,17 +63,17 @@ router.get('/export', (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=invoices.csv');
     res.send('\uFEFF' + csv);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/invoices/:id — single invoice with items
-router.get('/:id', (req, res) => {
+router.get('/:id', requirePermission('invoices', 'view'), (req, res) => {
   try {
     const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
     if (!invoice) return res.status(404).json({ error: 'الفاتورة غير موجودة' });
     invoice.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order').all(invoice.id);
     res.json(invoice);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/invoices — create invoice
@@ -123,7 +123,7 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
     created.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoiceId);
     logAudit(req, 'CREATE', 'invoice', invoiceId, invoice_number);
     res.status(201).json(created);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/invoices/:id — update invoice
@@ -174,7 +174,7 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
     updated.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoice.id);
     logAudit(req, 'UPDATE', 'invoice', invoice.id, invoice.invoice_number, invoice, updated);
     res.json(updated);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/invoices/:id/status — quick status update
@@ -202,7 +202,7 @@ router.patch('/:id/status', requirePermission('invoices', 'edit'), (req, res) =>
 
     db.prepare("UPDATE invoices SET status=?, updated_at=datetime('now') WHERE id=?").run(status, req.params.id);
     res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/invoices/:id — soft-cancel (preserve audit trail)
@@ -214,7 +214,7 @@ router.delete('/:id', requirePermission('invoices', 'delete'), (req, res) => {
     db.prepare("UPDATE invoices SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(req.params.id);
     logAudit(req, 'DELETE', 'invoice', req.params.id, `INV#${req.params.id} cancelled`);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

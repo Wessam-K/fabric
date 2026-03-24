@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const router = express.Router();
 const db = require('../database');
-const { requireRole, logAudit } = require('../middleware/auth');
+const { requirePermission, logAudit } = require('../middleware/auth');
 
 const upload = multer({ dest: path.join(__dirname, '..', 'uploads', 'attendance'), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -14,7 +14,7 @@ const upload = multer({ dest: path.join(__dirname, '..', 'uploads', 'attendance'
 // ═══════════════════════════════════════════════
 
 // GET /api/hr/employees
-router.get('/employees', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.get('/employees', requirePermission('hr', 'view'), (req, res) => {
   try {
     const { search, department, employment_type, status = 'active' } = req.query;
     const conditions = [];
@@ -34,11 +34,11 @@ router.get('/employees', requireRole('superadmin', 'hr', 'manager'), (req, res) 
     const pieceWork = db.prepare("SELECT COUNT(*) as c FROM employees WHERE status='active' AND employment_type='piece_work'").get().c;
 
     res.json({ employees, kpi: { total, full_time: fullTime, daily, piece_work: pieceWork } });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/hr/employees/next-code
-router.get('/employees/next-code', requireRole('superadmin', 'hr'), (req, res) => {
+router.get('/employees/next-code', requirePermission('hr', 'edit'), (req, res) => {
   try {
     const last = db.prepare("SELECT emp_code FROM employees ORDER BY id DESC LIMIT 1").get();
     let next = 'EMP-001';
@@ -47,11 +47,11 @@ router.get('/employees/next-code', requireRole('superadmin', 'hr'), (req, res) =
       next = `EMP-${String(num).padStart(3, '0')}`;
     }
     res.json({ next_code: next });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/hr/employees
-router.post('/employees', requireRole('superadmin', 'hr'), (req, res) => {
+router.post('/employees', requirePermission('hr', 'create'), (req, res) => {
   try {
     const d = req.body;
     if (!d.emp_code || !d.full_name) return res.status(400).json({ error: 'كود الموظف والاسم مطلوبان' });
@@ -83,11 +83,11 @@ router.post('/employees', requireRole('superadmin', 'hr'), (req, res) => {
 
     logAudit(req, 'CREATE', 'employee', result.lastInsertRowid, d.full_name, null, d);
     res.json({ id: result.lastInsertRowid, message: 'تم إنشاء الموظف بنجاح' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/hr/employees/import — bulk import employees from CSV
-router.post('/employees/import', requireRole('superadmin', 'hr'), (req, res) => {
+router.post('/employees/import', requirePermission('hr', 'create'), (req, res) => {
   try {
     const items = req.body;
     if (!Array.isArray(items)) return res.status(400).json({ error: 'يجب إرسال مصفوفة من الموظفين' });
@@ -134,11 +134,11 @@ router.post('/employees/import', requireRole('superadmin', 'hr'), (req, res) => 
       } catch (e) { errors.push({ row: i + 1, error: e.message }); }
     }
     res.json({ inserted, updated, errors, message: `تم استيراد ${inserted} موظف جديد وتحديث ${updated}` });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/hr/employees/:id
-router.get('/employees/:id', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.get('/employees/:id', requirePermission('hr', 'view'), (req, res) => {
   try {
     const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
     if (!emp) return res.status(404).json({ error: 'الموظف غير موجود' });
@@ -161,11 +161,11 @@ router.get('/employees/:id', requireRole('superadmin', 'hr', 'manager'), (req, r
     `).all(emp.id);
 
     res.json({ ...emp, attendance, payroll, adjustments });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/hr/employees/:id
-router.put('/employees/:id', requireRole('superadmin', 'hr'), (req, res) => {
+router.put('/employees/:id', requirePermission('hr', 'edit'), (req, res) => {
   try {
     const old = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
     if (!old) return res.status(404).json({ error: 'الموظف غير موجود' });
@@ -195,18 +195,18 @@ router.put('/employees/:id', requireRole('superadmin', 'hr'), (req, res) => {
 
     logAudit(req, 'UPDATE', 'employee', old.id, d.full_name || old.full_name, old, d);
     res.json({ message: 'تم تحديث بيانات الموظف' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/hr/employees/:id — soft delete
-router.delete('/employees/:id', requireRole('superadmin', 'hr'), (req, res) => {
+router.delete('/employees/:id', requirePermission('hr', 'delete'), (req, res) => {
   try {
     const emp = db.prepare('SELECT id, full_name FROM employees WHERE id = ?').get(req.params.id);
     if (!emp) return res.status(404).json({ error: 'الموظف غير موجود' });
     db.prepare("UPDATE employees SET status='terminated', termination_date=datetime('now') WHERE id=?").run(emp.id);
     logAudit(req, 'DELETE', 'employee', emp.id, emp.full_name);
     res.json({ message: 'تم إنهاء خدمة الموظف' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -221,7 +221,7 @@ function getDayName(dateStr) {
 }
 
 // POST /api/hr/attendance/clock — clock-in/out by barcode scan
-router.post('/attendance/clock', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.post('/attendance/clock', requirePermission('hr', 'view'), (req, res) => {
   try {
     const { barcode } = req.body;
     if (!barcode) return res.status(400).json({ error: 'الباركود مطلوب' });
@@ -280,11 +280,11 @@ WHERE emp_code = ? AND status = 'active'
       emp_code: emp.emp_code,
       time: currentTime
     });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/hr/attendance/import — Excel import
-router.post('/attendance/import', requireRole('superadmin', 'hr'), upload.single('file'), (req, res) => {
+router.post('/attendance/import', requirePermission('hr', 'edit'), upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'يرجى رفع ملف Excel' });
     const { period_month } = req.body;
@@ -425,11 +425,11 @@ router.post('/attendance/import', requireRole('superadmin', 'hr'), upload.single
 
     logAudit(req, 'CREATE', 'attendance_import', batchId, `${period_month} (${imported} records)`);
     res.json({ imported, errors, batch_id: batchId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/hr/attendance — list with filters
-router.get('/attendance', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.get('/attendance', requirePermission('hr', 'view'), (req, res) => {
   try {
     const { employee_id, month } = req.query;
     const conditions = [];
@@ -445,11 +445,11 @@ router.get('/attendance', requireRole('superadmin', 'hr', 'manager'), (req, res)
     `).all(...params);
 
     res.json(records);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/hr/attendance/summary/:month — monthly summary per employee
-router.get('/attendance/summary/:month', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.get('/attendance/summary/:month', requirePermission('hr', 'view'), (req, res) => {
   try {
     const month = req.params.month;
     const summary = db.prepare(`
@@ -466,11 +466,11 @@ router.get('/attendance/summary/:month', requireRole('superadmin', 'hr', 'manage
     `).all(month + '%');
 
     res.json(summary);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PUT /api/hr/attendance/:id — update single record
-router.put('/attendance/:id', requireRole('superadmin', 'hr'), (req, res) => {
+router.put('/attendance/:id', requirePermission('hr', 'edit'), (req, res) => {
   try {
     const old = db.prepare('SELECT * FROM attendance WHERE id = ?').get(req.params.id);
     if (!old) return res.status(404).json({ error: 'السجل غير موجود' });
@@ -481,11 +481,11 @@ router.put('/attendance/:id', requireRole('superadmin', 'hr'), (req, res) => {
         late_minutes ?? old.late_minutes, notes ?? old.notes, old.id);
 
     res.json({ message: 'تم تحديث السجل' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/hr/attendance/bulk — manual bulk entry
-router.post('/attendance/bulk', requireRole('superadmin', 'hr'), (req, res) => {
+router.post('/attendance/bulk', requirePermission('hr', 'edit'), (req, res) => {
   try {
     const { records } = req.body;
     if (!records || !records.length) return res.status(400).json({ error: 'لا توجد سجلات' });
@@ -508,7 +508,7 @@ router.post('/attendance/bulk', requireRole('superadmin', 'hr'), (req, res) => {
 
     logAudit(req, 'CREATE', 'attendance', null, `bulk (${records.length} records)`);
     res.json({ message: `تم إدخال ${records.length} سجل حضور` });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -516,15 +516,15 @@ router.post('/attendance/bulk', requireRole('superadmin', 'hr'), (req, res) => {
 // ═══════════════════════════════════════════════
 
 // GET /api/hr/payroll — list periods
-router.get('/payroll', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.get('/payroll', requirePermission('hr', 'view'), (req, res) => {
   try {
     const periods = db.prepare('SELECT * FROM payroll_periods ORDER BY period_month DESC').all();
     res.json(periods);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/hr/payroll/periods — create period
-router.post('/payroll/periods', requireRole('superadmin', 'hr'), (req, res) => {
+router.post('/payroll/periods', requirePermission('hr', 'create'), (req, res) => {
   try {
     const { period_month } = req.body;
     if (!period_month) return res.status(400).json({ error: 'الشهر مطلوب' });
@@ -542,11 +542,11 @@ router.post('/payroll/periods', requireRole('superadmin', 'hr'), (req, res) => {
 
     logAudit(req, 'CREATE', 'payroll_period', result.lastInsertRowid, periodName);
     res.json({ id: result.lastInsertRowid, message: 'تم إنشاء كشف الرواتب' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/hr/payroll/:periodId/calculate — calculate payroll
-router.post('/payroll/:periodId/calculate', requireRole('superadmin', 'hr'), (req, res) => {
+router.post('/payroll/:periodId/calculate', requirePermission('hr', 'edit'), (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(req.params.periodId);
     if (!period) return res.status(404).json({ error: 'كشف الرواتب غير موجود' });
@@ -621,7 +621,7 @@ router.post('/payroll/:periodId/calculate', requireRole('superadmin', 'hr'), (re
 
     logAudit(req, 'UPDATE', 'payroll_period', period.id, `Calculate ${period.period_name}`);
     res.json({ message: 'تم احتساب الرواتب بنجاح', total_gross: totalGross, total_net: totalNet, employees_count: employees.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 function calculateEmployeePay(employee, attendanceSummary, adjustments) {
@@ -646,7 +646,7 @@ function calculateEmployeePay(employee, attendanceSummary, adjustments) {
     base_pay = 0; // added as adjustment
   }
 
-  const overtime_pay = attendanceSummary.overtime_hours * hourly_rate * employee.overtime_rate_multiplier;
+  const overtime_pay = attendanceSummary.overtime_hours * hourly_rate * (employee.overtime_rate_multiplier || 1.5);
 
   const housing = employee.housing_allowance;
   const transport = employee.transport_allowance;
@@ -688,7 +688,7 @@ function calculateEmployeePay(employee, attendanceSummary, adjustments) {
 }
 
 // GET /api/hr/payroll/:periodId — full period details
-router.get('/payroll/:periodId', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.get('/payroll/:periodId', requirePermission('hr', 'view'), (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(req.params.periodId);
     if (!period) return res.status(404).json({ error: 'كشف الرواتب غير موجود' });
@@ -702,11 +702,11 @@ router.get('/payroll/:periodId', requireRole('superadmin', 'hr', 'manager'), (re
     `).all(period.id);
 
     res.json({ ...period, records });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/hr/payroll/:periodId/approve
-router.patch('/payroll/:periodId/approve', requireRole('superadmin', 'manager'), (req, res) => {
+router.patch('/payroll/:periodId/approve', requirePermission('hr', 'edit'), (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(req.params.periodId);
     if (!period) return res.status(404).json({ error: 'كشف الرواتب غير موجود' });
@@ -717,11 +717,11 @@ router.patch('/payroll/:periodId/approve', requireRole('superadmin', 'manager'),
 
     logAudit(req, 'UPDATE', 'payroll_period', period.id, `Approve ${period.period_name}`);
     res.json({ message: 'تم اعتماد كشف الرواتب' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/hr/payroll/:periodId/pay
-router.patch('/payroll/:periodId/pay', requireRole('superadmin', 'manager'), (req, res) => {
+router.patch('/payroll/:periodId/pay', requirePermission('hr', 'edit'), (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(req.params.periodId);
     if (!period) return res.status(404).json({ error: 'كشف الرواتب غير موجود' });
@@ -733,11 +733,11 @@ router.patch('/payroll/:periodId/pay', requireRole('superadmin', 'manager'), (re
 
     logAudit(req, 'UPDATE', 'payroll_period', period.id, `Pay ${period.period_name}`);
     res.json({ message: 'تم تأكيد صرف الرواتب' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/hr/payroll/:periodId/slip/:employeeId — payslip
-router.get('/payroll/:periodId/slip/:employeeId', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.get('/payroll/:periodId/slip/:employeeId', requirePermission('hr', 'view'), (req, res) => {
   try {
     const record = db.prepare(`
       SELECT pr.*, e.emp_code, e.full_name, e.department, e.job_title, e.salary_type,
@@ -751,11 +751,11 @@ router.get('/payroll/:periodId/slip/:employeeId', requireRole('superadmin', 'hr'
 
     if (!record) return res.status(404).json({ error: 'سجل الراتب غير موجود' });
     res.json(record);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/hr/adjustments
-router.post('/adjustments', requireRole('superadmin', 'hr'), (req, res) => {
+router.post('/adjustments', requirePermission('hr', 'create'), (req, res) => {
   try {
     const { employee_id, period_id, adj_type, amount, description } = req.body;
     if (!employee_id || !adj_type || !amount || !description) {
@@ -768,15 +768,15 @@ router.post('/adjustments', requireRole('superadmin', 'hr'), (req, res) => {
 
     logAudit(req, 'CREATE', 'hr_adjustment', result.lastInsertRowid, `${adj_type}: ${description}`);
     res.json({ id: result.lastInsertRowid, message: 'تم إضافة التعديل' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/hr/adjustments/:employeeId
-router.get('/adjustments/:employeeId', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.get('/adjustments/:employeeId', requirePermission('hr', 'view'), (req, res) => {
   try {
     const adjs = db.prepare('SELECT * FROM hr_adjustments WHERE employee_id = ? ORDER BY created_at DESC').all(req.params.employeeId);
     res.json(adjs);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -784,7 +784,7 @@ router.get('/adjustments/:employeeId', requireRole('superadmin', 'hr', 'manager'
 // ═══════════════════════════════════════════════
 
 // GET /api/hr/leaves
-router.get('/leaves', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.get('/leaves', requirePermission('hr', 'view'), (req, res) => {
   try {
     const leaves = db.prepare(`
       SELECT lr.*, e.full_name as employee_name, e.emp_code as employee_code
@@ -793,11 +793,11 @@ router.get('/leaves', requireRole('superadmin', 'hr', 'manager'), (req, res) => 
       ORDER BY lr.created_at DESC
     `).all();
     res.json(leaves);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/hr/leaves
-router.post('/leaves', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.post('/leaves', requirePermission('hr', 'create'), (req, res) => {
   try {
     const { employee_id, leave_type, start_date, end_date, reason } = req.body;
     if (!employee_id || !start_date || !end_date) return res.status(400).json({ error: 'الموظف وتواريخ الإجازة مطلوبة' });
@@ -814,11 +814,11 @@ router.post('/leaves', requireRole('superadmin', 'hr', 'manager'), (req, res) =>
       LEFT JOIN employees e ON e.id = lr.employee_id WHERE lr.id = ?
     `).get(result.lastInsertRowid);
     res.status(201).json(leave);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/hr/leaves/:id — approve/reject
-router.patch('/leaves/:id', requireRole('superadmin', 'hr', 'manager'), (req, res) => {
+router.patch('/leaves/:id', requirePermission('hr', 'view'), (req, res) => {
   try {
     const { status } = req.body;
     if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'الحالة غير صالحة' });
@@ -843,7 +843,7 @@ router.patch('/leaves/:id', requireRole('superadmin', 'hr', 'manager'), (req, re
     }
 
     res.json({ message: status === 'approved' ? 'تم قبول الطلب' : 'تم رفض الطلب' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

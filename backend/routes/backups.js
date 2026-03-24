@@ -13,7 +13,7 @@ router.get('/', requirePermission('backups', 'read'), (req, res) => {
   try {
     const rows = db.prepare('SELECT b.*, u.full_name as created_by_name FROM backups b LEFT JOIN users u ON u.id=b.created_by ORDER BY b.created_at DESC').all();
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/backups — create a database backup
@@ -41,7 +41,7 @@ router.post('/', requirePermission('backups', 'create'), (req, res) => {
         .run(filename, filePath, err.message, req.user.id);
       res.status(500).json({ error: `فشل النسخ الاحتياطي: ${err.message}` });
     });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/backups/:id/restore — restore from a backup
@@ -56,10 +56,9 @@ router.post('/:id/restore', requirePermission('backups', 'create'), (req, res) =
     logAudit(req, 'RESTORE_REQUEST', 'database', backup.id, backup.file_name);
     res.json({ 
       message: 'لاستعادة النسخة الاحتياطية، يجب إيقاف الخادم واستبدال ملف قاعدة البيانات يدوياً',
-      file_path: backup.file_path,
       file_name: backup.file_name
     });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // DELETE /api/backups/:id
@@ -76,7 +75,7 @@ router.delete('/:id', requirePermission('backups', 'delete'), (req, res) => {
     db.prepare('DELETE FROM backups WHERE id=?').run(id);
     logAudit(req, 'DELETE', 'backup', id, backup.file_name);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;

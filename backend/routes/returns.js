@@ -19,7 +19,7 @@ router.get('/sales', requirePermission('returns', 'read'), (req, res) => {
       FROM sales_returns sr LEFT JOIN customers c ON c.id=sr.customer_id LEFT JOIN invoices i ON i.id=sr.invoice_id
       WHERE ${where} ORDER BY sr.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
     res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/returns/sales
@@ -45,7 +45,7 @@ router.post('/sales', requirePermission('returns', 'create'), (req, res) => {
 
     logAudit(req, 'CREATE', 'sales_return', retId, retNum);
     res.status(201).json({ id: retId, return_number: retNum });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/returns/sales/:id
@@ -55,7 +55,7 @@ router.get('/sales/:id', requirePermission('returns', 'read'), (req, res) => {
     if (!sr) return res.status(404).json({ error: 'مرتجع غير موجود' });
     sr.items = db.prepare('SELECT * FROM sales_return_items WHERE return_id=?').all(sr.id);
     res.json(sr);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/returns/sales/:id/approve — approve & adjust stock
@@ -69,7 +69,7 @@ router.patch('/sales/:id/approve', requirePermission('returns', 'update'), (req,
     db.prepare("UPDATE sales_returns SET status='approved' WHERE id=?").run(id);
     logAudit(req, 'APPROVE', 'sales_return', id, sr.return_number);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // ═══════════════════════════════════════════════
@@ -88,7 +88,7 @@ router.get('/purchases', requirePermission('returns', 'read'), (req, res) => {
       FROM purchase_returns pr LEFT JOIN suppliers s ON s.id=pr.supplier_id LEFT JOIN purchase_orders po ON po.id=pr.purchase_order_id
       WHERE ${where} ORDER BY pr.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
     res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // POST /api/returns/purchases
@@ -113,7 +113,7 @@ router.post('/purchases', requirePermission('returns', 'create'), (req, res) => 
 
     logAudit(req, 'CREATE', 'purchase_return', retId, retNum);
     res.status(201).json({ id: retId, return_number: retNum });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/returns/purchases/:id
@@ -123,7 +123,7 @@ router.get('/purchases/:id', requirePermission('returns', 'read'), (req, res) =>
     if (!pr) return res.status(404).json({ error: 'مرتجع غير موجود' });
     pr.items = db.prepare('SELECT * FROM purchase_return_items WHERE return_id=?').all(pr.id);
     res.json(pr);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // PATCH /api/returns/purchases/:id/approve
@@ -137,7 +137,7 @@ router.patch('/purchases/:id/approve', requirePermission('returns', 'update'), (
     db.prepare("UPDATE purchase_returns SET status='approved' WHERE id=?").run(id);
     logAudit(req, 'APPROVE', 'purchase_return', id, pr.return_number);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 module.exports = router;
