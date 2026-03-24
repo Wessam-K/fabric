@@ -125,6 +125,7 @@ router.put('/:id', requirePermission('maintenance', 'edit'), (req, res) => {
   try {
     const old = db.prepare('SELECT * FROM maintenance_orders WHERE id=? AND is_deleted=0').get(req.params.id);
     if (!old) return res.status(404).json({ error: 'أمر الصيانة غير موجود' });
+    if (['completed', 'cancelled'].includes(old.status)) return res.status(400).json({ error: 'لا يمكن تعديل أمر صيانة مكتمل أو ملغي' });
     const { machine_id, maintenance_type, title, description, priority, status, scheduled_date, completed_date, performed_by, cost, parts_used, notes } = req.body;
 
     let finalCompletedDate = completed_date !== undefined ? completed_date : old.completed_date;

@@ -8,7 +8,7 @@ const { logAudit, requirePermission } = require('../middleware/auth');
 // ═══════════════════════════════════════════════
 
 // GET /api/quotations
-router.get('/', requirePermission('quotations', 'read'), (req, res) => {
+router.get('/', requirePermission('quotations', 'view'), (req, res) => {
   try {
     const { status, customer_id, search, page = 1, limit = 25 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -27,7 +27,7 @@ router.get('/', requirePermission('quotations', 'read'), (req, res) => {
 });
 
 // GET /api/quotations/next-number
-router.get('/next-number', requirePermission('quotations', 'read'), (req, res) => {
+router.get('/next-number', requirePermission('quotations', 'view'), (req, res) => {
   try {
     const prefix = db.prepare("SELECT value FROM settings WHERE key='quotation_number_prefix'").get()?.value || 'QT-';
     const last = db.prepare('SELECT quotation_number FROM quotations ORDER BY id DESC LIMIT 1').get();
@@ -37,7 +37,7 @@ router.get('/next-number', requirePermission('quotations', 'read'), (req, res) =
 });
 
 // GET /api/quotations/:id
-router.get('/:id', requirePermission('quotations', 'read'), (req, res) => {
+router.get('/:id', requirePermission('quotations', 'view'), (req, res) => {
   try {
     const q = db.prepare(`SELECT q.*, c.name as customer_name, c.email as customer_email, c.phone as customer_phone
       FROM quotations q LEFT JOIN customers c ON c.id=q.customer_id WHERE q.id=?`).get(req.params.id);
@@ -52,6 +52,8 @@ router.post('/', requirePermission('quotations', 'create'), (req, res) => {
   try {
     const { quotation_number, customer_id, valid_until, notes, discount_percent, tax_percent, items } = req.body;
     if (!customer_id || !items?.length) return res.status(400).json({ error: 'العميل والأصناف مطلوبان' });
+    if (discount_percent != null && parseFloat(discount_percent) < 0) return res.status(400).json({ error: 'نسبة الخصم لا يمكن أن تكون سالبة' });
+    if (tax_percent != null && parseFloat(tax_percent) < 0) return res.status(400).json({ error: 'نسبة الضريبة لا يمكن أن تكون سالبة' });
 
     let subtotal = 0;
     for (const it of items) { subtotal += (it.quantity || 0) * (it.unit_price || 0); }
@@ -77,7 +79,7 @@ router.post('/', requirePermission('quotations', 'create'), (req, res) => {
 });
 
 // PUT /api/quotations/:id
-router.put('/:id', requirePermission('quotations', 'update'), (req, res) => {
+router.put('/:id', requirePermission('quotations', 'edit'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const old = db.prepare('SELECT * FROM quotations WHERE id=?').get(id);
@@ -85,6 +87,8 @@ router.put('/:id', requirePermission('quotations', 'update'), (req, res) => {
     if (old.status === 'accepted') return res.status(400).json({ error: 'لا يمكن تعديل عرض سعر مقبول' });
 
     const { customer_id, valid_until, notes, discount_percent, tax_percent, items, status } = req.body;
+    if (discount_percent != null && parseFloat(discount_percent) < 0) return res.status(400).json({ error: 'نسبة الخصم لا يمكن أن تكون سالبة' });
+    if (tax_percent != null && parseFloat(tax_percent) < 0) return res.status(400).json({ error: 'نسبة الضريبة لا يمكن أن تكون سالبة' });
 
     let subtotal = old.subtotal;
     if (items?.length) {
@@ -161,7 +165,7 @@ router.delete('/:id', requirePermission('quotations', 'delete'), (req, res) => {
 // ═══════════════════════════════════════════════
 
 // GET /api/quotations/sales-orders
-router.get('/sales-orders/list', requirePermission('sales_orders', 'read'), (req, res) => {
+router.get('/sales-orders/list', requirePermission('sales_orders', 'view'), (req, res) => {
   try {
     const { status, customer_id, page = 1, limit = 25 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -179,7 +183,7 @@ router.get('/sales-orders/list', requirePermission('sales_orders', 'read'), (req
 });
 
 // GET /api/quotations/sales-orders/:id
-router.get('/sales-orders/:id', requirePermission('sales_orders', 'read'), (req, res) => {
+router.get('/sales-orders/:id', requirePermission('sales_orders', 'view'), (req, res) => {
   try {
     const so = db.prepare(`SELECT so.*, c.name as customer_name FROM sales_orders so LEFT JOIN customers c ON c.id=so.customer_id WHERE so.id=?`).get(req.params.id);
     if (!so) return res.status(404).json({ error: 'أمر البيع غير موجود' });
@@ -189,7 +193,7 @@ router.get('/sales-orders/:id', requirePermission('sales_orders', 'read'), (req,
 });
 
 // POST /api/quotations/sales-orders/:id/convert-to-wo
-router.post('/sales-orders/:id/convert-to-wo', requirePermission('workorders', 'create'), (req, res) => {
+router.post('/sales-orders/:id/convert-to-wo', requirePermission('work_orders', 'create'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const so = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(id);
@@ -216,7 +220,7 @@ router.post('/sales-orders/:id/convert-to-wo', requirePermission('workorders', '
 });
 
 // PATCH /api/quotations/sales-orders/:id/status
-router.patch('/sales-orders/:id/status', requirePermission('sales_orders', 'update'), (req, res) => {
+router.patch('/sales-orders/:id/status', requirePermission('sales_orders', 'edit'), (req, res) => {
   try {
     const { status } = req.body;
     db.prepare('UPDATE sales_orders SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status, req.params.id);

@@ -201,14 +201,12 @@ router.get('/vat-summary', requirePermission('accounting', 'view'), (req, res) =
     if (to) { purchaseDateCond += ' AND po.created_at <= ?'; purchaseParams.push(to); }
 
     const purchases = db.prepare(`
-      SELECT COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total
+      SELECT COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total,
+        COALESCE(SUM(CASE WHEN COALESCE(tax_pct,0) > 0 THEN total_amount * tax_pct / (100 + tax_pct) ELSE 0 END), 0) AS tax
       FROM purchase_orders po WHERE ${purchaseDateCond} AND status != 'cancelled'
     `).get(...purchaseParams);
 
-    // Get VAT rate from settings (default 14%)
-    const vatSetting = db.prepare("SELECT value FROM settings WHERE key='tax_rate'").get();
-    const vatRate = (parseFloat(vatSetting?.value) || 14) / 100;
-    const purchaseVat = purchases.total * vatRate / (1 + vatRate);
+    const purchaseVat = purchases.tax;
 
     res.json({
       sales_vat: sales.tax,

@@ -82,13 +82,23 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
     const { invoice_number, customer_name, customer_phone, customer_email, customer_id, notes, tax_pct, discount, due_date, items, status } = req.body;
     if (!invoice_number || !customer_name) return res.status(400).json({ error: 'رقم الفاتورة واسم العميل مطلوبين' });
 
+    // Validate item values
+    if (items?.length) {
+      for (const item of items) {
+        if ((parseFloat(item.quantity) || 0) < 0 || (parseFloat(item.unit_price) || 0) < 0) {
+          return res.status(400).json({ error: 'الكمية والسعر يجب أن تكون قيم موجبة' });
+        }
+      }
+    }
+
     // Check duplicate
     const exists = db.prepare('SELECT id FROM invoices WHERE invoice_number = ?').get(invoice_number);
     if (exists) return res.status(409).json({ error: 'رقم الفاتورة موجود بالفعل' });
 
     const subtotal = (items || []).reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
-    const taxAmt = subtotal * ((parseFloat(tax_pct) || 0) / 100);
-    const total = subtotal + taxAmt - (parseFloat(discount) || 0);
+    const discountAmt = parseFloat(discount) || 0;
+    const taxAmt = (subtotal - discountAmt) * ((parseFloat(tax_pct) || 0) / 100);
+    const total = subtotal - discountAmt + taxAmt;
 
     const ins = db.prepare(`INSERT INTO invoices (invoice_number, customer_name, customer_phone, customer_email, customer_id, notes, subtotal, tax_pct, discount, total, status, due_date)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -129,12 +139,14 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
     let total = invoice.total;
     if (items) {
       subtotal = items.reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
-      const taxAmt = subtotal * ((parseFloat(tax_pct) || invoice.tax_pct || 0) / 100);
-      total = subtotal + taxAmt - (parseFloat(discount) || invoice.discount || 0);
+      const disc = parseFloat(discount) || invoice.discount || 0;
+      const taxAmt = (subtotal - disc) * ((parseFloat(tax_pct) || invoice.tax_pct || 0) / 100);
+      total = subtotal - disc + taxAmt;
     } else if (tax_pct !== undefined || discount !== undefined) {
       subtotal = invoice.subtotal;
-      const taxAmt = subtotal * (((parseFloat(tax_pct) ?? invoice.tax_pct) || 0) / 100);
-      total = subtotal + taxAmt - ((parseFloat(discount) ?? invoice.discount) || 0);
+      const disc = (parseFloat(discount) ?? invoice.discount) || 0;
+      const taxAmt = (subtotal - disc) * (((parseFloat(tax_pct) ?? invoice.tax_pct) || 0) / 100);
+      total = subtotal - disc + taxAmt;
     }
 
     db.prepare(`UPDATE invoices SET customer_name=?, customer_phone=?, customer_email=?, customer_id=?, notes=?, subtotal=?, tax_pct=?, discount=?, total=?, status=?, due_date=?, updated_at=datetime('now')
@@ -172,19 +184,35 @@ router.patch('/:id/status', requirePermission('invoices', 'edit'), (req, res) =>
     if (!['draft', 'sent', 'paid', 'overdue', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'حالة غير صالحة' });
     }
-    const invoice = db.prepare('SELECT id FROM invoices WHERE id = ?').get(req.params.id);
+    const invoice = db.prepare('SELECT id, status FROM invoices WHERE id = ?').get(req.params.id);
     if (!invoice) return res.status(404).json({ error: 'الفاتورة غير موجودة' });
+
+    // Status transition validation
+    const validTransitions = {
+      draft: ['sent', 'cancelled'],
+      sent: ['paid', 'overdue', 'cancelled'],
+      overdue: ['paid', 'cancelled'],
+      paid: [],
+      cancelled: ['draft'],
+    };
+    const allowed = validTransitions[invoice.status] || [];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ error: `لا يمكن تغيير الحالة من "${invoice.status}" إلى "${status}"` });
+    }
+
     db.prepare("UPDATE invoices SET status=?, updated_at=datetime('now') WHERE id=?").run(status, req.params.id);
     res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE /api/invoices/:id
+// DELETE /api/invoices/:id — soft-cancel (preserve audit trail)
 router.delete('/:id', requirePermission('invoices', 'delete'), (req, res) => {
   try {
-    db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM invoices WHERE id = ?').run(req.params.id);
-    logAudit(req, 'DELETE', 'invoice', req.params.id, `INV#${req.params.id}`);
+    const invoice = db.prepare('SELECT id, status FROM invoices WHERE id = ?').get(req.params.id);
+    if (!invoice) return res.status(404).json({ error: 'الفاتورة غير موجودة' });
+    if (invoice.status === 'paid') return res.status(400).json({ error: 'لا يمكن حذف فاتورة مدفوعة' });
+    db.prepare("UPDATE invoices SET status='cancelled', updated_at=datetime('now') WHERE id=?").run(req.params.id);
+    logAudit(req, 'DELETE', 'invoice', req.params.id, `INV#${req.params.id} cancelled`);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

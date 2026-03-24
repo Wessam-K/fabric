@@ -764,11 +764,16 @@ router.post('/:id/finalize', requirePermission('work_orders', 'edit'), (req, res
       }
 
       // V8: Calculate real cost from consumption tables
+      // NOTE: wo_fabric_consumption tracks production use (actual_meters × price).
+      //       wo_waste tracks ad-hoc waste. wo_fabric_batches tracks batch-level waste.
+      //       When V8 consumption exists, batch waste may already be reflected in consumption records,
+      //       so we only add wo_waste (manual) to avoid potential double-count.
       const fabricCost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_fabric_consumption WHERE work_order_id=?').get(woId).v;
       const accessoryCost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_accessory_consumption WHERE work_order_id=?').get(woId).v;
       const wasteFromWoWaste = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as v FROM wo_waste WHERE work_order_id=?').get(woId).v;
       const wasteFromBatches = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as v FROM wo_fabric_batches WHERE wo_id=? AND waste_cost > 0').get(woId).v;
-      const wasteCost = wasteFromWoWaste + wasteFromBatches;
+      // When V8 consumption data exists, only count manual waste to avoid double-counting batch waste
+      const wasteCost = fabricCost > 0 ? wasteFromWoWaste : (wasteFromWoWaste + wasteFromBatches);
 
       // Fall back to calculated cost if no consumption recorded
       const cost = calculateWOCost(woId);

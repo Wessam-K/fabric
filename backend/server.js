@@ -147,7 +147,7 @@ app.post('/api/setup/create-admin', (req, res) => {
     if (count > 0) return res.status(403).json({ error: 'تم إكمال الإعداد بالفعل' });
     const { username, full_name, password } = req.body;
     if (!username || !full_name || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
-    if (password.length < 6) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' });
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/\d/.test(password)) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل مع حرف كبير ورقم' });
     const hash = bcrypt.hashSync(password, 12);
     const result = db.prepare('INSERT INTO users (username, full_name, password_hash, role, status) VALUES (?,?,?,?,?)')
       .run(username, full_name, hash, 'superadmin', 'active');
@@ -200,7 +200,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     const completedThisMonth = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month')").get().c;
     const urgentOrders = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE priority='urgent' AND status NOT IN ('completed','cancelled')").get().c;
     const pendingInvoices = db.prepare("SELECT COUNT(*) as c FROM invoices WHERE status IN ('draft','sent','overdue')").get().c;
-    const outstandingPayables = db.prepare(`SELECT COALESCE(SUM(total_amount - paid_amount), 0) as b FROM purchase_orders WHERE status NOT IN ('cancelled','draft')`).get().b || 0;
+    const outstandingPayables = db.prepare(`SELECT COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as b FROM purchase_orders WHERE status NOT IN ('cancelled','draft')`).get().b || 0;
     const totalSuppliers = db.prepare("SELECT COUNT(*) as c FROM suppliers WHERE status='active'").get().c;
 
     const recentWorkOrders = db.prepare(`

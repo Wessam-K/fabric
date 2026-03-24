@@ -41,13 +41,24 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
         if (sz.length) totalPieces = sz.reduce((s, r) => s + (r.qty_s||0) + (r.qty_m||0) + (r.qty_l||0) + (r.qty_xl||0) + (r.qty_2xl||0) + (r.qty_3xl||0), 0);
       }
 
-      // Fabric requirements from wo_fabrics
+      // Fabric requirements from wo_fabrics (V3 legacy)
       const woFabrics = db.prepare('SELECT * FROM wo_fabrics WHERE wo_id=?').all(wo.id);
       for (const wf of woFabrics) {
         const key = wf.fabric_code || `id_${wf.fabric_id}`;
         if (!fabricNeeds[key]) fabricNeeds[key] = { id: wf.fabric_id, code: wf.fabric_code, required: 0, woIds: [] };
-        fabricNeeds[key].required += (wf.consumption_per_piece || 0) * totalPieces;
+        fabricNeeds[key].required += (wf.meters_per_piece || 0) * totalPieces;
         fabricNeeds[key].woIds.push(wo.id);
+      }
+
+      // Fabric requirements from wo_fabric_batches (V4 batch-based)
+      if (!woFabrics.length) {
+        const woBatches = db.prepare('SELECT fabric_code, planned_meters_per_piece, planned_total_meters FROM wo_fabric_batches WHERE wo_id=?').all(wo.id);
+        for (const bf of woBatches) {
+          const key = bf.fabric_code;
+          if (!fabricNeeds[key]) fabricNeeds[key] = { id: 0, code: bf.fabric_code, required: 0, woIds: [] };
+          fabricNeeds[key].required += bf.planned_total_meters || ((bf.planned_meters_per_piece || 0) * totalPieces);
+          if (!fabricNeeds[key].woIds.includes(wo.id)) fabricNeeds[key].woIds.push(wo.id);
+        }
       }
 
       // Accessory requirements
@@ -72,8 +83,8 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
 
         const onHand = db.prepare('SELECT COALESCE(SUM(available_meters),0) as v FROM fabric_inventory_batches WHERE fabric_code=? AND batch_status=?').get(fabric.code, 'available')?.v || 0;
         const onOrder = db.prepare(`SELECT COALESCE(SUM(poi.quantity),0) as v FROM purchase_order_items poi 
-          JOIN purchase_orders po ON po.id=poi.purchase_order_id 
-          WHERE poi.item_code=? AND po.status IN ('sent','partial')`).get(fabric.code)?.v || 0;
+          JOIN purchase_orders po ON po.id=poi.po_id 
+          WHERE poi.fabric_code=? AND po.status IN ('sent','partial')`).get(fabric.code)?.v || 0;
 
         const shortage = Math.max(0, need.required - onHand - onOrder);
         if (shortage > 0) {
@@ -89,8 +100,8 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
 
         const onHand = acc.quantity_on_hand || 0;
         const onOrder = db.prepare(`SELECT COALESCE(SUM(poi.quantity),0) as v FROM purchase_order_items poi 
-          JOIN purchase_orders po ON po.id=poi.purchase_order_id 
-          WHERE poi.item_code=? AND po.status IN ('sent','partial')`).get(acc.code)?.v || 0;
+          JOIN purchase_orders po ON po.id=poi.po_id 
+          WHERE poi.accessory_code=? AND po.status IN ('sent','partial')`).get(acc.code)?.v || 0;
 
         const shortage = Math.max(0, need.required - onHand - onOrder);
         if (shortage > 0) {
@@ -172,8 +183,8 @@ router.post('/:id/auto-po', requirePermission('mrp', 'create'), (req, res) => {
         const poId = poResult.lastInsertRowid;
 
         for (const item of group.items) {
-          db.prepare(`INSERT INTO purchase_order_items (purchase_order_id, item_type, item_code, description, quantity, unit_price, total) VALUES (?,?,?,?,?,?,?)`)
-            .run(poId, item.item_type, item.item_code, item.item_name, item.suggested_qty, item.unit_price, item.total_cost);
+          db.prepare(`INSERT INTO purchase_order_items (po_id, item_type, fabric_code, accessory_code, description, quantity, unit_price) VALUES (?,?,?,?,?,?,?)`)
+            .run(poId, item.item_type, item.item_type === 'fabric' ? item.item_code : null, item.item_type === 'accessory' ? item.item_code : null, item.item_name, item.suggested_qty, item.unit_price);
           db.prepare('UPDATE mrp_suggestions SET po_created=1, po_id=? WHERE id=?').run(poId, item.id);
         }
 

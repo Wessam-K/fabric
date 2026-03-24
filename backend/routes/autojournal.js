@@ -41,7 +41,7 @@ function createJournalEntry(req, description, lines, refType, refId) {
 
   const result = db.prepare(`INSERT INTO journal_entries 
     (entry_number, entry_date, description, reference_type, reference_id, status, total_debit, total_credit, created_by)
-    VALUES (?, datetime('now','localtime'), ?, ?, ?, 'posted', ?, ?, ?)`)
+    VALUES (?, datetime('now','localtime'), ?, ?, ?, 'draft', ?, ?, ?)`)
   .run(entryNumber, description, refType || null, refId || null, totalDebit, totalCredit, req.user?.id || null);
 
   const jeId = result.lastInsertRowid;
@@ -70,7 +70,7 @@ router.post('/invoice/:id', requirePermission('accounting', 'create'), (req, res
 
     const lines = [];
     const totalWithTax = invoice.total || 0;
-    const taxAmount = invoice.tax_amount || 0;
+    const taxAmount = (invoice.subtotal || 0) * ((invoice.tax_pct || 0) / 100);
     const netAmount = totalWithTax - taxAmount;
 
     lines.push({ account_id: ar.id, description: `ذمم مدينة - فاتورة ${invoice.invoice_number}`, debit: totalWithTax, credit: 0 });
@@ -103,8 +103,8 @@ router.post('/po-receipt/:id', requirePermission('accounting', 'create'), (req, 
     if (!inventory || !ap) return res.status(400).json({ error: 'حسابات مطلوبة غير موجودة' });
 
     const totalAmount = po.total_amount || 0;
-    const taxRate = parseFloat(getSetting('tax_rate') || '0') / 100;
-    const taxAmount = totalAmount * taxRate / (1 + taxRate);
+    const taxPct = po.tax_pct || 0;
+    const taxAmount = taxPct > 0 ? totalAmount * (taxPct / 100) / (1 + taxPct / 100) : 0;
     const netAmount = totalAmount - taxAmount;
 
     const lines = [
@@ -160,7 +160,7 @@ router.post('/payroll/:periodId', requirePermission('accounting', 'create'), (re
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id=?').get(periodId);
     if (!period) return res.status(404).json({ error: 'فترة الرواتب غير موجودة' });
 
-    const totalNet = db.prepare('SELECT COALESCE(SUM(net_salary),0) as v FROM payroll_records WHERE period_id=?').get(periodId).v;
+    const totalNet = db.prepare('SELECT COALESCE(SUM(net_pay),0) as v FROM payroll_records WHERE period_id=?').get(periodId).v;
     const totalDeductions = db.prepare('SELECT COALESCE(SUM(total_deductions),0) as v FROM payroll_records WHERE period_id=?').get(periodId).v;
     const totalGross = totalNet + totalDeductions;
 

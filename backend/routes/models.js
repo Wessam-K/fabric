@@ -17,7 +17,7 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilt
 // GET /api/models — list all
 router.get('/', requirePermission('models', 'view'), (req, res) => {
   try {
-    const { search, status, category, gender } = req.query;
+    const { search, status, category, gender, page, limit } = req.query;
     let q = 'SELECT * FROM models WHERE 1=1';
     const p = [];
     if (status) { q += ' AND status = ?'; p.push(status); }
@@ -26,13 +26,20 @@ router.get('/', requirePermission('models', 'view'), (req, res) => {
     if (gender) { q += ' AND gender = ?'; p.push(gender); }
     if (search) { q += ' AND (serial_number LIKE ? OR model_code LIKE ? OR model_name LIKE ?)'; const s = `%${search}%`; p.push(s, s, s); }
     q += ' ORDER BY created_at DESC';
-    const models = db.prepare(q).all(...p);
-    // For each model, attach BOM template count
+
     const countStmt = db.prepare('SELECT COUNT(*) as c FROM bom_templates WHERE model_id = ?');
-    const result = models.map(m => ({
-      ...m,
-      bom_template_count: countStmt.get(m.id).c,
-    }));
+
+    if (page && limit) {
+      const pg = Math.max(1, parseInt(page));
+      const lim = Math.min(200, Math.max(1, parseInt(limit)));
+      const total = db.prepare(q.replace('SELECT *', 'SELECT COUNT(*) as c')).get(...p).c;
+      const rows = db.prepare(q + ' LIMIT ? OFFSET ?').all(...p, lim, (pg - 1) * lim);
+      const data = rows.map(m => ({ ...m, bom_template_count: countStmt.get(m.id).c }));
+      return res.json({ data, total, page: pg, totalPages: Math.ceil(total / lim) });
+    }
+
+    const models = db.prepare(q).all(...p);
+    const result = models.map(m => ({ ...m, bom_template_count: countStmt.get(m.id).c }));
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

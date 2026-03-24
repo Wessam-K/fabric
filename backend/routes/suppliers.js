@@ -107,6 +107,7 @@ router.post('/', requirePermission('suppliers', 'create'), (req, res) => {
   try {
     const { code, name, supplier_type, phone, email, address, contact_name, payment_terms, rating, notes } = req.body;
     if (!code || !name) return res.status(400).json({ error: 'الكود والاسم مطلوبين' });
+    if (rating != null && (rating < 1 || rating > 5)) return res.status(400).json({ error: 'التقييم يجب أن يكون بين 1 و 5' });
     const r = db.prepare(`INSERT INTO suppliers (code,name,supplier_type,phone,email,address,contact_name,payment_terms,rating,notes) VALUES (?,?,?,?,?,?,?,?,?,?)`)
       .run(code, name, supplier_type || 'both', phone || null, email || null, address || null, contact_name || null, payment_terms || null, rating || 3, notes || null);
     const created = db.prepare('SELECT * FROM suppliers WHERE id=?').get(r.lastInsertRowid);
@@ -124,6 +125,7 @@ router.put('/:id', requirePermission('suppliers', 'edit'), (req, res) => {
     const existing = db.prepare('SELECT * FROM suppliers WHERE id=?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { name, supplier_type, phone, email, address, contact_name, payment_terms, rating, status, notes } = req.body;
+    if (rating != null && (rating < 1 || rating > 5)) return res.status(400).json({ error: 'التقييم يجب أن يكون بين 1 و 5' });
     db.prepare(`UPDATE suppliers SET name=COALESCE(?,name),supplier_type=COALESCE(?,supplier_type),phone=COALESCE(?,phone),email=COALESCE(?,email),address=COALESCE(?,address),contact_name=COALESCE(?,contact_name),payment_terms=COALESCE(?,payment_terms),rating=COALESCE(?,rating),status=COALESCE(?,status),notes=COALESCE(?,notes) WHERE id=?`)
       .run(name||null, supplier_type||null, phone||null, email||null, address||null, contact_name||null, payment_terms||null, rating||null, status||null, notes||null, req.params.id);
     const updated = db.prepare('SELECT * FROM suppliers WHERE id=?').get(req.params.id);

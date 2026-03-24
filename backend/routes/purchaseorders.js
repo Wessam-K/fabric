@@ -55,7 +55,7 @@ router.get('/export', (req, res) => {
 });
 
 // POST /api/purchase-orders/import — bulk import
-router.post('/import', requirePermission('purchaseorders', 'create'), (req, res) => {
+router.post('/import', requirePermission('purchase_orders', 'create'), (req, res) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
@@ -94,15 +94,16 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/purchase-orders
-router.post('/', requirePermission('purchaseorders', 'create'), (req, res) => {
+router.post('/', requirePermission('purchase_orders', 'create'), (req, res) => {
   try {
     const { po_number, supplier_id, po_type, expected_date, items, notes, tax_pct, discount } = req.body;
     if (!po_number || !supplier_id) return res.status(400).json({ error: 'رقم أمر الشراء ومعرف المورد مطلوبان' });
 
     const transaction = db.transaction(() => {
       const subtotal = (items || []).reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
-      const taxAmt = subtotal * ((parseFloat(tax_pct) || 0) / 100);
-      const totalAmount = subtotal + taxAmt - (parseFloat(discount) || 0);
+      const disc = parseFloat(discount) || 0;
+      const taxAmt = (subtotal - disc) * ((parseFloat(tax_pct) || 0) / 100);
+      const totalAmount = subtotal - disc + taxAmt;
       const r = db.prepare(`INSERT INTO purchase_orders (po_number,supplier_id,po_type,expected_date,total_amount,tax_pct,discount,notes) VALUES (?,?,?,?,?,?,?,?)`)
         .run(po_number, supplier_id, po_type || 'fabric', expected_date || null, totalAmount, parseFloat(tax_pct) || 0, parseFloat(discount) || 0, notes || null);
       const poId = r.lastInsertRowid;
@@ -130,7 +131,7 @@ router.post('/', requirePermission('purchaseorders', 'create'), (req, res) => {
 });
 
 // PUT /api/purchase-orders/:id
-router.put('/:id', requirePermission('purchaseorders', 'edit'), (req, res) => {
+router.put('/:id', requirePermission('purchase_orders', 'edit'), (req, res) => {
   try {
     const poId = parseInt(req.params.id);
     const existing = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
@@ -141,7 +142,7 @@ router.put('/:id', requirePermission('purchaseorders', 'edit'), (req, res) => {
       const subtotal = items ? items.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0) : null;
       const taxPct = tax_pct !== undefined ? parseFloat(tax_pct) || 0 : existing.tax_pct || 0;
       const disc = discount !== undefined ? parseFloat(discount) || 0 : existing.discount || 0;
-      const totalAmount = subtotal !== null ? subtotal + subtotal * (taxPct / 100) - disc : existing.total_amount;
+      const totalAmount = subtotal !== null ? (subtotal - disc) + (subtotal - disc) * (taxPct / 100) : existing.total_amount;
       db.prepare(`UPDATE purchase_orders SET supplier_id=COALESCE(?,supplier_id),po_type=COALESCE(?,po_type),expected_date=?,total_amount=?,tax_pct=?,discount=?,notes=COALESCE(?,notes) WHERE id=?`)
         .run(supplier_id ?? null, po_type || null, expected_date || null, totalAmount, taxPct, disc, notes || null, poId);
 
@@ -164,7 +165,7 @@ router.put('/:id', requirePermission('purchaseorders', 'edit'), (req, res) => {
 });
 
 // PATCH /api/purchase-orders/:id/status
-router.patch('/:id/status', requirePermission('purchaseorders', 'edit'), (req, res) => {
+router.patch('/:id/status', requirePermission('purchase_orders', 'edit'), (req, res) => {
   try {
     const { status } = req.body;
     const valid = ['draft', 'sent', 'received', 'cancelled'];
@@ -182,7 +183,7 @@ router.patch('/:id/status', requirePermission('purchaseorders', 'edit'), (req, r
 });
 
 // POST /api/purchase-orders/:id/payments
-router.post('/:id/payments', requirePermission('purchaseorders', 'edit'), (req, res) => {
+router.post('/:id/payments', requirePermission('purchase_orders', 'edit'), (req, res) => {
   try {
     const poId = parseInt(req.params.id);
     const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
@@ -203,7 +204,7 @@ router.post('/:id/payments', requirePermission('purchaseorders', 'edit'), (req, 
 });
 
 // PATCH /api/purchase-orders/:id/receive — receive items and create fabric batches
-router.patch('/:id/receive', requirePermission('purchaseorders', 'edit'), (req, res) => {
+router.patch('/:id/receive', requirePermission('purchase_orders', 'edit'), (req, res) => {
   try {
     const poId = parseInt(req.params.id);
     const po = db.prepare(`SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.id=?`).get(poId);
@@ -225,6 +226,7 @@ router.patch('/:id/receive', requirePermission('purchaseorders', 'edit'), (req, 
         if (isNaN(receivedQty) || receivedQty < 0) throw new Error('كمية غير صالحة');
 
         const totalReceived = (poItem.received_qty_actual || 0) + receivedQty;
+        if (totalReceived > poItem.quantity * 1.1) throw new Error(`الكمية المستلمة (${totalReceived}) تتجاوز 110% من الكمية المطلوبة (${poItem.quantity})`);
         const variance = totalReceived - poItem.quantity;
         const varianceNotes = item.variance_notes || null;
         db.prepare('UPDATE purchase_order_items SET received_qty_actual=?, quantity_variance=?, variance_notes=COALESCE(?,variance_notes) WHERE id=?')
@@ -284,7 +286,7 @@ router.patch('/:id/receive', requirePermission('purchaseorders', 'edit'), (req, 
 });
 
 // DELETE /api/purchase-orders/:id
-router.delete('/:id', requirePermission('purchaseorders', 'delete'), (req, res) => {
+router.delete('/:id', requirePermission('purchase_orders', 'delete'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     db.prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?").run(id);

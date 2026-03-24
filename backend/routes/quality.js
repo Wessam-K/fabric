@@ -8,7 +8,7 @@ const { logAudit, requirePermission } = require('../middleware/auth');
 // ═══════════════════════════════════════════════
 
 // GET /api/quality/templates
-router.get('/templates', requirePermission('quality', 'read'), (req, res) => {
+router.get('/templates', requirePermission('quality', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT qt.*, 
       (SELECT COUNT(*) FROM qc_template_items WHERE template_id=qt.id) as item_count
@@ -38,7 +38,7 @@ router.post('/templates', requirePermission('quality', 'create'), (req, res) => 
 });
 
 // GET /api/quality/templates/:id
-router.get('/templates/:id', requirePermission('quality', 'read'), (req, res) => {
+router.get('/templates/:id', requirePermission('quality', 'view'), (req, res) => {
   try {
     const template = db.prepare('SELECT * FROM qc_templates WHERE id=? AND is_active=1').get(req.params.id);
     if (!template) return res.status(404).json({ error: 'القالب غير موجود' });
@@ -48,7 +48,7 @@ router.get('/templates/:id', requirePermission('quality', 'read'), (req, res) =>
 });
 
 // PUT /api/quality/templates/:id
-router.put('/templates/:id', requirePermission('quality', 'update'), (req, res) => {
+router.put('/templates/:id', requirePermission('quality', 'edit'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const old = db.prepare('SELECT * FROM qc_templates WHERE id=? AND is_active=1').get(id);
@@ -84,7 +84,7 @@ router.delete('/templates/:id', requirePermission('quality', 'delete'), (req, re
 // ═══════════════════════════════════════════════
 
 // GET /api/quality/defect-codes
-router.get('/defect-codes', requirePermission('quality', 'read'), (req, res) => {
+router.get('/defect-codes', requirePermission('quality', 'view'), (req, res) => {
   try {
     res.json(db.prepare('SELECT * FROM qc_defect_codes WHERE is_active=1 ORDER BY code').all());
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -107,7 +107,7 @@ router.post('/defect-codes', requirePermission('quality', 'create'), (req, res) 
 // ═══════════════════════════════════════════════
 
 // GET /api/quality/inspections
-router.get('/inspections', requirePermission('quality', 'read'), (req, res) => {
+router.get('/inspections', requirePermission('quality', 'view'), (req, res) => {
   try {
     const { status, work_order_id, page = 1, limit = 25 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -154,7 +154,7 @@ router.post('/inspections', requirePermission('quality', 'create'), (req, res) =
 });
 
 // GET /api/quality/inspections/:id
-router.get('/inspections/:id', requirePermission('quality', 'read'), (req, res) => {
+router.get('/inspections/:id', requirePermission('quality', 'view'), (req, res) => {
   try {
     const insp = db.prepare(`SELECT qi.*, wo.wo_number, qt.name as template_name, u.full_name as inspector_name
       FROM qc_inspections qi 
@@ -172,7 +172,7 @@ router.get('/inspections/:id', requirePermission('quality', 'read'), (req, res) 
 });
 
 // PATCH /api/quality/inspections/:id/complete
-router.patch('/inspections/:id/complete', requirePermission('quality', 'update'), (req, res) => {
+router.patch('/inspections/:id/complete', requirePermission('quality', 'edit'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { passed_qty, failed_qty, result, notes } = req.body;
@@ -191,7 +191,7 @@ router.patch('/inspections/:id/complete', requirePermission('quality', 'update')
 // ═══════════════════════════════════════════════
 
 // GET /api/quality/ncr
-router.get('/ncr', requirePermission('quality', 'read'), (req, res) => {
+router.get('/ncr', requirePermission('quality', 'view'), (req, res) => {
   try {
     const { status, page = 1, limit = 25 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -224,7 +224,7 @@ router.post('/ncr', requirePermission('quality', 'create'), (req, res) => {
 });
 
 // PATCH /api/quality/ncr/:id
-router.patch('/ncr/:id', requirePermission('quality', 'update'), (req, res) => {
+router.patch('/ncr/:id', requirePermission('quality', 'edit'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { status, root_cause, corrective_action, preventive_action, assigned_to } = req.body;

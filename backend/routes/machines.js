@@ -114,6 +114,8 @@ router.post('/', requirePermission('machines', 'create'), (req, res) => {
   try {
     const { code, name, machine_type, location, capacity_per_hour, cost_per_hour, notes, sort_order } = req.body;
     if (!name || !name.trim()) return validationError(res, 'اسم الماكينة مطلوب', 'name');
+    if (capacity_per_hour != null && capacity_per_hour < 0) return validationError(res, 'الطاقة لا يمكن أن تكون سالبة', 'capacity_per_hour');
+    if (cost_per_hour != null && cost_per_hour < 0) return validationError(res, 'التكلفة لا يمكن أن تكون سالبة', 'cost_per_hour');
 
     let machineCode = code;
     if (!machineCode || !machineCode.trim()) {
@@ -158,6 +160,8 @@ router.patch('/:id', requirePermission('machines', 'edit'), (req, res) => {
 
     const { name, machine_type, location, capacity_per_hour, cost_per_hour, status, notes, sort_order } = req.body;
     if (name !== undefined && (!name || !name.trim())) return res.status(400).json({ error: 'اسم الماكينة مطلوب' });
+    if (capacity_per_hour != null && capacity_per_hour < 0) return res.status(400).json({ error: 'الطاقة لا يمكن أن تكون سالبة' });
+    if (cost_per_hour != null && cost_per_hour < 0) return res.status(400).json({ error: 'التكلفة لا يمكن أن تكون سالبة' });
 
     const validStatuses = ['active', 'maintenance', 'inactive'];
     if (status && !validStatuses.includes(status)) return res.status(400).json({ error: 'حالة الماكينة غير صالحة' });
