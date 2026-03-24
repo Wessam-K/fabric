@@ -152,7 +152,7 @@ app.post('/api/setup/create-admin', (req, res) => {
     const result = db.prepare('INSERT INTO users (username, full_name, password_hash, role, status) VALUES (?,?,?,?,?)')
       .run(username, full_name, hash, 'superadmin', 'active');
     res.json({ message: 'تم إنشاء حساب مدير النظام', user_id: result.lastInsertRowid });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ أثناء إنشاء الحساب' }); }
 });
 
 // ═══ Protected routes ═══
@@ -328,7 +328,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       overdue_invoices: overdueInvoicesList,
       overdue_work_orders: overdueWOList,
     });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // Global search
@@ -355,7 +355,7 @@ app.get('/api/search', requireAuth, (req, res) => {
       expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT 8`).all(like, like);
     } catch {}
     res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults, machines });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // Serve built frontend in production (Electron)
@@ -374,7 +374,7 @@ if (fs.existsSync(frontendDist)) {
 // ═══ Global error handler ═══
 app.use((err, req, res, _next) => {
   console.error('Unhandled error:', err.stack || err.message || err);
-  res.status(err.status || 500).json({ error: process.env.NODE_ENV === 'production' ? 'خطأ داخلي في الخادم' : err.message });
+  res.status(err.status || 500).json({ error: 'خطأ داخلي في الخادم' });
 });
 
 const server = app.listen(PORT, () => {

@@ -95,7 +95,7 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
         if (!fabric) continue;
 
         const onHand = db.prepare('SELECT COALESCE(SUM(available_meters),0) as v FROM fabric_inventory_batches WHERE fabric_code=? AND batch_status=?').get(fabric.code, 'available')?.v || 0;
-        const onOrder = db.prepare(`SELECT COALESCE(SUM(poi.quantity),0) as v FROM purchase_order_items poi 
+        const onOrder = db.prepare(`SELECT COALESCE(SUM(poi.quantity - poi.received_qty),0) as v FROM purchase_order_items poi 
           JOIN purchase_orders po ON po.id=poi.po_id 
           WHERE poi.fabric_code=? AND po.status IN ('sent','partial')`).get(fabric.code)?.v || 0;
 
@@ -112,7 +112,7 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
         if (!acc) continue;
 
         const onHand = acc.quantity_on_hand || 0;
-        const onOrder = db.prepare(`SELECT COALESCE(SUM(poi.quantity),0) as v FROM purchase_order_items poi 
+        const onOrder = db.prepare(`SELECT COALESCE(SUM(poi.quantity - poi.received_qty),0) as v FROM purchase_order_items poi 
           JOIN purchase_orders po ON po.id=poi.po_id 
           WHERE poi.accessory_code=? AND po.status IN ('sent','partial')`).get(acc.code)?.v || 0;
 

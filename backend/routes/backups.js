@@ -37,9 +37,10 @@ router.post('/', requirePermission('backups', 'create'), (req, res) => {
       logAudit(req, 'BACKUP', 'database', result.lastInsertRowid, filename);
       res.status(201).json({ id: result.lastInsertRowid, file_name: filename, size: `${sizeMB} MB` });
     }).catch(err => {
+      console.error('Backup failed:', err);
       db.prepare("INSERT INTO backups (file_name, file_path, file_size, description, status, created_by) VALUES (?,?,?,'0','failed',?)")
-        .run(filename, filePath, err.message, req.user.id);
-      res.status(500).json({ error: `فشل النسخ الاحتياطي: ${err.message}` });
+        .run(filename, filePath, 'backup_error', req.user.id);
+      res.status(500).json({ error: 'فشل النسخ الاحتياطي' });
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

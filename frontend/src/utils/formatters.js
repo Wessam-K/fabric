@@ -1,6 +1,6 @@
 /** Shared formatting utilities */
 
-export const fmtNum = (n) => Math.round(n || 0).toLocaleString('ar-EG');
+export const fmtNum = (n) => Number(n || 0).toLocaleString('ar-EG', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 export const fmtMoney = (n) => `${fmtNum(n)} ج`;
 

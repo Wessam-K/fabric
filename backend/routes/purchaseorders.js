@@ -108,8 +108,11 @@ router.post('/', requirePermission('purchase_orders', 'create'), (req, res) => {
       }
     }
 
+    const preSubtotal = (items || []).reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
+    if ((parseFloat(discount) || 0) > preSubtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
+
     const transaction = db.transaction(() => {
-      const subtotal = (items || []).reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
+      const subtotal = preSubtotal;
       const disc = parseFloat(discount) || 0;
       const taxAmt = (subtotal - disc) * ((parseFloat(tax_pct) || 0) / 100);
       const totalAmount = subtotal - disc + taxAmt;
@@ -148,10 +151,17 @@ router.put('/:id', requirePermission('purchase_orders', 'edit'), (req, res) => {
     const { supplier_id, po_type, expected_date, items, notes, tax_pct, discount } = req.body;
 
     const transaction = db.transaction(() => {
-      const subtotal = items ? items.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0) : null;
+      let subtotal;
+      if (items) {
+        subtotal = items.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
+      } else {
+        // Recalculate from existing items when tax/discount changes
+        const existingItems = db.prepare('SELECT quantity, unit_price FROM purchase_order_items WHERE po_id=?').all(poId);
+        subtotal = existingItems.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
+      }
       const taxPct = tax_pct !== undefined ? parseFloat(tax_pct) || 0 : existing.tax_pct || 0;
       const disc = discount !== undefined ? parseFloat(discount) || 0 : existing.discount || 0;
-      const totalAmount = subtotal !== null ? (subtotal - disc) + (subtotal - disc) * (taxPct / 100) : existing.total_amount;
+      const totalAmount = (subtotal - disc) + (subtotal - disc) * (taxPct / 100);
       db.prepare(`UPDATE purchase_orders SET supplier_id=COALESCE(?,supplier_id),po_type=COALESCE(?,po_type),expected_date=?,total_amount=?,tax_pct=?,discount=?,notes=COALESCE(?,notes) WHERE id=?`)
         .run(supplier_id ?? null, po_type || null, expected_date || null, totalAmount, taxPct, disc, notes || null, poId);
 

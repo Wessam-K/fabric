@@ -537,3 +537,36 @@
 
 - **Post all fixes (R7-01 to R7-07)**: 58/58 passing ✅
 - **Frontend build**: Success (0 errors, 2545 modules) ✅
+
+---
+
+## Round 8 — Production Audit: Math/Financial Correctness, Security Hardening
+
+### R8-01 — `autojournal.js`: Invoice Tax Ignores Discount (P0 CRITICAL)
+- Tax was calculated as `subtotal × tax_pct` ignoring discount → unbalanced journal entries
+- Fixed to `(subtotal - discount) × tax_pct` matching invoice formula
+
+### R8-02 — `formatters.js`: fmtNum Loses Decimal Precision
+- `Math.round()` dropped all decimals → cost displays showed only integers
+- Fixed to `toLocaleString('ar-EG', { maximumFractionDigits: 2 })`
+
+### R8-03 — `mrp.js`: On-Order Double-Counts Received Items (P0 CRITICAL)
+- MRP counted full PO `quantity` instead of `quantity - received_qty` → understated shortages
+- Fixed both fabric and accessory on-order queries
+
+### R8-04 — `purchaseorders.js`: PO Total Stale on Tax-Only Update (P0 CRITICAL)
+- Changing `tax_pct` or `discount` without items kept old `total_amount`
+- Fixed: always recalculates from existing items when items not provided
+
+### R8-05 — `invoices.js` + `purchaseorders.js`: Negative Total Prevention
+- Discount > subtotal created negative tax and negative totals
+- Added guard: returns 400 if discount exceeds subtotal (POST + PUT)
+
+### R8-06 — `server.js` + `backups.js`: Error Message Leaks
+- Dashboard, search, setup, backups, and global error handler leaked `err.message`
+- All replaced with generic Arabic error messages
+
+## Test Results — Round 8
+
+- **Post all fixes (R8-01 to R8-06)**: 58/58 passing ✅
+- **Frontend build**: Success (0 errors, 2545 modules) ✅

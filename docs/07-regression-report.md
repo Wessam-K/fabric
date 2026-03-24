@@ -408,3 +408,39 @@ All 104 fixes across Rounds 1–6 pass the full 58-test regression suite. Fronte
 ## Final Conclusion (Round 7)
 
 All 111+ fixes across Rounds 1–7 pass the full 58-test regression suite. Frontend builds clean (0 errors, 2545 modules). Production readiness: **9.2/10**.
+
+---
+
+# Round 8 — Production Audit Regression Report
+
+## Metrics
+
+| Metric | Value |
+|---|---|
+| Test suite | 58 / 58 pass ✅ |
+| Duration | ~530 ms |
+| Frontend build | 2545 modules, 0 errors ✅ |
+| Fixes applied | 6 (R8-01 → R8-06) |
+
+## Files Changed
+
+| # | File | Change |
+|---|---|---|
+| R8-01 | `backend/routes/autojournal.js` | Invoice auto-journal tax now uses `(subtotal − discount) × tax_pct` |
+| R8-02 | `frontend/src/utils/formatters.js` | `fmtNum` preserves up to 2 decimal places |
+| R8-03 | `backend/routes/mrp.js` | On-order qty uses `quantity − received_qty` (fabric + accessory) |
+| R8-04 | `backend/routes/purchaseorders.js` | PUT recalculates subtotal from DB items when items not in body |
+| R8-05 | `backend/routes/invoices.js` + `purchaseorders.js` | Discount > subtotal guard (400 response) |
+| R8-06 | `backend/server.js` + `backend/routes/backups.js` | Generic error messages — no `err.message` leaks |
+
+## Behavioral Changes
+
+1. **Auto-journal entries** for invoices with discounts now match the invoice's own tax calculation exactly — eliminates ledger imbalance
+2. **MRP on-order** correctly reflects only the undelivered portion of purchase orders — prevents over-ordering
+3. **PO edits** (tax/discount only) now recalculate the total from actual line items instead of using stale `total_amount`
+4. **Negative-total invoices/POs** are now impossible — discount exceeding subtotal returns HTTP 400
+5. **Error responses** in setup, dashboard, search, backup, and global handler no longer leak internal error details
+
+## Final Conclusion (Round 8)
+
+All 117+ fixes across Rounds 1–8 pass the full 58-test regression suite. Frontend builds clean (0 errors, 2545 modules). Production readiness: **8.5/10** (GO WITH CONDITIONS — see `docs/audit/09-production-readiness-final.md`).

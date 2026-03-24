@@ -72,7 +72,8 @@ router.post('/invoice/:id', requirePermission('accounting', 'create'), (req, res
 
     const lines = [];
     const totalWithTax = invoice.total || 0;
-    const taxAmount = (invoice.subtotal || 0) * ((invoice.tax_pct || 0) / 100);
+    const discountAmt = invoice.discount || 0;
+    const taxAmount = ((invoice.subtotal || 0) - discountAmt) * ((invoice.tax_pct || 0) / 100);
     const netAmount = totalWithTax - taxAmount;
 
     lines.push({ account_id: ar.id, description: `ذمم مدينة - فاتورة ${invoice.invoice_number}`, debit: totalWithTax, credit: 0 });

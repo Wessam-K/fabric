@@ -97,6 +97,7 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
 
     const subtotal = (items || []).reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
     const discountAmt = parseFloat(discount) || 0;
+    if (discountAmt > subtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
     const taxAmt = (subtotal - discountAmt) * ((parseFloat(tax_pct) || 0) / 100);
     const total = subtotal - discountAmt + taxAmt;
 
@@ -141,11 +142,13 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
     if (items) {
       subtotal = items.reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
       const disc = parseFloat(discount) || invoice.discount || 0;
+      if (disc > subtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
       const taxAmt = (subtotal - disc) * ((parseFloat(tax_pct) || invoice.tax_pct || 0) / 100);
       total = subtotal - disc + taxAmt;
     } else if (tax_pct !== undefined || discount !== undefined) {
       subtotal = invoice.subtotal;
       const disc = (parseFloat(discount) ?? invoice.discount) || 0;
+      if (disc > subtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
       const taxAmt = (subtotal - disc) * (((parseFloat(tax_pct) ?? invoice.tax_pct) || 0) / 100);
       total = subtotal - disc + taxAmt;
     }
