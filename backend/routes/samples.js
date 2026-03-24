@@ -86,27 +86,32 @@ router.put('/:id', requirePermission('samples', 'edit'), (req, res) => {
 });
 
 // POST /api/samples/:id/convert-to-wo
-router.post('/:id/convert-to-wo', requirePermission('workorders', 'create'), (req, res) => {
+router.post('/:id/convert-to-wo', requirePermission('work_orders', 'create'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const s = db.prepare('SELECT * FROM samples WHERE id=?').get(id);
     if (!s) return res.status(404).json({ error: 'العينة غير موجودة' });
     if (s.status !== 'approved') return res.status(400).json({ error: 'يمكن التحويل فقط من عينة معتمدة' });
 
-    const lastWo = db.prepare('SELECT wo_number FROM work_orders ORDER BY id DESC LIMIT 1').get();
-    const woNum = lastWo ? parseInt(String(lastWo.wo_number).replace(/\D/g, '')) + 1 : 1;
-    const woNumber = `WO-${String(woNum).padStart(5, '0')}`;
     const { quantity: targetQty } = req.body;
 
-    const result = db.prepare(`INSERT INTO work_orders 
-      (wo_number, customer_id, start_date, status, quantity, notes, created_by)
-      VALUES (?,?,datetime('now','localtime'),'pending',?,?,?)`)
-      .run(woNumber, s.customer_id, targetQty || 1, `من عينة ${s.sample_number}: ${s.model_code}`, req.user.id);
+    const woResult = db.transaction(() => {
+      const lastWo = db.prepare('SELECT wo_number FROM work_orders ORDER BY id DESC LIMIT 1').get();
+      const woNum = lastWo ? parseInt(String(lastWo.wo_number).replace(/\D/g, '')) + 1 : 1;
+      const woNumber = `WO-${String(woNum).padStart(5, '0')}`;
 
-    db.prepare("UPDATE samples SET status='in_production' WHERE id=?").run(id);
+      const result = db.prepare(`INSERT INTO work_orders 
+        (wo_number, customer_id, start_date, status, quantity, notes, created_by)
+        VALUES (?,?,datetime('now','localtime'),'pending',?,?,?)`)
+        .run(woNumber, s.customer_id, targetQty || 1, `من عينة ${s.sample_number}: ${s.model_code}`, req.user.id);
 
-    logAudit(req, 'CONVERT', 'sample', id, `${s.sample_number} → ${woNumber}`);
-    res.status(201).json({ id: result.lastInsertRowid, wo_number: woNumber });
+      db.prepare("UPDATE samples SET status='in_production' WHERE id=?").run(id);
+
+      return { id: result.lastInsertRowid, wo_number: woNumber };
+    })();
+
+    logAudit(req, 'CONVERT', 'sample', id, `${s.sample_number} → ${woResult.wo_number}`);
+    res.status(201).json(woResult);
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 

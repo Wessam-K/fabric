@@ -86,11 +86,7 @@ router.post('/import', requirePermission('suppliers', 'create'), (req, res) => {
 });
 
 // GET /api/suppliers/:id — single with stats
-router.get('/:id', (req, res) => {
-  try {
-    const supplier = db.prepare('SELECT * FROM suppliers WHERE id=?').get(req.params.id);
-    if (!supplier) return res.status(404).json({ error: 'غير موجود' });
-    supplier.purchase_orders = db.prepare('SELECT * FROM purchase_orders WHERE supplier_id=? ORDER BY created_at DESC LIMIT 20').all(supplier.id);
+router.get('/:id', requirePermission('suppliers', 'view'), (req, res) => {
     supplier.payments = db.prepare('SELECT * FROM supplier_payments WHERE supplier_id=? ORDER BY payment_date DESC').all(supplier.id);
     const totOrd = db.prepare(`SELECT COALESCE(SUM(total_amount),0) as v FROM purchase_orders WHERE supplier_id=? AND status NOT IN ('cancelled','draft')`).get(supplier.id).v;
     const totPaid = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE supplier_id=?`).get(supplier.id).v;
@@ -139,33 +135,34 @@ router.post('/:id/payments', requirePermission('suppliers', 'edit'), (req, res) 
   try {
     const { po_id, amount, payment_method, payment_type, reference, notes } = req.body;
     if (!amount || amount <= 0) return res.status(400).json({ error: 'المبلغ المطلوب غير صالح' });
-    const r = db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,payment_type,reference,notes) VALUES (?,?,?,?,?,?,?)`)
-      .run(parseInt(req.params.id), po_id || null, parseFloat(amount), payment_method || 'cash', payment_type || 'payment', reference || null, notes || null);
-    // Update paid_amount on PO if po_id provided
-    if (po_id) {
-      const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE po_id=?').get(po_id).v;
-      db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(totalPaid, po_id);
-      // Update total_outstanding on PO
-      const po = db.prepare('SELECT total_amount, paid_amount FROM purchase_orders WHERE id=?').get(po_id);
-      if (po) {
-        db.prepare('UPDATE purchase_orders SET total_outstanding=? WHERE id=?').run((po.total_amount || 0) - (po.paid_amount || 0), po_id);
-      }
-    }
-    // Update total_paid on supplier
-    const suppId = parseInt(req.params.id);
-    const suppTotalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE supplier_id=?').get(suppId).v;
-    db.prepare('UPDATE suppliers SET total_paid=? WHERE id=?').run(suppTotalPaid, suppId);
 
-    logAudit(req, 'CREATE', 'supplier_payment', r.lastInsertRowid, `payment ${amount}`);
-    res.status(201).json(db.prepare('SELECT * FROM supplier_payments WHERE id=?').get(r.lastInsertRowid));
+    const payment = db.transaction(() => {
+      const r = db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,payment_type,reference,notes) VALUES (?,?,?,?,?,?,?)`)
+        .run(parseInt(req.params.id), po_id || null, parseFloat(amount), payment_method || 'cash', payment_type || 'payment', reference || null, notes || null);
+      // Update paid_amount on PO if po_id provided
+      if (po_id) {
+        const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE po_id=?').get(po_id).v;
+        db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(totalPaid, po_id);
+        // Update total_outstanding on PO
+        const po = db.prepare('SELECT total_amount, paid_amount FROM purchase_orders WHERE id=?').get(po_id);
+        if (po) {
+          db.prepare('UPDATE purchase_orders SET total_outstanding=? WHERE id=?').run((po.total_amount || 0) - (po.paid_amount || 0), po_id);
+        }
+      }
+      // Update total_paid on supplier
+      const suppId = parseInt(req.params.id);
+      const suppTotalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE supplier_id=?').get(suppId).v;
+      db.prepare('UPDATE suppliers SET total_paid=? WHERE id=?').run(suppTotalPaid, suppId);
+      return db.prepare('SELECT * FROM supplier_payments WHERE id=?').get(r.lastInsertRowid);
+    })();
+
+    logAudit(req, 'CREATE', 'supplier_payment', payment.id, `payment ${amount}`);
+    res.status(201).json(payment);
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });
 
 // GET /api/suppliers/:id/ledger — full financial ledger
-router.get('/:id/ledger', (req, res) => {
-  try {
-    const supplier = db.prepare('SELECT id, code, name FROM suppliers WHERE id=?').get(req.params.id);
-    if (!supplier) return res.status(404).json({ error: 'غير موجود' });
+router.get('/:id/ledger', requirePermission('suppliers', 'view'), (req, res) => {
     // Get all POs as debits
     const pos = db.prepare(`SELECT id, po_number, total_amount, paid_amount, status, order_date, received_date
       FROM purchase_orders WHERE supplier_id=? AND status NOT IN ('cancelled','draft') ORDER BY order_date DESC`).all(supplier.id);

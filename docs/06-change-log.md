@@ -379,3 +379,62 @@
 
 - **Post all fixes (R4-01 to R4-09)**: 58/58 passing ✅
 - **Frontend build**: Success (0 errors, 2545 modules) ✅
+
+---
+
+## Round 5 — SQL Injection Fix, Permission Seed Gaps, Transaction Safety, Authorization Hardening
+
+### R5-01: Remove SQL-injectable nextNumber helper (mrp.js)
+- **File**: `backend/routes/mrp.js`
+- **Change**: Removed `nextNumber(prefix, table, column)` function that used `${table}` and `${column}` directly in SQL template literals
+- **Reason**: Accepted arbitrary table/column names — SQL injection vector if any future caller passes user input. Function was dead code (defined but never called).
+- **Severity**: P0 (SQL Injection)
+
+### R5-02: Fix permission key 'workorders' → 'work_orders' + wrap in transaction
+- **File**: `backend/routes/samples.js`
+- **Change**: `requirePermission('workorders', 'create')` → `requirePermission('work_orders', 'create')`; wrapped SELECT+INSERT+UPDATE in `db.transaction()`
+- **Reason**: Seeded module is `work_orders` (with underscore); `workorders` never matched → 403 for all non-superadmin users
+- **Severity**: P1 (Broken feature)
+
+### R5-03: Add missing permission seeds (V26 migration)
+- **File**: `backend/database.js`
+- **Change**: V26 adds `machines:create/edit/delete` + `settings:delete` permission definitions and role_permissions
+- **Reason**: V10 only seeded `machines:view/manage` but routes use `create/edit/delete`; `settings:delete` never seeded but used by stagetemplates.js
+- **Severity**: P1 (Broken features for non-superadmin)
+
+### R5-04: Add requirePermission to 6 unguarded GET endpoints
+- **Files**: `backend/routes/customers.js`, `backend/routes/suppliers.js`
+- **Changes**: Added `requirePermission('customers', 'view')` to `/:id`, `/:id/invoices`, `/:id/balance`, `/:id/payments`; added `requirePermission('suppliers', 'view')` to `/:id`, `/:id/ledger`
+- **Reason**: List endpoints had permissions but detail/sub-resource GETs were unguarded
+- **Severity**: P1 (Authorization gap)
+
+### R5-05: Wrap 5 multi-write operations in transactions
+- **Files**: `suppliers.js`, `customers.js`, `maintenance.js`, `machines.js`
+- **Changes**: Wrapped supplier payments POST, customer payments POST, maintenance PUT, machines import, maintenance import in `db.transaction()`
+- **Reason**: Partial failure left inconsistent data (payment recorded but totals not updated)
+- **Severity**: P1 (Data integrity)
+
+### R5-06: Move shipping nextNumber inside transaction
+- **File**: `backend/routes/shipping.js`
+- **Change**: Moved `nextNumber('SHP')` from outside `db.transaction()` to inside
+- **Reason**: Number generation now atomic with INSERT
+- **Severity**: P1 (Data integrity)
+
+### R5-07: Add multer file type filter for HR attendance import
+- **File**: `backend/routes/hr.js`
+- **Change**: Added `fileFilter` restricting uploads to `.xlsx`, `.xls`, `.csv`
+- **Reason**: No file type validation — any file type accepted
+- **Severity**: P1 (Security)
+
+### R5-08: Add performance indexes (V26 migration)
+- **File**: `backend/database.js`
+- **Changes**: 5 new indexes on `customer_payments(customer_id)`, `customer_payments(invoice_id)`, `supplier_payments(po_id)`, `supplier_payments(supplier_id)`, `stage_movement_log(wo_id)`
+- **Reason**: Frequently queried columns without indexes
+- **Severity**: P2 (Performance)
+
+---
+
+## Test Results — Round 5
+
+- **Post all fixes (R5-01 to R5-08)**: 58/58 passing ✅
+- **Frontend build**: Success (0 errors, 2545 modules) ✅

@@ -3,13 +3,6 @@ const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 
-// ═══ Helper: generate next number ═══
-function nextNumber(prefix, table, column) {
-  const last = db.prepare(`SELECT ${column} FROM ${table} ORDER BY id DESC LIMIT 1`).get();
-  const num = last ? parseInt(String(last[column]).replace(/\D/g, '')) + 1 : 1;
-  return `${prefix}-${String(num).padStart(5, '0')}`;
-}
-
 // ═══════════════════════════════════════════════
 // POST /api/mrp/calculate — Run MRP calculation
 // ═══════════════════════════════════════════════

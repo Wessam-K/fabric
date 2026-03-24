@@ -70,8 +70,8 @@ router.post('/', requirePermission('shipping', 'create'), (req, res) => {
       carrier_name, tracking_number, shipping_method, shipping_cost, weight, packages_count,
       ship_date, expected_delivery, shipping_address, notes, items } = req.body;
 
-    const num = shipment_number || nextNumber('SHP');
     const created = db.transaction(() => {
+      const num = shipment_number || nextNumber('SHP');
       const result = db.prepare(`INSERT INTO shipments 
         (shipment_number, shipment_type, customer_id, supplier_id, work_order_id, invoice_id,
          carrier_name, tracking_number, shipping_method, shipping_cost, weight, packages_count,

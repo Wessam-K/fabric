@@ -306,26 +306,31 @@ router.post('/import', requirePermission('machines', 'create'), (req, res) => {
     const items = req.body;
     if (!Array.isArray(items)) return validationError(res, 'يجب إرسال مصفوفة من الماكينات');
     let inserted = 0, updated = 0, errors = [];
-    for (let i = 0; i < items.length; i++) {
-      try {
-        const item = items[i];
-        if (!item.name) { errors.push({ row: i+1, error: 'الاسم مطلوب' }); continue; }
-        const existing = item.barcode ? db.prepare('SELECT id FROM machines WHERE barcode = ?').get(item.barcode) : null;
-        if (existing) {
-          db.prepare('UPDATE machines SET name=?, machine_type=?, location=?, status=?, notes=?, updated_at=datetime(\'now\') WHERE id=?')
-            .run(item.name, item.machine_type || 'other', item.location || null, item.status || 'active', item.notes || null, existing.id);
-          updated++;
-        } else {
-          const code = item.code || ('MCH-IMP-' + Date.now().toString().slice(-6) + '-' + i);
-          const result = db.prepare('INSERT INTO machines (code, name, machine_type, location, status, notes) VALUES (?,?,?,?,?,?)')
-            .run(code, item.name, item.machine_type || 'other', item.location || null, item.status || 'active', item.notes || null);
-          const barcode = item.barcode || ('MCH-' + result.lastInsertRowid + '-' + Date.now().toString().slice(-6));
-          db.prepare('UPDATE machines SET barcode=? WHERE id=?').run(barcode, result.lastInsertRowid);
-          inserted++;
-        }
-      } catch (e) { errors.push({ row: i+1, error: e.message }); }
-    }
-    res.json({ inserted, updated, errors });
+
+    const importResult = db.transaction(() => {
+      for (let i = 0; i < items.length; i++) {
+        try {
+          const item = items[i];
+          if (!item.name) { errors.push({ row: i+1, error: 'الاسم مطلوب' }); continue; }
+          const existing = item.barcode ? db.prepare('SELECT id FROM machines WHERE barcode = ?').get(item.barcode) : null;
+          if (existing) {
+            db.prepare('UPDATE machines SET name=?, machine_type=?, location=?, status=?, notes=?, updated_at=datetime(\'now\') WHERE id=?')
+              .run(item.name, item.machine_type || 'other', item.location || null, item.status || 'active', item.notes || null, existing.id);
+            updated++;
+          } else {
+            const code = item.code || ('MCH-IMP-' + Date.now().toString().slice(-6) + '-' + i);
+            const result = db.prepare('INSERT INTO machines (code, name, machine_type, location, status, notes) VALUES (?,?,?,?,?,?)')
+              .run(code, item.name, item.machine_type || 'other', item.location || null, item.status || 'active', item.notes || null);
+            const barcode = item.barcode || ('MCH-' + result.lastInsertRowid + '-' + Date.now().toString().slice(-6));
+            db.prepare('UPDATE machines SET barcode=? WHERE id=?').run(barcode, result.lastInsertRowid);
+            inserted++;
+          }
+        } catch (e) { errors.push({ row: i+1, error: e.message }); }
+      }
+      return { inserted, updated };
+    })();
+
+    res.json({ inserted: importResult.inserted, updated: importResult.updated, errors });
   } catch (err) { serverError(res, err); }
 });
 

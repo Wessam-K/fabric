@@ -7,7 +7,16 @@ const router = express.Router();
 const db = require('../database');
 const { requirePermission, logAudit } = require('../middleware/auth');
 
-const upload = multer({ dest: path.join(__dirname, '..', 'uploads', 'attendance'), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({
+  dest: path.join(__dirname, '..', 'uploads', 'attendance'),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.xlsx', '.xls', '.csv'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) return cb(null, true);
+    cb(new Error('نوع الملف غير مدعوم. الأنواع المسموحة: xlsx, xls, csv'));
+  }
+});
 
 // ═══════════════════════════════════════════════
 // EMPLOYEES

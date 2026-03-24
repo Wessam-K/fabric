@@ -67,12 +67,7 @@ router.post('/import', requirePermission('customers', 'create'), (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/customers/:id — single with invoice summary
 // ═══════════════════════════════════════════════
-router.get('/:id', (req, res) => {
-  try {
-    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
-    if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
-
-    const invoiceSummary = db.prepare(`
+router.get('/:id', requirePermission('customers', 'view'), (req, res) => {
       SELECT COUNT(*) as invoice_count,
         COALESCE(SUM(total), 0) as total_invoiced,
         COALESCE(SUM(CASE WHEN status = 'paid' THEN total ELSE 0 END), 0) as total_paid
@@ -94,10 +89,7 @@ router.get('/:id', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/customers/:id/invoices
 // ═══════════════════════════════════════════════
-router.get('/:id/invoices', (req, res) => {
-  try {
-    const customer = db.prepare('SELECT id FROM customers WHERE id = ?').get(req.params.id);
-    if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
+router.get('/:id/invoices', requirePermission('customers', 'view'), (req, res) => {
 
     const invoices = db.prepare(`
       SELECT id, invoice_number, status, subtotal, total, due_date, created_at
@@ -125,10 +117,7 @@ router.get('/:id/invoices', (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/customers/:id/balance
 // ═══════════════════════════════════════════════
-router.get('/:id/balance', (req, res) => {
-  try {
-    const customer = db.prepare('SELECT id, name FROM customers WHERE id = ?').get(req.params.id);
-    if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
+router.get('/:id/balance', requirePermission('customers', 'view'), (req, res) => {
 
     const totals = db.prepare(`
       SELECT COALESCE(SUM(total), 0) as total_invoiced,
@@ -254,10 +243,7 @@ router.delete('/:id', requirePermission('customers', 'delete'), (req, res) => {
 // ═══════════════════════════════════════════════
 // GET /api/customers/:id/payments — list payments
 // ═══════════════════════════════════════════════
-router.get('/:id/payments', (req, res) => {
-  try {
-    const customer = db.prepare('SELECT id FROM customers WHERE id = ?').get(req.params.id);
-    if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
+router.get('/:id/payments', requirePermission('customers', 'view'), (req, res) => {
 
     const payments = db.prepare(`
       SELECT cp.*, i.invoice_number
@@ -304,25 +290,28 @@ router.post('/:id/payments', requirePermission('customers', 'edit'), (req, res) 
       }
     }
 
-    const result = db.prepare(`
-      INSERT INTO customer_payments (customer_id, invoice_id, amount, payment_method, reference, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(customer.id, invoice_id || null, amount, payment_method || 'cash', reference_number || null, notes || null, req.user?.id || null);
+    const payment = db.transaction(() => {
+      const result = db.prepare(`
+        INSERT INTO customer_payments (customer_id, invoice_id, amount, payment_method, reference, notes, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(customer.id, invoice_id || null, amount, payment_method || 'cash', reference_number || null, notes || null, req.user?.id || null);
 
-    // Auto-update invoice status if linked
-    if (invoice_id) {
-      const inv = db.prepare('SELECT total FROM invoices WHERE id=?').get(invoice_id);
-      if (inv) {
-        const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM customer_payments WHERE invoice_id=?').get(invoice_id).v;
-        if (totalPaid >= inv.total) {
-          db.prepare("UPDATE invoices SET status='paid', updated_at=datetime('now') WHERE id=?").run(invoice_id);
-        } else if (totalPaid > 0) {
-          db.prepare("UPDATE invoices SET status='partial', updated_at=datetime('now') WHERE id=? AND status != 'paid'").run(invoice_id);
+      // Auto-update invoice status if linked
+      if (invoice_id) {
+        const inv = db.prepare('SELECT total FROM invoices WHERE id=?').get(invoice_id);
+        if (inv) {
+          const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM customer_payments WHERE invoice_id=?').get(invoice_id).v;
+          if (totalPaid >= inv.total) {
+            db.prepare("UPDATE invoices SET status='paid', updated_at=datetime('now') WHERE id=?").run(invoice_id);
+          } else if (totalPaid > 0) {
+            db.prepare("UPDATE invoices SET status='partial', updated_at=datetime('now') WHERE id=? AND status != 'paid'").run(invoice_id);
+          }
         }
       }
-    }
 
-    const payment = db.prepare('SELECT * FROM customer_payments WHERE id = ?').get(result.lastInsertRowid);
+      return db.prepare('SELECT * FROM customer_payments WHERE id = ?').get(result.lastInsertRowid);
+    })();
+
     logAudit(req, 'CREATE', 'customer_payment', payment.id, `${amount}`);
     res.status(201).json(payment);
   } catch (err) {

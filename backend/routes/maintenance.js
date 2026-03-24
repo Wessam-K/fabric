@@ -133,29 +133,32 @@ router.put('/:id', requirePermission('maintenance', 'edit'), (req, res) => {
       finalCompletedDate = new Date().toISOString().slice(0, 10);
     }
 
-    db.prepare(`UPDATE maintenance_orders SET
-      machine_id=COALESCE(?,machine_id), maintenance_type=COALESCE(?,maintenance_type),
-      title=COALESCE(?,title), description=COALESCE(?,description),
-      priority=COALESCE(?,priority), status=COALESCE(?,status),
-      scheduled_date=COALESCE(?,scheduled_date), completed_date=?,
-      performed_by=COALESCE(?,performed_by), cost=COALESCE(?,cost),
-      parts_used=COALESCE(?,parts_used), notes=COALESCE(?,notes)
-      WHERE id=?`).run(
-      machine_id !== undefined ? machine_id : null, maintenance_type || null,
-      title || null, description !== undefined ? description : null,
-      priority || null, status || null,
-      scheduled_date !== undefined ? scheduled_date : null, finalCompletedDate,
-      performed_by !== undefined ? performed_by : null, cost !== undefined ? cost : null,
-      parts_used !== undefined ? parts_used : null, notes !== undefined ? notes : null,
-      req.params.id);
+    const updated = db.transaction(() => {
+      db.prepare(`UPDATE maintenance_orders SET
+        machine_id=COALESCE(?,machine_id), maintenance_type=COALESCE(?,maintenance_type),
+        title=COALESCE(?,title), description=COALESCE(?,description),
+        priority=COALESCE(?,priority), status=COALESCE(?,status),
+        scheduled_date=COALESCE(?,scheduled_date), completed_date=?,
+        performed_by=COALESCE(?,performed_by), cost=COALESCE(?,cost),
+        parts_used=COALESCE(?,parts_used), notes=COALESCE(?,notes)
+        WHERE id=?`).run(
+        machine_id !== undefined ? machine_id : null, maintenance_type || null,
+        title || null, description !== undefined ? description : null,
+        priority || null, status || null,
+        scheduled_date !== undefined ? scheduled_date : null, finalCompletedDate,
+        performed_by !== undefined ? performed_by : null, cost !== undefined ? cost : null,
+        parts_used !== undefined ? parts_used : null, notes !== undefined ? notes : null,
+        req.params.id);
 
-    // Update machine's last_maintenance_date if completed
-    if (status === 'completed' && (machine_id || old.machine_id)) {
-      const mid = machine_id || old.machine_id;
-      try { db.prepare("UPDATE machines SET last_maintenance_date=date('now') WHERE id=?").run(mid); } catch {}
-    }
+      // Update machine's last_maintenance_date if completed
+      if (status === 'completed' && (machine_id || old.machine_id)) {
+        const mid = machine_id || old.machine_id;
+        db.prepare("UPDATE machines SET last_maintenance_date=date('now') WHERE id=?").run(mid);
+      }
 
-    const updated = db.prepare('SELECT * FROM maintenance_orders WHERE id=?').get(req.params.id);
+      return db.prepare('SELECT * FROM maintenance_orders WHERE id=?').get(req.params.id);
+    })();
+
     logAudit(req, 'update', 'maintenance_orders', old.id, old.title, old, updated);
     res.json(updated);
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
@@ -182,19 +185,23 @@ router.post('/import', requirePermission('maintenance', 'create'), (req, res) =>
     const items = req.body;
     if (!Array.isArray(items)) return res.status(400).json({ error: 'يجب إرسال مصفوفة' });
     let inserted = 0; const errors = [];
-    for (let i = 0; i < items.length; i++) {
-      try {
-        const r = items[i];
-        if (!r.title) { errors.push({ row: i+1, error: 'العنوان مطلوب' }); continue; }
-        const barcode = 'MNT-' + Date.now().toString().slice(-8) + '-' + i;
-        db.prepare(`INSERT INTO maintenance_orders (machine_id, maintenance_type, title, description, priority, scheduled_date, performed_by, cost, notes, barcode, created_by, status)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')`)
-          .run(r.machine_id||null, r.maintenance_type||'preventive', r.title, r.description||null,
-            r.priority||'medium', r.scheduled_date||null, r.performed_by||null, r.cost||0,
-            r.notes||null, barcode, req.user.id);
-        inserted++;
-      } catch (e) { errors.push({ row: i+1, error: e.message }); }
-    }
+
+    db.transaction(() => {
+      for (let i = 0; i < items.length; i++) {
+        try {
+          const r = items[i];
+          if (!r.title) { errors.push({ row: i+1, error: 'العنوان مطلوب' }); continue; }
+          const barcode = 'MNT-' + Date.now().toString().slice(-8) + '-' + i;
+          db.prepare(`INSERT INTO maintenance_orders (machine_id, maintenance_type, title, description, priority, scheduled_date, performed_by, cost, notes, barcode, created_by, status)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')`)
+            .run(r.machine_id||null, r.maintenance_type||'preventive', r.title, r.description||null,
+              r.priority||'medium', r.scheduled_date||null, r.performed_by||null, r.cost||0,
+              r.notes||null, barcode, req.user.id);
+          inserted++;
+        } catch (e) { errors.push({ row: i+1, error: e.message }); }
+      }
+    })();
+
     res.json({ inserted, errors });
   } catch (err) { console.error(err); res.status(500).json({ error: '??? ??? ?????' }); }
 });

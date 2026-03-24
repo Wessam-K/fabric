@@ -2295,6 +2295,39 @@ function runMigrations() {
     `);
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (25)`);
   }
+
+  // ──── V26 — Audit Round 5: permission seed gaps + indexes ────
+  const v26 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 26').get();
+  if (!v26) {
+    // 26.1 Add missing machines create/edit/delete permissions (V10 only seeded view+manage)
+    try {
+      const insPD26 = db.prepare('INSERT OR IGNORE INTO permission_definitions (module, action, label_ar, description_ar, sort_order) VALUES (?,?,?,?,?)');
+      insPD26.run('machines', 'create', 'إضافة ماكينة', 'إضافة ماكينات جديدة', 77);
+      insPD26.run('machines', 'edit', 'تعديل ماكينة', 'تعديل بيانات الماكينات', 78);
+      insPD26.run('machines', 'delete', 'حذف ماكينة', 'حذف وتعطيل الماكينات', 79);
+      insPD26.run('settings', 'delete', 'حذف الإعدادات', 'حذف قوالب المراحل وإعدادات النظام', 142);
+
+      const insRP26 = db.prepare('INSERT OR IGNORE INTO role_permissions (role, module, action, allowed) VALUES (?,?,?,?)');
+      for (const role of ['superadmin', 'manager', 'production']) {
+        insRP26.run(role, 'machines', 'create', 1);
+        insRP26.run(role, 'machines', 'edit', 1);
+        insRP26.run(role, 'machines', 'delete', 1);
+      }
+      insRP26.run('superadmin', 'settings', 'delete', 1);
+      insRP26.run('manager', 'settings', 'delete', 1);
+    } catch {}
+
+    // 26.2 Performance indexes for payment and movement tables
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_customer_payments_customer ON customer_payments(customer_id);
+      CREATE INDEX IF NOT EXISTS idx_customer_payments_invoice ON customer_payments(invoice_id);
+      CREATE INDEX IF NOT EXISTS idx_supplier_payments_po ON supplier_payments(po_id);
+      CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id);
+      CREATE INDEX IF NOT EXISTS idx_stage_movement_log_wo ON stage_movement_log(wo_id);
+    `);
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (26)`);
+  }
 }
 
 initializeDatabase();

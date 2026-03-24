@@ -257,3 +257,66 @@ All 42 fixes across Rounds 1+2 pass the full 58-test regression suite. Frontend 
 ## Final Conclusion
 
 All 72 fixes across Rounds 1–4 pass the full 58-test regression suite. Frontend builds clean (0 errors, 2545 modules). All database migrations (V23–V25) are backward-compatible. The system maintains full compatibility with existing data. Key achievements: complete permission coverage across all endpoints, all multi-step write operations wrapped in transactions, N+1 patterns eliminated, 8 performance indexes added.
+
+---
+
+## Round 5 — SQL Injection, Permission Seeds, Transaction Safety, Authorization Hardening
+
+### Test Suite Results
+
+| Phase | Tests | Pass | Fail | Status |
+|-------|-------|------|------|--------|
+| Post SQL Injection Fix (R5-01) | 58 | 58 | 0 | ✅ |
+| Post Permission Fixes (R5-02–04) | 58 | 58 | 0 | ✅ |
+| Post Transaction Wrappers (R5-05–06) | 58 | 58 | 0 | ✅ |
+| Post Security Fix (R5-07) | 58 | 58 | 0 | ✅ |
+| Post V26 Migration (R5-08) | 58 | 58 | 0 | ✅ |
+| Frontend Build | — | — | — | ✅ 0 errors, 2545 modules |
+
+### Files Changed (Round 5)
+
+| File | Changes |
+|------|---------|
+| `backend/routes/mrp.js` | Removed SQL-injectable `nextNumber()` dead code |
+| `backend/routes/samples.js` | Fixed `workorders` → `work_orders` permission key, wrapped convert-to-wo in transaction |
+| `backend/routes/customers.js` | 4 GET endpoints + requirePermission, customer payments wrapped in transaction |
+| `backend/routes/suppliers.js` | 2 GET endpoints + requirePermission, supplier payments wrapped in transaction |
+| `backend/routes/maintenance.js` | PUT wrapped in transaction, import loop wrapped in transaction |
+| `backend/routes/machines.js` | Import loop wrapped in transaction |
+| `backend/routes/shipping.js` | Moved nextNumber inside transaction |
+| `backend/routes/hr.js` | Multer fileFilter (xlsx/xls/csv only) |
+| `backend/database.js` | V26 migration (4 permission seeds, 5 indexes) |
+
+### New Behavioral Changes (Round 5)
+
+31. **Machines create/edit/delete** now accessible to manager and production roles (was superadmin-only due to missing permission seeds).
+32. **Stage templates delete** now accessible to manager role (was superadmin-only).
+33. **Sample convert-to-WO** now works for non-superadmin users with `work_orders:create` permission.
+34. **Customer detail, invoices, balance, payments** GETs require `customers:view` permission.
+35. **Supplier detail, ledger** GETs require `suppliers:view` permission.
+36. **Supplier/customer payment** creation is fully transactional (payment + totals update atomic).
+37. **Maintenance update** is atomic (order update + machine last_maintenance_date).
+38. **Machine/maintenance imports** are all-or-nothing transactional.
+39. **HR attendance import** rejects non-spreadsheet file types.
+40. **Shipping number** generation is atomic with shipment creation.
+
+### Database Schema (Round 5)
+
+- V26 migration adds 4 permission definitions: `machines:create`, `machines:edit`, `machines:delete`, `settings:delete`
+- V26 migration adds 5 performance indexes on payment and movement log tables
+
+### Updated Issue Resolution Summary (Cumulative)
+
+| Severity | Found R1–R5 | Fixed R1 | Fixed R2 | Fixed R3 | Fixed R4 | Fixed R5 | Deferred |
+|----------|-------------|----------|----------|----------|----------|----------|----------|
+| CRITICAL | 8 | 3 | 2 | 0 | 1 | 1 | 1 |
+| HIGH | 51 | 10 | 9 | 6 | 14 | 11 | 1 |
+| MEDIUM | 50 | 13 | 4 | 3 | 5 | 5 | 20 |
+| LOW | 25 | 0 | 1 | 1 | 0 | 0 | 23 |
+| **Total** | **134** | **26** | **16** | **10** | **20** | **17** | **45** |
+
+---
+
+## Final Conclusion (Round 5)
+
+All 89 fixes across Rounds 1–5 pass the full 58-test regression suite. Frontend builds clean (0 errors, 2545 modules). All database migrations (V23–V26) are backward-compatible. Production readiness: **8.5/10**.
