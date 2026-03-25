@@ -2403,6 +2403,20 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (30)`);
   }
+
+  // ──── V31 — Pagination/limit settings ────
+  const v31 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 31').get();
+  if (!v31) {
+    try {
+      const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+      // Notifications list limit
+      insSetting.run('notification_list_limit', '50');
+      // Reports default row limit
+      insSetting.run('report_default_limit', '100');
+    } catch(e) { console.error('V31: pagination settings:', e.message); }
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (31)`);
+  }
 }
 
 initializeDatabase();

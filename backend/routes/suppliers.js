@@ -27,7 +27,8 @@ router.get('/', requirePermission('suppliers', 'view'), (req, res) => {
       const countQ = q.replace('SELECT *', 'SELECT COUNT(*) as total');
       const total = db.prepare(countQ).get(...p).total;
       const pg = parseInt(page) || 1;
-      const lim = parseInt(limit) || 25;
+      const defaultPageSize = parseInt(db.prepare("SELECT value FROM settings WHERE key='default_page_size'").get()?.value) || 25;
+      const lim = parseInt(limit) || defaultPageSize;
       q += ' LIMIT ? OFFSET ?';
       p.push(lim, (pg - 1) * lim);
       const suppliers = db.prepare(q).all(...p);

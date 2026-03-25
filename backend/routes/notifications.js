@@ -105,7 +105,8 @@ router.get('/', (req, res) => {
     const p = [userId];
     if (unread_only === 'true') { q += ' AND is_read=0'; }
     q += ' ORDER BY created_at DESC LIMIT ?';
-    p.push(parseInt(limit) || 50);
+    const defaultNotificationLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='notification_list_limit'").get()?.value) || 50;
+    p.push(parseInt(limit) || defaultNotificationLimit);
     const notifications = db.prepare(q).all(...p);
     const unread_count = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id=? AND is_read=0').get(userId).count;
     res.json({ notifications, unread_count });

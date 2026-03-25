@@ -1085,7 +1085,8 @@ router.get('/employee-productivity', requirePermission('reports', 'view'), (req,
 // GET /api/reports/barcode-activity — recent barcode scan activity (from audit_log)
 router.get('/barcode-activity', requirePermission('reports', 'view'), (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 100;
+    const defaultReportLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='report_default_limit'").get()?.value) || 100;
+    const limit = parseInt(req.query.limit) || defaultReportLimit;
     const scans = db.prepare(`SELECT al.*, u.full_name as user_name FROM audit_log al LEFT JOIN users u ON u.id=al.user_id
       WHERE al.action LIKE '%barcode%' OR al.action LIKE '%scan%' OR al.entity_type='barcode'
       ORDER BY al.created_at DESC LIMIT ?`).all(limit);
