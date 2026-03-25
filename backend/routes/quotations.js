@@ -50,8 +50,8 @@ router.post('/', requirePermission('quotations', 'create'), (req, res) => {
   try {
     const { quotation_number, customer_id, valid_until, notes, discount_percent, tax_percent, items } = req.body;
     if (!customer_id || !items?.length) return res.status(400).json({ error: 'العميل والأصناف مطلوبان' });
-    if (discount_percent != null && parseFloat(discount_percent) < 0) return res.status(400).json({ error: 'نسبة الخصم لا يمكن أن تكون سالبة' });
-    if (tax_percent != null && parseFloat(tax_percent) < 0) return res.status(400).json({ error: 'نسبة الضريبة لا يمكن أن تكون سالبة' });
+    if (discount_percent != null && (parseFloat(discount_percent) < 0 || parseFloat(discount_percent) > 100)) return res.status(400).json({ error: 'نسبة الخصم يجب أن تكون بين 0 و 100' });
+    if (tax_percent != null && (parseFloat(tax_percent) < 0 || parseFloat(tax_percent) > 100)) return res.status(400).json({ error: 'نسبة الضريبة يجب أن تكون بين 0 و 100' });
 
     let subtotal = 0;
     for (const it of items) { subtotal += (it.quantity || 0) * (it.unit_price || 0); }

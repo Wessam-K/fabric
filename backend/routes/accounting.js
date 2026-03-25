@@ -95,6 +95,15 @@ router.post('/journal', requirePermission('accounting', 'create'), (req, res) =>
     const { entry_number, entry_date, description, reference, lines } = req.body;
     if (!entry_number || !entry_date || !lines?.length) return res.status(400).json({ error: 'البيانات الأساسية مطلوبة' });
 
+    // Validate each line has either debit or credit (not both zero or negative)
+    for (const line of lines) {
+      const debit = parseFloat(line.debit) || 0;
+      const credit = parseFloat(line.credit) || 0;
+      if (debit < 0 || credit < 0) return res.status(400).json({ error: 'المبالغ لا يمكن أن تكون سالبة' });
+      if (debit === 0 && credit === 0) return res.status(400).json({ error: 'كل سطر يجب أن يحتوي على مبلغ مدين أو دائن' });
+      if (!line.account_id) return res.status(400).json({ error: 'الحساب مطلوب لكل سطر' });
+    }
+
     const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
     const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
     if (Math.abs(totalDebit - totalCredit) > 0.01) return res.status(400).json({ error: 'القيد غير متوازن — المدين لا يساوي الدائن' });

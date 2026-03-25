@@ -119,7 +119,7 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
 
         const shortage = Math.max(0, need.required - onHand - onOrder);
         if (shortage > 0) {
-          const price = acc.price || 0;
+          const price = acc.unit_price || 0;
           insertSugg.run(runId, 'accessory', acc.id, acc.code, acc.name, need.required, onHand, onOrder, shortage, shortage, acc.supplier_id, acc.supplier_name, price, shortage * price, JSON.stringify(need.woIds));
         }
       }

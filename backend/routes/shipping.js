@@ -63,6 +63,10 @@ router.post('/', requirePermission('shipping', 'create'), (req, res) => {
       carrier_name, tracking_number, shipping_method, shipping_cost, weight, packages_count,
       ship_date, expected_delivery, shipping_address, notes, items } = req.body;
     if (shipment_type && !['outbound','inbound','return'].includes(shipment_type)) return res.status(400).json({ error: 'نوع الشحنة غير صالح' });
+    // Validate numeric bounds
+    if (shipping_cost != null && parseFloat(shipping_cost) < 0) return res.status(400).json({ error: 'تكلفة الشحن لا يمكن أن تكون سالبة' });
+    if (weight != null && parseFloat(weight) < 0) return res.status(400).json({ error: 'الوزن لا يمكن أن يكون سالباً' });
+    if (packages_count != null && parseInt(packages_count) < 1) return res.status(400).json({ error: 'عدد الطرود يجب أن يكون 1 على الأقل' });
 
     const created = db.transaction(() => {
       const num = shipment_number || generateNextNumber(db, 'shipment');

@@ -298,6 +298,12 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
             fabric_batches, accessories_detail, extra_expenses } = req.body;
     if (!wo_number) return res.status(400).json({ error: 'رقم أمر العمل مطلوب' });
 
+    // Validate numeric bounds
+    if (masnaiya != null && parseFloat(masnaiya) < 0) return res.status(400).json({ error: 'قيمة المصنعية لا يمكن أن تكون سالبة' });
+    if (masrouf != null && parseFloat(masrouf) < 0) return res.status(400).json({ error: 'قيمة المصروف لا يمكن أن تكون سالبة' });
+    if (margin_pct != null && (parseFloat(margin_pct) < 0 || parseFloat(margin_pct) > 100)) return res.status(400).json({ error: 'نسبة الهامش يجب أن تكون بين 0 و 100' });
+    if (quantity != null && parseInt(quantity) < 0) return res.status(400).json({ error: 'الكمية لا يمكن أن تكون سالبة' });
+
     // Load defaults from settings when values not provided
     const getSetting = (key, fallback) => {
       const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key);
@@ -464,6 +470,12 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
             consumer_price, wholesale_price, quantity, is_size_based,
             fabrics, accessories, sizes, notes,
             fabric_batches, accessories_detail, extra_expenses } = req.body;
+
+    // Validate numeric bounds
+    if (masnaiya != null && parseFloat(masnaiya) < 0) return res.status(400).json({ error: 'قيمة المصنعية لا يمكن أن تكون سالبة' });
+    if (masrouf != null && parseFloat(masrouf) < 0) return res.status(400).json({ error: 'قيمة المصروف لا يمكن أن تكون سالبة' });
+    if (margin_pct != null && (parseFloat(margin_pct) < 0 || parseFloat(margin_pct) > 100)) return res.status(400).json({ error: 'نسبة الهامش يجب أن تكون بين 0 و 100' });
+    if (quantity != null && parseInt(quantity) < 0) return res.status(400).json({ error: 'الكمية لا يمكن أن تكون سالبة' });
 
     const transaction = db.transaction(() => {
       db.prepare(`UPDATE work_orders SET model_id=COALESCE(?,model_id),priority=COALESCE(?,priority),due_date=?,assigned_to=COALESCE(?,assigned_to),masnaiya=COALESCE(?,masnaiya),masrouf=COALESCE(?,masrouf),margin_pct=COALESCE(?,margin_pct),consumer_price=?,wholesale_price=?,notes=COALESCE(?,notes),quantity=COALESCE(?,quantity),is_size_based=COALESCE(?,is_size_based),updated_at=datetime('now') WHERE id=?`)
