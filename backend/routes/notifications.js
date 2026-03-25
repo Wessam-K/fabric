@@ -3,6 +3,14 @@ const router = express.Router();
 const db = require('../database');
 const { requireRole, logAudit } = require('../middleware/auth');
 
+// Helper to get currency symbol from settings
+const getCurrencySymbol = () => {
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key='currency_symbol'").get();
+    return row?.value || 'ج.م';
+  } catch { return 'ج.م'; }
+};
+
 // GET /api/notifications/count — unread count only (lightweight poll) — MUST be before /:id
 router.get('/count', (req, res) => {
   try {
@@ -75,10 +83,11 @@ router.post('/check-overdue', requireRole('superadmin', 'manager'), (req, res) =
 
     // Expenses pending > 24h
     try {
+      const currencySymbol = getCurrencySymbol();
       const pending = db.prepare(`SELECT id, description, amount FROM expenses WHERE status='pending' AND created_at < datetime('now','-24 hours') AND is_deleted=0`).all();
       for (const exp of pending) {
         for (const u of adminUsers) {
-          if (!hasNotif(u.id, 'expense', exp.id, 'expense_pending')) { createNotification(u.id, 'expense_pending', 'مصروف بانتظار الاعتماد > 24 ساعة', `${exp.description} — ${exp.amount} ج.م`, 'expense', exp.id); created++; }
+          if (!hasNotif(u.id, 'expense', exp.id, 'expense_pending')) { createNotification(u.id, 'expense_pending', 'مصروف بانتظار الاعتماد > 24 ساعة', `${exp.description} — ${exp.amount} ${currencySymbol}`, 'expense', exp.id); created++; }
         }
       }
     } catch {}
@@ -194,11 +203,12 @@ function generateNotifications() {
 
     // V17 — Pending expense approvals
     try {
+      const currencySymbol = getCurrencySymbol();
       const pendingExpenses = db.prepare(`SELECT id, description, amount FROM expenses WHERE is_deleted=0 AND status='pending'`).all();
       for (const exp of pendingExpenses) {
         for (const u of adminUsers) {
           if (!hasUnread(u.id, 'expense', String(exp.id), 'expense_pending')) {
-            createNotification(u.id, 'expense_pending', `مصروف بانتظار الاعتماد`, `${exp.description} — ${exp.amount} ج.م`, 'expense', String(exp.id));
+            createNotification(u.id, 'expense_pending', `مصروف بانتظار الاعتماد`, `${exp.description} — ${exp.amount} ${currencySymbol}`, 'expense', String(exp.id));
           }
         }
       }

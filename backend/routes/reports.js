@@ -718,6 +718,11 @@ router.get('/ar-aging', requirePermission('reports', 'view'), (req, res) => {
     `).all();
 
     const now = new Date();
+    // Get aging bucket thresholds from settings (default: 30, 60, 90)
+    const agingBucket1 = parseInt(db.prepare("SELECT value FROM settings WHERE key='aging_bucket_1'").get()?.value) || 30;
+    const agingBucket2 = parseInt(db.prepare("SELECT value FROM settings WHERE key='aging_bucket_2'").get()?.value) || 60;
+    const agingBucket3 = parseInt(db.prepare("SELECT value FROM settings WHERE key='aging_bucket_3'").get()?.value) || 90;
+    
     const buckets = { current: [], days_30: [], days_60: [], days_90: [], over_90: [] };
     let totals = { current: 0, days_30: 0, days_60: 0, days_90: 0, over_90: 0, grand_total: 0 };
 
@@ -727,14 +732,14 @@ router.get('/ar-aging', requirePermission('reports', 'view'), (req, res) => {
       inv.days_overdue = daysOverdue;
 
       if (daysOverdue <= 0) { buckets.current.push(inv); totals.current += inv.outstanding; }
-      else if (daysOverdue <= 30) { buckets.days_30.push(inv); totals.days_30 += inv.outstanding; }
-      else if (daysOverdue <= 60) { buckets.days_60.push(inv); totals.days_60 += inv.outstanding; }
-      else if (daysOverdue <= 90) { buckets.days_90.push(inv); totals.days_90 += inv.outstanding; }
+      else if (daysOverdue <= agingBucket1) { buckets.days_30.push(inv); totals.days_30 += inv.outstanding; }
+      else if (daysOverdue <= agingBucket2) { buckets.days_60.push(inv); totals.days_60 += inv.outstanding; }
+      else if (daysOverdue <= agingBucket3) { buckets.days_90.push(inv); totals.days_90 += inv.outstanding; }
       else { buckets.over_90.push(inv); totals.over_90 += inv.outstanding; }
       totals.grand_total += inv.outstanding;
     }
 
-    res.json({ buckets, totals, total_invoices: invoices.length });
+    res.json({ buckets, totals, total_invoices: invoices.length, aging_thresholds: { bucket_1: agingBucket1, bucket_2: agingBucket2, bucket_3: agingBucket3 } });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -1032,6 +1037,11 @@ router.get('/tax-summary', requirePermission('reports', 'view'), (req, res) => {
 // GET /api/reports/ap-aging — accounts payable aging by supplier
 router.get('/ap-aging', requirePermission('reports', 'view'), (req, res) => {
   try {
+    // Get aging bucket thresholds from settings (default: 30, 60, 90)
+    const agingBucket1 = parseInt(db.prepare("SELECT value FROM settings WHERE key='aging_bucket_1'").get()?.value) || 30;
+    const agingBucket2 = parseInt(db.prepare("SELECT value FROM settings WHERE key='aging_bucket_2'").get()?.value) || 60;
+    const agingBucket3 = parseInt(db.prepare("SELECT value FROM settings WHERE key='aging_bucket_3'").get()?.value) || 90;
+    
     const pos = db.prepare(`SELECT po.*, s.name as supplier_name, s.code as supplier_code
       FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id
       WHERE po.status NOT IN ('cancelled','draft','received') AND po.total_amount > po.paid_amount`).all();
@@ -1040,11 +1050,11 @@ router.get('/ap-aging', requirePermission('reports', 'view'), (req, res) => {
       const due = po.expected_date ? new Date(po.expected_date) : new Date(po.order_date);
       const days = Math.floor((today - due) / 86400000);
       const outstanding = (po.total_amount || 0) - (po.paid_amount || 0);
-      return { po_number: po.po_number, supplier_name: po.supplier_name, supplier_code: po.supplier_code, total: po.total_amount, paid: po.paid_amount, outstanding, expected_date: po.expected_date, days_overdue: Math.max(0, days), bucket: days <= 0 ? 'current' : days <= 30 ? '1-30' : days <= 60 ? '31-60' : days <= 90 ? '61-90' : '90+' };
+      return { po_number: po.po_number, supplier_name: po.supplier_name, supplier_code: po.supplier_code, total: po.total_amount, paid: po.paid_amount, outstanding, expected_date: po.expected_date, days_overdue: Math.max(0, days), bucket: days <= 0 ? 'current' : days <= agingBucket1 ? '1-30' : days <= agingBucket2 ? '31-60' : days <= agingBucket3 ? '61-90' : '90+' };
     });
     const summary = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
     buckets.forEach(b => { summary[b.bucket] += b.outstanding; });
-    res.json({ items: buckets, summary, total_outstanding: buckets.reduce((s, b) => s + b.outstanding, 0) });
+    res.json({ items: buckets, summary, total_outstanding: buckets.reduce((s, b) => s + b.outstanding, 0), aging_thresholds: { bucket_1: agingBucket1, bucket_2: agingBucket2, bucket_3: agingBucket3 } });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

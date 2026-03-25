@@ -2387,6 +2387,22 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (29)`);
   }
+
+  // ──── V30 — Currency symbol and aging bucket settings ────
+  const v30 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 30').get();
+  if (!v30) {
+    try {
+      const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+      // Currency symbol for display
+      insSetting.run('currency_symbol', 'ج.م');
+      // Aging bucket thresholds (days)
+      insSetting.run('aging_bucket_1', '30');
+      insSetting.run('aging_bucket_2', '60');
+      insSetting.run('aging_bucket_3', '90');
+    } catch(e) { console.error('V30: currency/aging settings:', e.message); }
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (30)`);
+  }
 }
 
 initializeDatabase();
