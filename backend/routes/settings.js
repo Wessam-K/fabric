@@ -25,6 +25,7 @@ router.put('/', requirePermission('settings', 'edit'), (req, res) => {
       'sr_', 'pr_', 'ncr_', 'qc_',
       'je_', 'mnt_', 'mch_', 'cust_', 'emp_', 'fb_',
       'aging_', 'notification_', 'report_', 'dashboard_', 'search_',
+      'password_', 'profile_', 'cost_', 'quality_', 'machine_',
     ];
     const upsert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
     const rejected = [];

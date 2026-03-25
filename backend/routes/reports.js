@@ -195,9 +195,10 @@ router.get('/model-detail/:code', requirePermission('reports', 'view'), (req, re
       FROM work_orders wo WHERE wo.model_id=? AND wo.status!='cancelled' ORDER BY wo.created_at DESC`).all(model.id);
 
     // Cost history from snapshots
+    const costHistoryLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='cost_history_limit'").get()?.value) || 20;
     const costHistory = db.prepare(`SELECT cs.* FROM cost_snapshots cs 
       INNER JOIN work_orders wo ON wo.id=cs.wo_id WHERE wo.model_id=? 
-      ORDER BY cs.snapshot_date DESC LIMIT 20`).all(model.id);
+      ORDER BY cs.snapshot_date DESC LIMIT ?`).all(model.id, costHistoryLimit);
 
     res.json({ model, summary, templates: templateDetails, work_orders: workOrders, cost_history: costHistory });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -206,7 +207,8 @@ router.get('/model-detail/:code', requirePermission('reports', 'view'), (req, re
 // GET /api/reports — cost snapshots (paginated)
 router.get('/', requirePermission('reports', 'view'), (req, res) => {
   try {
-    const { page = 1, limit = 20, date_from, date_to, wo_id } = req.query;
+    const defaultReportPageSize = parseInt(db.prepare("SELECT value FROM settings WHERE key='default_page_size'").get()?.value) || 25;
+    const { page = 1, limit = defaultReportPageSize, date_from, date_to, wo_id } = req.query;
     let q = `SELECT cs.*, m.model_code, m.model_name, wo.wo_number
              FROM cost_snapshots cs
              LEFT JOIN models m ON m.id=cs.model_id
@@ -629,6 +631,9 @@ router.get('/inventory-status', requirePermission('reports', 'view'), (req, res)
 // GET /api/reports/quality — quality & rejection report
 router.get('/quality', requirePermission('reports', 'view'), (req, res) => {
   try {
+    // Configurable limits for quality reports
+    const qualityHistoryLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='quality_history_limit'").get()?.value) || 50;
+    
     // Per-stage rejection rates
     const stageQuality = db.prepare(`
       SELECT ws.stage_name,
@@ -650,8 +655,8 @@ router.get('/quality', requirePermission('reports', 'view'), (req, res) => {
       LEFT JOIN work_orders wo ON wo.id = sml.wo_id
       LEFT JOIN models m ON m.id = wo.model_id
       WHERE sml.qty_rejected > 0
-      ORDER BY sml.moved_at DESC LIMIT 50
-    `).all();
+      ORDER BY sml.moved_at DESC LIMIT ?
+    `).all(qualityHistoryLimit);
 
     // Overall stats — final stage only (highest sort_order per WO)
     const overall = db.prepare(`
@@ -673,8 +678,8 @@ router.get('/quality', requirePermission('reports', 'view'), (req, res) => {
       FROM wo_stage_qc qc
       LEFT JOIN wo_stages ws ON ws.id = qc.stage_id
       LEFT JOIN work_orders wo ON wo.id = qc.wo_id
-      ORDER BY qc.checked_at DESC LIMIT 50
-    `).all();
+      ORDER BY qc.checked_at DESC LIMIT ?
+    `).all(qualityHistoryLimit);
 
     res.json({
       stage_quality: stageQuality,

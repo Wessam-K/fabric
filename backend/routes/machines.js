@@ -93,14 +93,15 @@ router.get('/:id', requirePermission('machines', 'view'), (req, res) => {
     const machine = db.prepare('SELECT * FROM machines WHERE id = ?').get(req.params.id);
     if (!machine) return notFound(res, 'الماكينة');
 
+    const recentStagesLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='machine_recent_stages_limit'").get()?.value) || 20;
     machine.recent_stages = db.prepare(`
       SELECT ws.*, wo.wo_number, m.model_name
       FROM wo_stages ws
       LEFT JOIN work_orders wo ON wo.id = ws.wo_id
       LEFT JOIN models m ON m.id = wo.model_id
       WHERE ws.machine_id = ?
-      ORDER BY ws.started_at DESC LIMIT 20
-    `).all(machine.id);
+      ORDER BY ws.started_at DESC LIMIT ?
+    `).all(machine.id, recentStagesLimit);
 
     res.json(machine);
   } catch (err) {

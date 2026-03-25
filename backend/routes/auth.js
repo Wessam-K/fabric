@@ -99,8 +99,9 @@ router.put('/change-password', requireAuth, (req, res) => {
     const valid = bcrypt.compareSync(current_password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'كلمة المرور الحالية غير صحيحة' });
 
-    // Check password history (last 5)
-    const history = db.prepare('SELECT password_hash FROM password_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 5').all(req.user.id);
+    // Check password history (configurable limit)
+    const passwordHistoryLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='password_history_limit'").get()?.value) || 5;
+    const history = db.prepare('SELECT password_hash FROM password_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(req.user.id, passwordHistoryLimit);
     for (const h of history) {
       if (bcrypt.compareSync(new_password, h.password_hash)) {
         return res.status(400).json({ error: 'لا يمكن استخدام كلمة مرور سابقة' });
@@ -125,7 +126,8 @@ router.get('/profile', requireAuth, (req, res) => {
       .filter(c => cols.includes(c)).join(', ');
     const user = db.prepare(`SELECT ${selectCols} FROM users WHERE id = ?`).get(req.user.id);
     if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
-    const recentActivity = db.prepare('SELECT action, entity_type, entity_label, created_at FROM audit_log WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(req.user.id);
+    const activityLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='profile_activity_limit'").get()?.value) || 20;
+    const recentActivity = db.prepare('SELECT action, entity_type, entity_label, created_at FROM audit_log WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(req.user.id, activityLimit);
     res.json({ ...user, recent_activity: recentActivity });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

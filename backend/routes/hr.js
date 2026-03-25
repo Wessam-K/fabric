@@ -148,22 +148,27 @@ router.get('/employees/:id', requirePermission('hr', 'view'), (req, res) => {
     const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
     if (!emp) return res.status(404).json({ error: 'الموظف غير موجود' });
 
+    // Get configurable limits
+    const attendanceLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='hr_attendance_history_limit'").get()?.value) || 30;
+    const payrollLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='hr_payroll_history_limit'").get()?.value) || 12;
+    const adjustmentsLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='hr_adjustments_history_limit'").get()?.value) || 20;
+
     // Recent attendance
     const attendance = db.prepare(`
-      SELECT * FROM attendance WHERE employee_id = ? ORDER BY work_date DESC LIMIT 30
-    `).all(emp.id);
+      SELECT * FROM attendance WHERE employee_id = ? ORDER BY work_date DESC LIMIT ?
+    `).all(emp.id, attendanceLimit);
 
     // Payroll history
     const payroll = db.prepare(`
       SELECT pr.*, pp.period_month, pp.period_name FROM payroll_records pr
       JOIN payroll_periods pp ON pp.id = pr.period_id
-      WHERE pr.employee_id = ? ORDER BY pp.period_month DESC LIMIT 12
-    `).all(emp.id);
+      WHERE pr.employee_id = ? ORDER BY pp.period_month DESC LIMIT ?
+    `).all(emp.id, payrollLimit);
 
     // Adjustments
     const adjustments = db.prepare(`
-      SELECT * FROM hr_adjustments WHERE employee_id = ? ORDER BY created_at DESC LIMIT 20
-    `).all(emp.id);
+      SELECT * FROM hr_adjustments WHERE employee_id = ? ORDER BY created_at DESC LIMIT ?
+    `).all(emp.id, adjustmentsLimit);
 
     res.json({ ...emp, attendance, payroll, adjustments });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

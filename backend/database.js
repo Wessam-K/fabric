@@ -2433,6 +2433,28 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (32)`);
   }
+
+  // ──── V33 — Auth, HR, quality, machine history limits ────
+  const v33 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 33').get();
+  if (!v33) {
+    try {
+      const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+      // Auth/security limits
+      insSetting.run('password_history_limit', '5');
+      insSetting.run('profile_activity_limit', '20');
+      // HR employee detail limits
+      insSetting.run('hr_attendance_history_limit', '30');
+      insSetting.run('hr_payroll_history_limit', '12');
+      insSetting.run('hr_adjustments_history_limit', '20');
+      // Reports limits
+      insSetting.run('cost_history_limit', '20');
+      insSetting.run('quality_history_limit', '50');
+      // Machine detail limit
+      insSetting.run('machine_recent_stages_limit', '20');
+    } catch(e) { console.error('V33: history limits settings:', e.message); }
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (33)`);
+  }
 }
 
 initializeDatabase();
