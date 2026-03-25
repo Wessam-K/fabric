@@ -192,6 +192,10 @@ app.use('/api/auto-journal', requireAuth, autojournalRouter);
 // Dashboard
 app.get('/api/dashboard', requireAuth, (req, res) => {
   try {
+    // Get configurable limits from settings
+    const dashboardListLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='dashboard_list_limit'").get()?.value) || 5;
+    const dashboardMachineLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='dashboard_machine_limit'").get()?.value) || 30;
+    
     const totalModels = db.prepare("SELECT COUNT(*) as c FROM models WHERE status='active'").get().c;
     const totalFabrics = db.prepare("SELECT COUNT(*) as c FROM fabrics WHERE status='active'").get().c;
     const totalAccessories = db.prepare("SELECT COUNT(*) as c FROM accessories WHERE status='active'").get().c;
@@ -208,12 +212,12 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
         (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id AND status='completed') as stages_done,
         (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id) as stages_total
       FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id
-      ORDER BY wo.created_at DESC LIMIT 5`).all();
+      ORDER BY wo.created_at DESC LIMIT ?`).all(dashboardListLimit);
 
     const recentPOs = db.prepare(`
       SELECT po.*, s.name as supplier_name
       FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id
-      ORDER BY po.created_at DESC LIMIT 5`).all();
+      ORDER BY po.created_at DESC LIMIT ?`).all(dashboardListLimit);
 
     // V9 — production pipeline (WO status counts for dashboard chart)
     const pipelineRows = db.prepare(`SELECT status, COUNT(*) as count FROM work_orders WHERE status NOT IN ('cancelled') GROUP BY status`).all();
@@ -230,7 +234,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     const overdueWorkOrdersCount = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE due_date < date('now') AND status NOT IN ('completed','cancelled')`).get().c;
 
     // Recent models
-    const recentModels = db.prepare(`SELECT model_code, model_name, model_image, category, created_at FROM models WHERE status='active' ORDER BY created_at DESC LIMIT 5`).all();
+    const recentModels = db.prepare(`SELECT model_code, model_name, model_image, category, created_at FROM models WHERE status='active' ORDER BY created_at DESC LIMIT ?`).all(dashboardListLimit);
 
     // V9 — monthly financials
     const monthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status='paid' AND created_at >= date('now','start of month')`).get().r;
@@ -253,7 +257,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     let topModels = [];
     try {
       topModels = db.prepare(`SELECT model_code, model_name, total_wo, completed_wo, total_quantity, total_pieces_completed, avg_cost_per_piece
-        FROM model_production_summary ORDER BY total_wo DESC LIMIT 5`).all();
+        FROM model_production_summary ORDER BY total_wo DESC LIMIT ?`).all(dashboardListLimit);
     } catch (e) { console.error('dashboard topModels:', e.message); }
 
     // V11 — stage bottleneck detection (stages with most WIP)
@@ -263,13 +267,13 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
         AVG(JULIANDAY('now') - JULIANDAY(ws.started_at)) as avg_days_in_stage
         FROM wo_stages ws JOIN work_orders wo ON wo.id=ws.wo_id
         WHERE wo.status='in_progress' AND ws.status='in_progress' AND ws.quantity_in_stage > 0
-        GROUP BY ws.stage_name ORDER BY total_wip DESC LIMIT 5`).all();
+        GROUP BY ws.stage_name ORDER BY total_wip DESC LIMIT ?`).all(dashboardListLimit);
     } catch (e) { console.error('dashboard stageBottlenecks:', e.message); }
 
     // V17 — Machine status board
     let machineStatusBoard = [];
     try {
-      machineStatusBoard = db.prepare(`SELECT id, code, name, status, location, machine_type FROM machines ORDER BY sort_order, name LIMIT 30`).all();
+      machineStatusBoard = db.prepare(`SELECT id, code, name, status, location, machine_type FROM machines ORDER BY sort_order, name LIMIT ?`).all(dashboardMachineLimit);
     } catch (e) { console.error('dashboard machineStatusBoard:', e.message); }
 
     // V18 — Today's summary
@@ -287,7 +291,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
     // V18 — Overdue invoices
     let overdueInvoicesList = [];
     try {
-      overdueInvoicesList = db.prepare(`SELECT id, invoice_number, customer_name, total, due_date FROM invoices WHERE status='overdue' ORDER BY due_date ASC LIMIT 5`).all();
+      overdueInvoicesList = db.prepare(`SELECT id, invoice_number, customer_name, total, due_date FROM invoices WHERE status='overdue' ORDER BY due_date ASC LIMIT ?`).all(dashboardListLimit);
     } catch (e) { console.error('dashboard overdueInvoices:', e.message); }
 
     // V18 — Overdue work orders list (detailed)
@@ -296,7 +300,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
       overdueWOList = db.prepare(`SELECT wo.id, wo.wo_number, wo.due_date, wo.status, m.model_code, m.model_name
         FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id
         WHERE wo.due_date < date('now') AND wo.status NOT IN ('completed','cancelled')
-        ORDER BY wo.due_date ASC LIMIT 5`).all();
+        ORDER BY wo.due_date ASC LIMIT ?`).all(dashboardListLimit);
     } catch (e) { console.error('dashboard overdueWOList:', e.message); }
 
     res.json({
@@ -336,23 +340,24 @@ app.get('/api/search', requireAuth, (req, res) => {
   try {
     const { q } = req.query;
     if (!q || q.length < 2) return res.json({ models: [], fabrics: [], accessories: [], invoices: [], suppliers: [], workOrders: [], purchaseOrders: [] });
+    const searchLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='search_results_limit'").get()?.value) || 8;
     const like = `%${q}%`;
-    const models = db.prepare(`SELECT model_code, model_name, serial_number, category FROM models WHERE status='active' AND (model_code LIKE ? OR model_name LIKE ? OR serial_number LIKE ?) LIMIT 8`).all(like, like, like);
-    const fabrics = db.prepare(`SELECT code, name, fabric_type, price_per_m FROM fabrics WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT 8`).all(like, like);
-    const accessories = db.prepare(`SELECT code, name, acc_type, unit_price FROM accessories WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT 8`).all(like, like);
-    const invoices = db.prepare(`SELECT id, invoice_number, customer_name, total, status FROM invoices WHERE invoice_number LIKE ? OR customer_name LIKE ? LIMIT 8`).all(like, like);
-    const suppliers = db.prepare(`SELECT id, code, name, supplier_type FROM suppliers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR contact_name LIKE ?) LIMIT 8`).all(like, like, like);
-    const workOrders = db.prepare(`SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.assigned_to, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ? LIMIT 8`).all(like, like, like, like);
-    const purchaseOrders = db.prepare(`SELECT po.id, po.po_number, po.status, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.po_number LIKE ? OR s.name LIKE ? LIMIT 8`).all(like, like);
-    const customers = db.prepare(`SELECT id, code, name, phone, city FROM customers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR phone LIKE ?) LIMIT 8`).all(like, like, like);
+    const models = db.prepare(`SELECT model_code, model_name, serial_number, category FROM models WHERE status='active' AND (model_code LIKE ? OR model_name LIKE ? OR serial_number LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
+    const fabrics = db.prepare(`SELECT code, name, fabric_type, price_per_m FROM fabrics WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit);
+    const accessories = db.prepare(`SELECT code, name, acc_type, unit_price FROM accessories WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit);
+    const invoices = db.prepare(`SELECT id, invoice_number, customer_name, total, status FROM invoices WHERE invoice_number LIKE ? OR customer_name LIKE ? LIMIT ?`).all(like, like, searchLimit);
+    const suppliers = db.prepare(`SELECT id, code, name, supplier_type FROM suppliers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR contact_name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
+    const workOrders = db.prepare(`SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.assigned_to, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ? LIMIT ?`).all(like, like, like, like, searchLimit);
+    const purchaseOrders = db.prepare(`SELECT po.id, po.po_number, po.status, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.po_number LIKE ? OR s.name LIKE ? LIMIT ?`).all(like, like, searchLimit);
+    const customers = db.prepare(`SELECT id, code, name, phone, city FROM customers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR phone LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
     let maintenanceOrders = [], expensesResults = [];
     let machines = [];
     try {
-      machines = db.prepare(`SELECT id, code, name, barcode, machine_type, status FROM machines WHERE status != 'inactive' AND (code LIKE ? OR name LIKE ? OR barcode LIKE ?) LIMIT 8`).all(like, like, like);
+      machines = db.prepare(`SELECT id, code, name, barcode, machine_type, status FROM machines WHERE status != 'inactive' AND (code LIKE ? OR name LIKE ? OR barcode LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
     } catch (e) { console.error('search machines:', e.message); }
     try {
-      maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT 8`).all(like, like, like);
-      expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT 8`).all(like, like);
+      maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
+      expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT ?`).all(like, like, searchLimit);
     } catch (e) { console.error('search maintenance/expenses:', e.message); }
     res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults, machines });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

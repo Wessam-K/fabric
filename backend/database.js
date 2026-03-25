@@ -2417,6 +2417,22 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (31)`);
   }
+
+  // ──── V32 — Dashboard and search limit settings ────
+  const v32 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 32').get();
+  if (!v32) {
+    try {
+      const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+      // Dashboard recent items limit
+      insSetting.run('dashboard_list_limit', '5');
+      // Dashboard machine board limit
+      insSetting.run('dashboard_machine_limit', '30');
+      // Global search results limit per category
+      insSetting.run('search_results_limit', '8');
+    } catch(e) { console.error('V32: dashboard/search settings:', e.message); }
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (32)`);
+  }
 }
 
 initializeDatabase();
