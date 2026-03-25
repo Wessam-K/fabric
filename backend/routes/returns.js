@@ -33,11 +33,13 @@ router.post('/sales', requirePermission('returns', 'create'), (req, res) => {
       const retNum = generateNextNumber(db, 'sales_return');
       let totalAmount = 0;
       for (const it of items) { totalAmount += (it.quantity || 0) * (it.unit_price || 0); }
-      const taxAmount = 0;
+      // Calculate tax from settings
+      const taxRatePct = parseFloat(db.prepare("SELECT value FROM settings WHERE key='tax_rate'").get()?.value) || 14;
+      const taxAmount = Math.round(totalAmount * taxRatePct) / 100;
 
       const r = db.prepare(`INSERT INTO sales_returns (return_number, customer_id, invoice_id, return_date, reason, notes, subtotal, tax_amount, total, status, created_by)
         VALUES (?,?,?,datetime('now','localtime'),?,?,?,?,?,'draft',?)`)
-        .run(retNum, customer_id, invoice_id || null, reason || null, notes || null, totalAmount, taxAmount, totalAmount, req.user.id);
+        .run(retNum, customer_id, invoice_id || null, reason || null, notes || null, totalAmount, taxAmount, totalAmount + taxAmount, req.user.id);
       const retId = r.lastInsertRowid;
 
       const ins = db.prepare('INSERT INTO sales_return_items (return_id, description, model_code, quantity, unit_price, total) VALUES (?,?,?,?,?,?)');

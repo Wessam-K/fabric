@@ -8,7 +8,7 @@ router.get('/fabric-stock', requirePermission('inventory', 'view'), (req, res) =
   try {
     const { search, low_stock_only } = req.query;
     const threshold = db.prepare("SELECT value FROM settings WHERE key='low_stock_threshold'").get();
-    const lowThreshold = parseFloat(threshold?.value) || 10;
+    const lowThreshold = parseFloat(threshold?.value) || 20;
 
     let q = `SELECT f.code, f.name, f.fabric_type, f.color, f.image_path, f.price_per_m as registry_price,
       COALESCE(SUM(fib.received_meters),0) as total_received,

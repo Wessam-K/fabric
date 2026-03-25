@@ -46,8 +46,11 @@ router.post('/', upload.single('image'), requirePermission('accessories', 'creat
     const { code, acc_type, name, unit_price, unit, supplier, supplier_id, notes, quantity_on_hand, low_stock_threshold, reorder_qty } = req.body;
     if (!code || !acc_type || !name || unit_price == null) return res.status(400).json({ error: 'الكود والنوع والاسم وسعر الوحدة مطلوبين' });
     const image_path = req.file ? `/uploads/accessories/${req.file.filename}` : null;
+    // Get defaults from settings
+    const defLowStock = parseInt(db.prepare("SELECT value FROM settings WHERE key='low_stock_threshold'").get()?.value) || 20;
+    const defReorderQty = parseInt(db.prepare("SELECT value FROM settings WHERE key='default_reorder_qty'").get()?.value) || 50;
     const r = db.prepare(`INSERT INTO accessories (code,acc_type,name,unit_price,unit,supplier,supplier_id,notes,quantity_on_hand,low_stock_threshold,reorder_qty,image_path) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(code, acc_type, name, parseFloat(unit_price), unit || 'piece', supplier || null, supplier_id || null, notes || null, quantity_on_hand || 0, low_stock_threshold || 10, reorder_qty || 50, image_path);
+      .run(code, acc_type, name, parseFloat(unit_price), unit || 'piece', supplier || null, supplier_id || null, notes || null, quantity_on_hand || 0, low_stock_threshold || defLowStock, reorder_qty || defReorderQty, image_path);
     const created = db.prepare('SELECT * FROM accessories WHERE id=?').get(r.lastInsertRowid);
     logAudit(req, 'CREATE', 'accessory', code, name);
     res.status(201).json(created);
@@ -83,8 +86,11 @@ router.post('/import', requirePermission('accessories', 'create'), (req, res) =>
         try {
           if (!item.code || !item.name) { errors.push(`سطر بدون كود أو اسم`); continue; }
           const existing = db.prepare('SELECT id FROM accessories WHERE code=?').get(item.code);
-          if (existing) { update.run(item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.low_stock_threshold)||10, parseInt(item.reorder_qty)||50, item.notes||null, item.code); updated++; }
-          else { insert.run(item.code, item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.quantity_on_hand)||0, parseInt(item.low_stock_threshold)||10, parseInt(item.reorder_qty)||50, item.notes||null); imported++; }
+          // Get defaults from settings for import
+          const defLowStock = parseInt(db.prepare("SELECT value FROM settings WHERE key='low_stock_threshold'").get()?.value) || 20;
+          const defReorderQty = parseInt(db.prepare("SELECT value FROM settings WHERE key='default_reorder_qty'").get()?.value) || 50;
+          if (existing) { update.run(item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.low_stock_threshold)||defLowStock, parseInt(item.reorder_qty)||defReorderQty, item.notes||null, item.code); updated++; }
+          else { insert.run(item.code, item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.quantity_on_hand)||0, parseInt(item.low_stock_threshold)||defLowStock, parseInt(item.reorder_qty)||defReorderQty, item.notes||null); imported++; }
         } catch (e) { errors.push(`${item.code}: ${e.message}`); }
       }
     })();

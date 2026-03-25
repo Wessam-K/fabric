@@ -598,11 +598,22 @@ router.post('/payroll/:periodId/calculate', requirePermission('hr', 'edit'), (re
         adjMap[adj.employee_id].push(adj);
       }
 
+      // Read settings for payroll defaults
+      const getSettingVal = (key, fallback) => {
+        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+        return row ? parseFloat(row.value) : fallback;
+      };
+      const paySettings = {
+        stdDays: getSettingVal('working_days_per_month', 26),
+        stdHours: getSettingVal('working_hours_per_day', 8),
+        overtimeMultiplier: getSettingVal('default_overtime_multiplier', 1.5)
+      };
+
       for (const emp of employees) {
         const summary = attMap[emp.id] || { days_worked: 0, total_hours: 0, overtime_hours: 0, absent_days: 0, total_late_minutes: 0 };
         const adjustments = adjMap[emp.id] || [];
 
-        const pay = calculateEmployeePay(emp, summary, adjustments);
+        const pay = calculateEmployeePay(emp, summary, adjustments, paySettings);
 
         insertRecord.run(
           period.id, emp.id, pay.days_worked, pay.hours_worked, pay.overtime_hours, pay.absent_days,
@@ -636,10 +647,11 @@ router.post('/payroll/:periodId/calculate', requirePermission('hr', 'edit'), (re
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
-function calculateEmployeePay(employee, attendanceSummary, adjustments) {
+function calculateEmployeePay(employee, attendanceSummary, adjustments, settings = {}) {
   let base_pay = 0, daily_rate = 0, hourly_rate = 0;
-  const stdDays = employee.standard_days_per_month || 26;
-  const stdHours = employee.standard_hours_per_day || 8;
+  // Use employee value, then settings, then hardcoded fallback
+  const stdDays = employee.standard_days_per_month || settings.stdDays || 26;
+  const stdHours = employee.standard_hours_per_day || settings.stdHours || 8;
 
   const salary = employee.base_salary || 0;
   if (employee.salary_type === 'monthly') {
@@ -658,7 +670,8 @@ function calculateEmployeePay(employee, attendanceSummary, adjustments) {
     base_pay = 0; // added as adjustment
   }
 
-  const overtime_pay = attendanceSummary.overtime_hours * hourly_rate * (employee.overtime_rate_multiplier || 1.5);
+  const overtimeMultiplier = employee.overtime_rate_multiplier || settings.overtimeMultiplier || 1.5;
+  const overtime_pay = attendanceSummary.overtime_hours * hourly_rate * overtimeMultiplier;
 
   const housing = employee.housing_allowance;
   const transport = employee.transport_allowance;

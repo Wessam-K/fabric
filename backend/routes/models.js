@@ -237,8 +237,9 @@ router.post('/:code/bom-templates', requirePermission('models', 'edit'), (req, r
       const tid = r.lastInsertRowid;
 
       if (fabrics?.length) {
+        const defWastePct = getSetting('waste_pct_default', 5);
         const ins = db.prepare('INSERT INTO bom_template_fabrics (template_id,fabric_code,role,meters_per_piece,waste_pct,color_note,sort_order) VALUES (?,?,?,?,?,?,?)');
-        fabrics.forEach((f, i) => { if (f.fabric_code) ins.run(tid, f.fabric_code, f.role || 'main', f.meters_per_piece || 1, f.role === 'lining' ? 0 : (f.waste_pct ?? 5), f.color_note || null, f.sort_order ?? i); });
+        fabrics.forEach((f, i) => { if (f.fabric_code) ins.run(tid, f.fabric_code, f.role || 'main', f.meters_per_piece || 1, f.role === 'lining' ? 0 : (f.waste_pct ?? defWastePct), f.color_note || null, f.sort_order ?? i); });
       }
       if (accessories?.length) {
         const ins = db.prepare('INSERT INTO bom_template_accessories (template_id,accessory_code,accessory_name,quantity,unit_price,notes) VALUES (?,?,?,?,?,?)');

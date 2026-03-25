@@ -2368,6 +2368,25 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (28)`);
   }
+
+  // ──── V29 — Hardcoded defaults audit: new settings ────
+  const v29 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 29').get();
+  if (!v29) {
+    try {
+      const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+      // Accessory defaults
+      insSetting.run('default_reorder_qty', '50');
+      // Pagination default
+      insSetting.run('default_page_size', '25');
+      // Scheduling/maintenance defaults
+      insSetting.run('default_schedule_priority', '5');
+      insSetting.run('default_maintenance_priority', 'medium');
+      // Shipping default
+      insSetting.run('default_package_count', '1');
+    } catch(e) { console.error('V29: new settings:', e.message); }
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (29)`);
+  }
 }
 
 initializeDatabase();
