@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // ═══════════════════════════════════════════════
 // QUOTATIONS
@@ -29,10 +30,7 @@ router.get('/', requirePermission('quotations', 'view'), (req, res) => {
 // GET /api/quotations/next-number
 router.get('/next-number', requirePermission('quotations', 'view'), (req, res) => {
   try {
-    const prefix = db.prepare("SELECT value FROM settings WHERE key='quotation_number_prefix'").get()?.value || 'QT-';
-    const last = db.prepare('SELECT quotation_number FROM quotations ORDER BY id DESC LIMIT 1').get();
-    const num = last ? parseInt(String(last.quotation_number).replace(/\D/g, '')) + 1 : 1;
-    res.json({ next_number: `${prefix}${String(num).padStart(5, '0')}` });
+    res.json({ next_number: generateNextNumber(db, 'quotation') });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -132,10 +130,7 @@ router.post('/:id/convert-to-so', requirePermission('sales_orders', 'create'), (
     if (!q) return res.status(404).json({ error: 'عرض السعر غير موجود' });
     if (q.status !== 'sent' && q.status !== 'draft') return res.status(400).json({ error: 'لا يمكن التحويل إلا من حالة مسودة أو مرسل' });
 
-    const prefix = db.prepare("SELECT value FROM settings WHERE key='so_number_prefix'").get()?.value || 'SO-';
-    const lastSo = db.prepare('SELECT so_number FROM sales_orders ORDER BY id DESC LIMIT 1').get();
-    const soNum = lastSo ? parseInt(String(lastSo.so_number).replace(/\D/g, '')) + 1 : 1;
-    const soNumber = `${prefix}${String(soNum).padStart(5, '0')}`;
+    const soNumber = generateNextNumber(db, 'sales_order');
 
     const soId = db.transaction(() => {
       const soResult = db.prepare(`INSERT INTO sales_orders 
@@ -208,10 +203,7 @@ router.post('/sales-orders/:id/convert-to-wo', requirePermission('work_orders', 
     if (!so) return res.status(404).json({ error: 'أمر البيع غير موجود' });
     if (!['confirmed','draft'].includes(so.status)) return res.status(400).json({ error: 'لا يمكن التحويل إلا من حالة مؤكد أو مسودة' });
 
-    const woPrefix = db.prepare("SELECT value FROM settings WHERE key='wo_prefix'").get()?.value || 'WO-';
-    const lastWo = db.prepare('SELECT wo_number FROM work_orders ORDER BY id DESC LIMIT 1').get();
-    const woNum = lastWo ? parseInt(String(lastWo.wo_number).replace(/\D/g, '')) + 1 : 1;
-    const woNumber = `${woPrefix}${String(woNum).padStart(5, '0')}`;
+    const woNumber = generateNextNumber(db, 'work_order');
 
     const soItems = db.prepare('SELECT * FROM sales_order_items WHERE sales_order_id=?').all(id);
     const totalQty = soItems.reduce((s, i) => s + (i.quantity || 0), 0);

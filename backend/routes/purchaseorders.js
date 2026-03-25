@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // GET /api/purchase-orders — list
 router.get('/', requirePermission('purchase_orders', 'view'), (req, res) => {
@@ -33,13 +34,7 @@ router.get('/', requirePermission('purchase_orders', 'view'), (req, res) => {
 // GET /api/purchase-orders/next-number
 router.get('/next-number', requirePermission('purchase_orders', 'view'), (req, res) => {
   try {
-    const prefix = db.prepare("SELECT value FROM settings WHERE key='po_prefix'").get()?.value || 'PO-';
-    const year = new Date().getFullYear();
-    const last = db.prepare(`SELECT po_number FROM purchase_orders WHERE po_number LIKE ? ORDER BY id DESC LIMIT 1`).get(`${prefix}${year}-%`);
-    if (!last) return res.json({ next_number: `${prefix}${year}-001` });
-    const parts = last.po_number.split('-');
-    const num = parseInt(parts[parts.length - 1], 10) || 0;
-    res.json({ next_number: `${prefix}${year}-${String(num + 1).padStart(3, '0')}` });
+    res.json({ next_number: generateNextNumber(db, 'purchase_order') });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -267,11 +262,7 @@ router.patch('/:id/receive', requirePermission('purchase_orders', 'edit'), (req,
 
         // Create fabric inventory batch for fabric items
         if (poItem.item_type === 'fabric' && poItem.fabric_code && receivedQty > 0) {
-          const year = new Date().getFullYear();
-          const last = db.prepare("SELECT batch_code FROM fabric_inventory_batches WHERE batch_code LIKE ? ORDER BY id DESC LIMIT 1").get(`FB-${year}-%`);
-          let nextNum = 1;
-          if (last) nextNum = (parseInt(last.batch_code.split('-')[2], 10) || 0) + 1;
-          const batchCode = `FB-${year}-${String(nextNum).padStart(4, '0')}`;
+          const batchCode = generateNextNumber(db, 'fabric_batch');
 
           db.prepare(`INSERT INTO fabric_inventory_batches (batch_code,fabric_code,supplier_id,po_id,po_item_id,ordered_meters,received_meters,price_per_meter,used_meters,wasted_meters,received_date,batch_status) VALUES (?,?,?,?,?,?,?,?,0,0,?,?)`)
             .run(batchCode, poItem.fabric_code, po.supplier_id, poId, poItem.id, poItem.quantity, receivedQty, poItem.unit_price, received_date || new Date().toISOString().split('T')[0], 'available');

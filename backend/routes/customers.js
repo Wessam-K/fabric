@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // ═══════════════════════════════════════════════
 // GET /api/customers — list with search & filter
@@ -162,9 +163,7 @@ router.post('/', requirePermission('customers', 'create'), (req, res) => {
     // Auto-generate code if not provided
     let customerCode = code;
     if (!customerCode || !customerCode.trim()) {
-      const last = db.prepare("SELECT code FROM customers WHERE code LIKE 'CUST-%' ORDER BY id DESC LIMIT 1").get();
-      const nextNum = last ? parseInt(last.code.replace('CUST-', '')) + 1 : 1;
-      customerCode = `CUST-${String(nextNum).padStart(3, '0')}`;
+      customerCode = generateNextNumber(db, 'customer');
     }
 
     // Check duplicate code
@@ -255,6 +254,9 @@ router.delete('/:id', requirePermission('customers', 'delete'), (req, res) => {
 // GET /api/customers/:id/payments — list payments
 // ═══════════════════════════════════════════════
 router.get('/:id/payments', requirePermission('customers', 'view'), (req, res) => {
+  try {
+    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
+    if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
 
     const payments = db.prepare(`
       SELECT cp.*, i.invoice_number

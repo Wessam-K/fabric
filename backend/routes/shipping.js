@@ -2,14 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
-
-function nextNumber(prefix) {
-  const setting = db.prepare('SELECT value FROM settings WHERE key=?').get(`${prefix.toLowerCase()}_number_prefix`);
-  const pfx = setting?.value || prefix;
-  const last = db.prepare(`SELECT shipment_number FROM shipments ORDER BY id DESC LIMIT 1`).get();
-  const num = last ? parseInt(String(last.shipment_number).replace(/\D/g, '')) + 1 : 1;
-  return `${pfx}-${String(num).padStart(5, '0')}`;
-}
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // GET /api/shipping — list shipments
 router.get('/', requirePermission('shipping', 'view'), (req, res) => {
@@ -40,7 +33,7 @@ router.get('/', requirePermission('shipping', 'view'), (req, res) => {
 
 // GET /api/shipping/next-number
 router.get('/next-number', requirePermission('shipping', 'view'), (req, res) => {
-  res.json({ number: nextNumber('SHP') });
+  res.json({ number: generateNextNumber(db, 'shipment') });
 });
 
 // GET /api/shipping/:id
@@ -72,7 +65,7 @@ router.post('/', requirePermission('shipping', 'create'), (req, res) => {
     if (shipment_type && !['outbound','inbound','return'].includes(shipment_type)) return res.status(400).json({ error: 'نوع الشحنة غير صالح' });
 
     const created = db.transaction(() => {
-      const num = shipment_number || nextNumber('SHP');
+      const num = shipment_number || generateNextNumber(db, 'shipment');
       const result = db.prepare(`INSERT INTO shipments 
         (shipment_number, shipment_type, customer_id, supplier_id, work_order_id, invoice_id,
          carrier_name, tracking_number, shipping_method, shipping_cost, weight, packages_count,

@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { requirePermission, logAudit } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // ═══════════════════════════════════════════
 //  Chart of Accounts
@@ -71,9 +72,7 @@ router.get('/journal', requirePermission('accounting', 'view'), (req, res) => {
 // GET /api/accounting/journal/next-number
 router.get('/journal/next-number', requirePermission('accounting', 'create'), (req, res) => {
   try {
-    const last = db.prepare("SELECT entry_number FROM journal_entries ORDER BY id DESC LIMIT 1").get();
-    const num = last ? parseInt(last.entry_number.replace(/\D/g, '')) + 1 : 1;
-    res.json({ next: `JE-${String(num).padStart(4, '0')}` });
+    res.json({ next: generateNextNumber(db, 'journal_entry') });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

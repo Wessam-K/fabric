@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { notFound, validationError, dbError, serverError, sanitize } = require('../utils/errors');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 const { toCSV } = require('../utils/csv');
 
 // ═══════════════════════════════════════════════
@@ -119,9 +120,7 @@ router.post('/', requirePermission('machines', 'create'), (req, res) => {
 
     let machineCode = code;
     if (!machineCode || !machineCode.trim()) {
-      const last = db.prepare("SELECT code FROM machines WHERE code LIKE 'MCH-%' ORDER BY id DESC LIMIT 1").get();
-      const nextNum = last ? parseInt(last.code.replace('MCH-', '')) + 1 : 1;
-      machineCode = `MCH-${String(nextNum).padStart(3, '0')}`;
+      machineCode = generateNextNumber(db, 'machine');
     }
 
     const existing = db.prepare('SELECT id FROM machines WHERE code = ?').get(machineCode);
@@ -136,7 +135,7 @@ router.post('/', requirePermission('machines', 'create'), (req, res) => {
     const machine = db.prepare('SELECT * FROM machines WHERE id = ?').get(result.lastInsertRowid);
     // Auto-generate barcode
     if (!machine.barcode) {
-      const barcode = 'MCH-' + result.lastInsertRowid + '-' + Date.now().toString().slice(-6);
+      const barcode = 'MCH-' + result.lastInsertRowid + '-' + String(result.lastInsertRowid).padStart(4, '0');
       db.prepare('UPDATE machines SET barcode=? WHERE id=?').run(barcode, result.lastInsertRowid);
       machine.barcode = barcode;
     }

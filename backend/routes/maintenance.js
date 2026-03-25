@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { toCSV } = require('../utils/csv');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // ═══════════════════════════════════════════════
 // GET /api/maintenance/stats
@@ -109,7 +110,7 @@ router.post('/', requirePermission('maintenance', 'create'), (req, res) => {
     if (!title) return res.status(400).json({ error: 'عنوان أمر الصيانة مطلوب' });
     if (maintenance_type && !['preventive','corrective','emergency','routine'].includes(maintenance_type)) return res.status(400).json({ error: 'نوع الصيانة غير صالح' });
     if (priority && !['low','medium','high','critical'].includes(priority)) return res.status(400).json({ error: 'الأولوية غير صالحة' });
-    const barcode = 'MNT-' + Date.now().toString().slice(-8);
+    const barcode = generateNextNumber(db, 'maintenance');
     const result = db.prepare(`INSERT INTO maintenance_orders (machine_id, maintenance_type, title, description, priority, scheduled_date, performed_by, cost, parts_used, notes, barcode, created_by, status)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'pending')`)
       .run(machine_id || null, maintenance_type || 'preventive', title, description || null, priority || 'medium',
@@ -195,7 +196,7 @@ router.post('/import', requirePermission('maintenance', 'create'), (req, res) =>
         try {
           const r = items[i];
           if (!r.title) { errors.push({ row: i+1, error: 'العنوان مطلوب' }); continue; }
-          const barcode = 'MNT-' + Date.now().toString().slice(-8) + '-' + i;
+          const barcode = generateNextNumber(db, 'maintenance');
           db.prepare(`INSERT INTO maintenance_orders (machine_id, maintenance_type, title, description, priority, scheduled_date, performed_by, cost, notes, barcode, created_by, status)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')`)
             .run(r.machine_id||null, r.maintenance_type||'preventive', r.title, r.description||null,

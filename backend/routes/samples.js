@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // GET /api/samples
 router.get('/', requirePermission('samples', 'view'), (req, res) => {
@@ -25,10 +26,7 @@ router.get('/', requirePermission('samples', 'view'), (req, res) => {
 // GET /api/samples/next-number
 router.get('/next-number', requirePermission('samples', 'view'), (req, res) => {
   try {
-    const prefix = db.prepare("SELECT value FROM settings WHERE key='sample_number_prefix'").get()?.value || 'SMP-';
-    const last = db.prepare('SELECT sample_number FROM samples ORDER BY id DESC LIMIT 1').get();
-    const num = last ? parseInt(String(last.sample_number).replace(/\D/g, '')) + 1 : 1;
-    res.json({ next_number: `${prefix}${String(num).padStart(5, '0')}` });
+    res.json({ next_number: generateNextNumber(db, 'sample') });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -96,10 +94,7 @@ router.post('/:id/convert-to-wo', requirePermission('work_orders', 'create'), (r
     const { quantity: targetQty } = req.body;
 
     const woResult = db.transaction(() => {
-      const woPrefix = db.prepare("SELECT value FROM settings WHERE key='wo_prefix'").get()?.value || 'WO-';
-      const lastWo = db.prepare('SELECT wo_number FROM work_orders ORDER BY id DESC LIMIT 1').get();
-      const woNum = lastWo ? parseInt(String(lastWo.wo_number).replace(/\D/g, '')) + 1 : 1;
-      const woNumber = `${woPrefix}${String(woNum).padStart(5, '0')}`;
+      const woNumber = generateNextNumber(db, 'work_order');
 
       const result = db.prepare(`INSERT INTO work_orders 
         (wo_number, customer_id, start_date, status, quantity, notes, created_by)

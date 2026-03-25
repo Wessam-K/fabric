@@ -2270,7 +2270,7 @@ function runMigrations() {
   // ──── V24 — Audit Round 2: soft-delete documents, wholesale setting ────
   const v24 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 24').get();
   if (!v24) {
-    addColumnSafe('documents', 'deleted_at', 'TEXT DEFAULT NULL');
+    try { db.exec("ALTER TABLE documents ADD COLUMN deleted_at TEXT DEFAULT NULL"); } catch(e) {}
     try {
       db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").run('wholesale_discount_pct', '22');
     } catch(e) {}
@@ -2331,6 +2331,42 @@ function runMigrations() {
   if (!v27) {
     db.exec(`DELETE FROM settings WHERE key IN ('default_waste_pct', 'default_masnaiya', 'default_masrouf', 'default_margin')`);
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (27)`);
+  }
+
+  // ──── V28 — Numbering system standardization ────
+  const v28 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 28').get();
+  if (!v28) {
+    // 28.1 — Add UNIQUE constraint on qc_inspections.inspection_number
+    try {
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_qc_inspections_number ON qc_inspections(inspection_number)`);
+    } catch(e) { console.error('V28: qc_inspections unique index:', e.message); }
+
+    // 28.2 — Add settings entries for previously hardcoded prefixes
+    const insSetting28 = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)');
+    insSetting28.run('je_prefix', 'JE-');
+    insSetting28.run('mnt_prefix', 'MNT-');
+    insSetting28.run('mch_prefix', 'MCH-');
+    insSetting28.run('cust_prefix', 'CUST-');
+    insSetting28.run('emp_prefix', 'EMP-');
+    insSetting28.run('fb_prefix', 'FB-');
+
+    // 28.3 — Standardize V23-seeded prefix values to include trailing dash
+    const prefixFixes = [
+      ['shipment_number_prefix', 'SHP',  'SHP-'],
+      ['quotation_number_prefix','QTN',  'QT-'],
+      ['so_number_prefix',       'SO',   'SO-'],
+      ['sample_number_prefix',   'SMP',  'SMP-'],
+      ['sr_number_prefix',       'SR',   'SR-'],
+      ['pr_number_prefix',       'PR',   'PR-'],
+      ['ncr_number_prefix',      'NCR',  'NCR-'],
+      ['qc_number_prefix',       'QC',   'QC-'],
+    ];
+    const updatePrefix = db.prepare('UPDATE settings SET value = ? WHERE key = ? AND value = ?');
+    for (const [key, oldVal, newVal] of prefixFixes) {
+      updatePrefix.run(newVal, key, oldVal);
+    }
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (28)`);
   }
 }
 

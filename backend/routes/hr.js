@@ -6,6 +6,7 @@ const fs = require('fs');
 const router = express.Router();
 const db = require('../database');
 const { requirePermission, logAudit } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 const upload = multer({
   dest: path.join(__dirname, '..', 'uploads', 'attendance'),
@@ -49,13 +50,7 @@ router.get('/employees', requirePermission('hr', 'view'), (req, res) => {
 // GET /api/hr/employees/next-code
 router.get('/employees/next-code', requirePermission('hr', 'edit'), (req, res) => {
   try {
-    const last = db.prepare("SELECT emp_code FROM employees ORDER BY id DESC LIMIT 1").get();
-    let next = 'EMP-001';
-    if (last) {
-      const num = parseInt(last.emp_code.replace('EMP-', '')) + 1;
-      next = `EMP-${String(num).padStart(3, '0')}`;
-    }
-    res.json({ next_code: next });
+    res.json({ next_code: generateNextNumber(db, 'employee') });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -129,10 +124,7 @@ router.post('/employees/import', requirePermission('hr', 'create'), (req, res) =
         } else {
           let empCode = d.emp_code;
           if (!empCode) {
-            const last = db.prepare("SELECT emp_code FROM employees ORDER BY id DESC LIMIT 1").get();
-            let nextNum = 1;
-            if (last) { nextNum = parseInt(last.emp_code.replace('EMP-', '')) + 1; }
-            empCode = `EMP-${String(nextNum).padStart(3, '0')}`;
+            empCode = generateNextNumber(db, 'employee');
           }
           db.prepare(`INSERT INTO employees (emp_code, full_name, national_id, department, job_title,
             employment_type, salary_type, base_salary, hire_date, phone, address, bank_account, notes)

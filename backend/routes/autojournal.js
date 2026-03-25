@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // ═══════════════════════════════════════════════
 // Auto-Journal Entry Helper
@@ -30,10 +31,8 @@ function getAccount(type) {
 
 function createJournalEntry(req, description, lines, refType, refId) {
   return db.transaction(() => {
-    // Generate JE number
-    const last = db.prepare('SELECT entry_number FROM journal_entries ORDER BY id DESC LIMIT 1').get();
-    const num = last ? parseInt(String(last.entry_number).replace(/\D/g, '')) + 1 : 1;
-    const entryNumber = `JE-${String(num).padStart(5, '0')}`;
+    // Generate JE number atomically inside transaction
+    const entryNumber = generateNextNumber(db, 'journal_entry');
 
     const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
     const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);

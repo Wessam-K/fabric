@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // ═══════════════════════════════════════════════
 // QC TEMPLATES
@@ -141,7 +142,7 @@ router.post('/inspections', requirePermission('quality', 'create'), (req, res) =
     if (!work_order_id) return res.status(400).json({ error: 'أمر العمل مطلوب' });
 
     const inspResult = db.transaction(() => {
-      const num = `QC-${String(Date.now()).slice(-8)}`;
+      const num = generateNextNumber(db, 'qc_inspection');
       const result = db.prepare(`INSERT INTO qc_inspections 
         (inspection_number, work_order_id, template_id, inspector_id, lot_size, sample_size)
         VALUES (?,?,?,?,?,?)`)
@@ -221,7 +222,7 @@ router.post('/ncr', requirePermission('quality', 'create'), (req, res) => {
     const { work_order_id, inspection_id, description, severity, root_cause, corrective_action, preventive_action, assigned_to, due_date } = req.body;
     if (!description) return res.status(400).json({ error: 'الوصف مطلوب' });
 
-    const ncrNum = `NCR-${String(Date.now()).slice(-8)}`;
+    const ncrNum = generateNextNumber(db, 'ncr');
     const result = db.prepare(`INSERT INTO qc_ncr 
       (ncr_number, work_order_id, inspection_id, description, severity, root_cause, corrective_action, preventive_action, assigned_to, due_date, created_by, status)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,'open')`)

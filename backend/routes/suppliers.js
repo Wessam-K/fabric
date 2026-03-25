@@ -87,6 +87,9 @@ router.post('/import', requirePermission('suppliers', 'create'), (req, res) => {
 
 // GET /api/suppliers/:id — single with stats
 router.get('/:id', requirePermission('suppliers', 'view'), (req, res) => {
+  try {
+    const supplier = db.prepare('SELECT * FROM suppliers WHERE id = ?').get(req.params.id);
+    if (!supplier) return res.status(404).json({ error: 'المورد غير موجود' });
     supplier.payments = db.prepare('SELECT * FROM supplier_payments WHERE supplier_id=? ORDER BY payment_date DESC').all(supplier.id);
     const totOrd = db.prepare(`SELECT COALESCE(SUM(total_amount),0) as v FROM purchase_orders WHERE supplier_id=? AND status NOT IN ('cancelled','draft')`).get(supplier.id).v;
     const totPaid = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE supplier_id=?`).get(supplier.id).v;
@@ -163,6 +166,9 @@ router.post('/:id/payments', requirePermission('suppliers', 'edit'), (req, res) 
 
 // GET /api/suppliers/:id/ledger — full financial ledger
 router.get('/:id/ledger', requirePermission('suppliers', 'view'), (req, res) => {
+  try {
+    const supplier = db.prepare('SELECT * FROM suppliers WHERE id = ?').get(req.params.id);
+    if (!supplier) return res.status(404).json({ error: 'المورد غير موجود' });
     // Get all POs as debits
     const pos = db.prepare(`SELECT id, po_number, total_amount, paid_amount, status, order_date, received_date
       FROM purchase_orders WHERE supplier_id=? AND status NOT IN ('cancelled','draft') ORDER BY order_date DESC`).all(supplier.id);

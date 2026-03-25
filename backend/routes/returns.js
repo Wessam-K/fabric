@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { generateNextNumber } = require('../utils/numberGenerator');
 
 // ═══════════════════════════════════════════════
 // SALES RETURNS
@@ -29,7 +30,7 @@ router.post('/sales', requirePermission('returns', 'create'), (req, res) => {
     if (!customer_id || !items?.length) return res.status(400).json({ error: 'العميل والأصناف مطلوبان' });
 
     const result = db.transaction(() => {
-      const retNum = `SR-${String(Date.now()).slice(-8)}`;
+      const retNum = generateNextNumber(db, 'sales_return');
       let totalAmount = 0;
       for (const it of items) { totalAmount += (it.quantity || 0) * (it.unit_price || 0); }
       const taxAmount = 0;
@@ -102,7 +103,7 @@ router.post('/purchases', requirePermission('returns', 'create'), (req, res) => 
     if (!supplier_id || !items?.length) return res.status(400).json({ error: 'المورد والأصناف مطلوبان' });
 
     const result = db.transaction(() => {
-      const retNum = `PR-${String(Date.now()).slice(-8)}`;
+      const retNum = generateNextNumber(db, 'purchase_return');
       let totalAmount = 0;
       for (const it of items) { totalAmount += (it.quantity || 0) * (it.unit_price || 0); }
 
