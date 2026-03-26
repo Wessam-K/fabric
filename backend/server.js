@@ -65,7 +65,7 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // ═══ Input sanitization — strip HTML tags from string fields ═══
 function stripTags(str) {
@@ -82,10 +82,26 @@ function sanitizeBody(obj) {
 }
 app.use((req, res, next) => {
   if (req.body && typeof req.body === 'object') req.body = sanitizeBody(req.body);
+  // Sanitize query parameters too (H10)
+  if (req.query && typeof req.query === 'object') {
+    for (const [k, v] of Object.entries(req.query)) {
+      if (typeof v === 'string') req.query[k] = stripTags(v);
+    }
+  }
   next();
 });
 
 app.use('/uploads', requireAuth, express.static(path.join(__dirname, 'uploads')));
+
+// ═══ Pagination ceiling — prevent DoS via huge limit values ═══
+const MAX_PAGE_SIZE = 500;
+app.use((req, res, next) => {
+  if (req.query.limit) {
+    const parsed = parseInt(req.query.limit);
+    req.query.limit = String(Math.min(Math.max(parsed || 50, 1), MAX_PAGE_SIZE));
+  }
+  next();
+});
 
 // ═══ Simple rate limiter for auth endpoints ═══
 const loginAttempts = new Map();

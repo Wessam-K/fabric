@@ -6,11 +6,6 @@ const VALID_SEND_CHANNELS = [
   'app:maximize',
   'app:close',
   'app:restart-backend',
-  'dialog:open-file',
-  'dialog:save-file',
-  'export:save',
-  'db:backup',
-  'db:get-info',
   'log:write',
 ];
 
@@ -19,12 +14,6 @@ const VALID_RECEIVE_CHANNELS = [
   'app:update-status',
   'backend:status',
   'backend:log',
-  'dialog:file-selected',
-  'dialog:save-path',
-  'export:saved',
-  'db:backup-result',
-  'db:info',
-  'log:entry',
 ];
 
 const VALID_INVOKE_CHANNELS = [

@@ -11,9 +11,12 @@ export const fmtPercent = (n) => `${(n || 0).toFixed(1)}%`;
 export const downloadCSV = (rows, filename) => {
   if (!rows.length) return;
   const headers = Object.keys(rows[0]);
-  const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => headers.map(h => `"${(r[h] ?? '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
+  const safe = (v) => { const s = (v ?? '').toString().replace(/"/g, '""'); return /^[=+\-@\t\r]/.test(s) ? `"'${s}"` : `"${s}"`; };
+  const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => headers.map(h => safe(r[h])).join(','))].join('\n');
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.href = url;
   a.download = `${filename}.csv`;
   a.click();
+  URL.revokeObjectURL(url);
 };

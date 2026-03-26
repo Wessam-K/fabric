@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle, Camera } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -51,6 +51,10 @@ export default function Accessories() {
   const [stockAdjust, setStockAdjust] = useState({ qty_change: '', notes: '' });
   const [confirmDel, setConfirmDel] = useState(null);
   const [imageFile, setImageFile] = useState(null);
+
+  // Blob URL with cleanup to prevent memory leak
+  const imagePreview = useMemo(() => imageFile ? URL.createObjectURL(imageFile) : null, [imageFile]);
+  useEffect(() => { return () => { if (imagePreview) URL.revokeObjectURL(imagePreview); }; }, [imagePreview]);
 
   const fetchList = async () => {
     try {
@@ -245,7 +249,7 @@ export default function Accessories() {
               <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-[#c9a84c] transition-colors">
                 {imageFile ? (
                   <div className="relative">
-                    <img src={URL.createObjectURL(imageFile)} alt="" className="w-full h-32 object-cover rounded-lg" />
+                    <img src={imagePreview} alt="" className="w-full h-32 object-cover rounded-lg" />
                     <button onClick={() => setImageFile(null)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full"><X size={12} /></button>
                   </div>
                 ) : editing && list.find(a => a.code === editing)?.image_path ? (

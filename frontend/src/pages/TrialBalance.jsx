@@ -36,9 +36,13 @@ export default function TrialBalance() {
 
   const downloadCSV = (rows, filename) => {
     const headers = Object.keys(rows[0] || {});
-    const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => headers.map(h => `"${r[h] ?? ''}"`).join(','))].join('\n');
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const safe = (v) => { const s = (v ?? '').toString().replace(/"/g, '""'); return /^[=+\-@\t\r]/.test(s) ? `"'${s}"` : `"${s}"`; };
+    const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => headers.map(h => safe(r[h])).join(','))].join('\n');
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.href = url;
     a.download = `${filename}.csv`; a.click();
+    URL.revokeObjectURL(url);
   };
 
   const fmt = (n) => Math.round(n || 0).toLocaleString('ar-EG');

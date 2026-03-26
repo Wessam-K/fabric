@@ -18,6 +18,19 @@ const isDev = !app.isPackaged;
 const BACKEND_PORT = 9002;
 const APP_VERSION = require('./package.json').version;
 
+// ── Single instance lock (prevent port conflicts) ────────
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 // ── Paths ────────────────────────────────────────────────
 function getUserDataDir() {
   return isDev ? __dirname : app.getPath('userData');
@@ -256,7 +269,10 @@ function registerIPC() {
   });
 
   ipcMain.handle('dialog:message-box', async (_event, options) => {
-    return dialog.showMessageBox(mainWindow, options);
+    // Validate allowed properties to prevent social engineering via crafted dialogs
+    const allowed = { type: options?.type, title: options?.title, message: options?.message, buttons: options?.buttons, defaultId: options?.defaultId, cancelId: options?.cancelId, detail: options?.detail };
+    Object.keys(allowed).forEach(k => allowed[k] === undefined && delete allowed[k]);
+    return dialog.showMessageBox(mainWindow, allowed);
   });
 
   // Export: save buffer to disk
@@ -272,9 +288,13 @@ function registerIPC() {
       filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
     });
     if (!result.canceled && result.filePath) {
-      fs.writeFileSync(result.filePath, buf);
-      getLogger().info('Export saved', { path: result.filePath, size: buf.length });
-      return { success: true, path: result.filePath };
+      try {
+        fs.writeFileSync(result.filePath, buf);
+        getLogger().info('Export saved', { path: result.filePath, size: buf.length });
+        return { success: true, path: result.filePath };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
     }
     return { success: false };
   });

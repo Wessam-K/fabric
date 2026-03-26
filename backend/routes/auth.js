@@ -132,23 +132,7 @@ router.get('/profile', requireAuth, (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
-// POST /api/auth/create-admin — first-run only
-router.post('/create-admin', (req, res) => {
-  try {
-    const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
-    if (count > 0) return res.status(403).json({ error: 'تم إنشاء حساب المدير مسبقاً' });
-
-    const { username, full_name, password } = req.body;
-    if (!username || !full_name || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
-    if (password.length < 8 || !/[A-Z]/.test(password) || !/\d/.test(password)) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي حرف كبير ورقم' });
-
-    const hash = bcrypt.hashSync(password, 12);
-    const result = db.prepare(
-      'INSERT INTO users (username, full_name, password_hash, role, status) VALUES (?,?,?,?,?)'
-    ).run(username, full_name, hash, 'superadmin', 'active');
-
-    res.json({ message: 'تم إنشاء حساب مدير النظام', user_id: result.lastInsertRowid });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
-});
+// NOTE: create-admin endpoint is defined in server.js with transaction safety.
+// Removed duplicate here to prevent TOCTOU race condition (audit C2).
 
 module.exports = router;

@@ -1,9 +1,10 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, RadialBarChart, RadialBar, AreaChart, Area, CartesianGrid } from 'recharts';
+import { useTheme } from '../context/ThemeContext';
 
 const COLORS = ['#c9a84c', '#3b82f6', '#22c55e', '#ef4444', '#94a3b8', '#8b5cf6'];
 
 export default function DashboardCharts({ data }) {
-  const isDark = document.documentElement.classList.contains('dark');
+  const { isDark } = useTheme();
   const tooltipStyle = {
     direction: 'rtl',
     fontSize: '11px',

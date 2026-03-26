@@ -5,6 +5,36 @@
 
 ---
 
+## Phase E — Production Audit v3 (2026-03-26)
+
+### E1: Critical Security Fixes
+- Removed duplicate `create-admin` endpoint from `routes/auth.js` (TOCTOU race condition)
+- File upload extension now derived from MIME type in `fabrics.js`, `accessories.js`, `models.js` (prevents RCE via `.php` extension)
+- Fixed `dialog:message-box` IPC — whitelist allowed properties to prevent social engineering
+- CSV injection protection in `formatters.js` and `TrialBalance.jsx` — prefix `=+\-@` values with `'`
+- `migrator.js` backup changed from async (race condition) to sync `copyFileSync`
+
+### E2: Memory Leak Fixes
+- `Fabrics.jsx` and `Accessories.jsx`: blob URL preview via `useMemo` + `useEffect` cleanup
+- `formatters.js` and `TrialBalance.jsx`: `revokeObjectURL` after CSV download
+- `ConfirmDialog.jsx`: `useConfirm` Promise now resolves `false` on cancel (was hanging forever)
+
+### E3: Hardening & Defense-in-Depth
+- `server.js`: Query parameter sanitization (HTML tag stripping on `req.query`)
+- `server.js`: Global pagination ceiling middleware (max 500)
+- `server.js`: JSON body limit reduced from 10MB to 2MB
+- `electron.js`: Single-instance lock (`requestSingleInstanceLock`) prevents port conflicts
+- `electron.js`: `export:save-to-disk` wrapped in try/catch
+- `backend/.gitignore`: Re-encoded as UTF-8, added `.jwt_secret`
+- `preload.js`: Cleaned stale IPC channel lists
+
+### E4: UI/UX Fixes
+- `DashboardCharts.jsx`: Uses `useTheme()` hook instead of DOM read for dark mode reactivity
+- `Dashboard.jsx`: `ErrorBoundary` wraps lazy-loaded charts
+- `ConfirmDialog.jsx`: Added dark mode classes
+
+---
+
 ## Phase D — Dashboard Refactoring, Dark Mode, Drag-and-Drop, Security Audit (2026-03-26)
 
 ### D1: App-Wide Dark Mode

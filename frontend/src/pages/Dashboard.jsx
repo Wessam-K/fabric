@@ -15,6 +15,7 @@ import {
 } from '../components/DashboardWidgets';
 import DashboardConfigPanel from '../components/DashboardConfigPanel';
 import HelpButton from '../components/HelpButton';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 const LazyCharts = lazy(() => import('../components/DashboardCharts'));
 
@@ -209,9 +210,11 @@ function WidgetRenderer({ widgetKey, dProps, widgets, data, hrData, kpis, net, p
 
       case 'charts':
         return (
-          <Suspense fallback={<Skeleton className="h-64" />}>
-            <LazyCharts data={data} />
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<Skeleton className="h-64" />}>
+              <LazyCharts data={data} />
+            </Suspense>
+          </ErrorBoundary>
         );
 
       case 'productionPipeline':

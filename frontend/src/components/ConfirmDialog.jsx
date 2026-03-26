@@ -10,14 +10,14 @@ export function ConfirmDialog({ isOpen, onClose, onConfirm, title, message, conf
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-[#1a1a2e] rounded-xl shadow-2xl max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-start gap-4">
           <div className={`p-3 rounded-full ${colors.bg}`}>
             <AlertTriangle className={`w-6 h-6 ${colors.icon}`} />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900">{title || 'تأكيد العملية'}</h3>
-            <p className="text-gray-600 mt-1 text-sm">{message}</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">{title || 'تأكيد العملية'}</h3>
+            <p className="text-gray-600 dark:text-gray-300 mt-1 text-sm">{message}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
@@ -46,13 +46,17 @@ export function useConfirm() {
         title,
         message,
         variant,
-        onConfirm: () => { resolve(true); setState(s => ({ ...s, isOpen: false })); },
+        onConfirm: () => { resolve(true); setState(s => ({ ...s, isOpen: false, onReject: null })); },
+        onReject: () => resolve(false),
       });
     });
   }, []);
 
   const close = useCallback(() => {
-    setState(s => ({ ...s, isOpen: false }));
+    setState(s => {
+      if (s.onReject) s.onReject();
+      return { ...s, isOpen: false, onReject: null };
+    });
   }, []);
 
   const ConfirmDialogEl = (

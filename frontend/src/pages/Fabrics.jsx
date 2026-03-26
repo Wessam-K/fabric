@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Camera } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -38,6 +38,10 @@ export default function Fabrics() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [imageFile, setImageFile] = useState(null);
+
+  // Blob URL with cleanup to prevent memory leak
+  const imagePreview = useMemo(() => imageFile ? URL.createObjectURL(imageFile) : null, [imageFile]);
+  useEffect(() => { return () => { if (imagePreview) URL.revokeObjectURL(imagePreview); }; }, [imagePreview]);
 
   const fetchFabrics = async () => {
     try {
@@ -225,7 +229,7 @@ export default function Fabrics() {
               <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-[#c9a84c] transition-colors">
                 {imageFile ? (
                   <div className="relative">
-                    <img src={URL.createObjectURL(imageFile)} alt="" className="w-full h-32 object-cover rounded-lg" />
+                    <img src={imagePreview} alt="" className="w-full h-32 object-cover rounded-lg" />
                     <button onClick={() => setImageFile(null)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full"><X size={12} /></button>
                   </div>
                 ) : editing && fabrics.find(f => f.code === editing)?.image_path ? (
