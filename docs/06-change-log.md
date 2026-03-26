@@ -5,6 +5,39 @@
 
 ---
 
+## Phase H — Production Audit v6 — Full Line-by-Line Audit (2026-03-27)
+
+### H1: Backend Security — CSV Injection Protection (7 files)
+- **All backend CSV exports** (`invoices.js`, `accessories.js`, `customers.js`, `fabrics.js`, `purchaseorders.js`, `suppliers.js`, `workorders.js`): Fixed `esc()` function to prefix values starting with `=`, `+`, `-`, `@`, `\t`, `\r` with `'` — prevents formula injection when opened in Excel/Sheets
+
+### H2: Backend Math — Invoice Tax Rounding
+- **Invoice POST** (`invoices.js`): Added `Math.round(... * 100) / 100` to both `taxAmt` and `total` — previously floating point could produce values like `115.000000000001`
+- **Invoice PUT** (`invoices.js`): Same rounding fix in both recalculation paths (items provided / only tax/discount changed)
+
+### H3: Backend Validation — Returns Negative Quantity
+- **Sales returns POST** (`returns.js`): Added validation rejecting `quantity <= 0` and `unit_price < 0` before processing
+- **Purchase returns POST** (`returns.js`): Same negative quantity/price validation
+
+### H4: Frontend Permission Guards — Edit/Delete Buttons (5 pages)
+- **Accessories.jsx**: Edit, delete, and stock adjust buttons now guarded by `can('accessories', 'edit/delete')`
+- **Customers.jsx**: Edit button guarded by `can('customers', 'edit')`
+- **Machines.jsx**: Edit and toggle-status buttons guarded by `can('machines', 'edit')`
+- **Fabrics.jsx**: Edit and delete buttons guarded by `can('fabrics', 'edit/delete')`
+- **Suppliers.jsx**: Edit button guarded by `can('suppliers', 'edit')`
+
+### H5: Build
+- Frontend: Vite production build (2553 modules, 105 KB CSS + 1.7 MB JS)
+- Electron: `WK-Hub Setup 2.0.0.exe` (103.6 MB), `WK-Hub 2.0.0.exe` (103.4 MB)
+- Tests: 58/58 pass
+
+### DB Update Safety (verified)
+- DB in `%APPDATA%/wk-hub/` — NOT in install dir
+- Uploads in `%APPDATA%/wk-hub/uploads/` — NOT in install dir
+- NSIS: `oneClick: false`, `allowToChangeInstallationDirectory: true`
+- Installing new version over existing: DB preserved, uploads preserved, all migrations idempotent
+
+---
+
 ## Phase G — Production Audit v5 — Full App Audit (2025-07-24)
 
 ### G1: Critical Backend Fixes

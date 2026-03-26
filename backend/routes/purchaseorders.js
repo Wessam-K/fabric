@@ -43,7 +43,7 @@ router.get('/export', requirePermission('purchase_orders', 'view'), (req, res) =
   try {
     const rows = db.prepare(`SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id ORDER BY po.created_at DESC`).all();
     const header = 'po_number,supplier_name,po_type,status,order_date,expected_date,total_amount,paid_amount,notes';
-    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const esc = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
     const csv = [header, ...rows.map(r => [r.po_number,r.supplier_name,r.po_type,r.status,r.order_date,r.expected_date,r.total_amount,r.paid_amount,r.notes].map(esc).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=purchase-orders.csv');

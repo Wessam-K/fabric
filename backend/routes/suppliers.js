@@ -55,7 +55,7 @@ router.get('/export', requirePermission('suppliers', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT * FROM suppliers ORDER BY created_at DESC`).all();
     const header = 'code,name,supplier_type,phone,email,address,contact_name,payment_terms,rating,status,notes';
-    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const esc = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
     const csv = [header, ...rows.map(r => [r.code,r.name,r.supplier_type,r.phone,r.email,r.address,r.contact_name,r.payment_terms,r.rating,r.status,r.notes].map(esc).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=suppliers.csv');

@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import { useAuth } from '../context/AuthContext';
 
 const TYPES = [
   { value: '', label: 'الكل' },
@@ -26,6 +27,7 @@ const emptyForm = { code: '', name: '', fabric_type: 'main', price_per_m: '', su
 
 export default function Fabrics() {
   const toast = useToast();
+  const { can } = useAuth();
   const [fabrics, setFabrics] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -192,8 +194,8 @@ export default function Fabrics() {
                 </span>
                 {/* Hover actions */}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                  <button onClick={() => openEdit(f)} className="p-2 bg-white rounded-full shadow text-blue-500 hover:bg-blue-50"><Edit2 size={14} /></button>
-                  <button onClick={() => handleDelete(f.code)} className="p-2 bg-white rounded-full shadow text-red-500 hover:bg-red-50"><Trash2 size={14} /></button>
+                  {can('fabrics', 'edit') && <button onClick={() => openEdit(f)} className="p-2 bg-white rounded-full shadow text-blue-500 hover:bg-blue-50"><Edit2 size={14} /></button>}
+                  {can('fabrics', 'delete') && <button onClick={() => handleDelete(f.code)} className="p-2 bg-white rounded-full shadow text-red-500 hover:bg-red-50"><Trash2 size={14} /></button>}
                 </div>
               </div>
               {/* Info */}

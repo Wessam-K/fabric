@@ -6,6 +6,7 @@ import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import { useAuth } from '../context/AuthContext';
 import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 
 const STATUS_MAP = { active: 'نشطة', maintenance: 'صيانة', inactive: 'متوقفة' };
@@ -13,6 +14,7 @@ const STATUS_COLOR = { active: 'bg-green-100 text-green-700', maintenance: 'bg-y
 
 export default function Machines() {
   const toast = useToast();
+  const { can } = useAuth();
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -176,10 +178,10 @@ export default function Machines() {
                 <div><span className="block font-mono font-bold text-sm text-purple-600">{m.total_hours || 0}</span>ساعة</div>
               </div>
               <div className="flex gap-2 pt-1">
-                <button onClick={() => openEdit(m)} className="flex-1 text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600">تعديل</button>
-                <button onClick={() => toggleStatus(m)} className={`flex-1 text-xs px-3 py-1.5 rounded-lg ${m.status === 'active' ? 'bg-yellow-50 hover:bg-yellow-100 text-yellow-700' : 'bg-green-50 hover:bg-green-100 text-green-700'}`}>
+                {can('machines', 'edit') && <button onClick={() => openEdit(m)} className="flex-1 text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600">تعديل</button>}
+                {can('machines', 'edit') && <button onClick={() => toggleStatus(m)} className={`flex-1 text-xs px-3 py-1.5 rounded-lg ${m.status === 'active' ? 'bg-yellow-50 hover:bg-yellow-100 text-yellow-700' : 'bg-green-50 hover:bg-green-100 text-green-700'}`}>
                   {m.status === 'active' ? 'صيانة' : 'تنشيط'}
-                </button>
+                </button>}
               </div>
             </div>
           ))}

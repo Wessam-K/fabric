@@ -8,9 +8,11 @@ import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import { useAuth } from '../context/AuthContext';
 
 export default function Customers() {
   const toast = useToast();
+  const { can } = useAuth();
   const [customers, setCustomers] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -171,7 +173,7 @@ export default function Customers() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => openEdit(c)} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-600">تعديل</button>
+                        {can('customers', 'edit') && <button onClick={() => openEdit(c)} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-600">تعديل</button>}
                         <button onClick={() => viewInvoices(c)} className="text-xs px-2 py-1 bg-blue-50 hover:bg-blue-100 rounded text-blue-700">فواتير</button>
                       </div>
                     </td>

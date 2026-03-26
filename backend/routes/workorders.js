@@ -433,7 +433,7 @@ router.get('/export', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT wo.*, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id ORDER BY wo.created_at DESC`).all();
     const header = 'wo_number,model_code,model_name,quantity,status,priority,start_date,due_date,notes';
-    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const esc = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
     const csv = [header, ...rows.map(r => [r.wo_number,r.model_code,r.model_name,r.quantity,r.status,r.priority,r.start_date,r.due_date,r.notes].map(esc).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=work-orders.csv');

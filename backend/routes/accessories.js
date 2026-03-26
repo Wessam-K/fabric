@@ -70,7 +70,7 @@ router.get('/export', requirePermission('accessories', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT a.*, s.name as supplier_name FROM accessories a LEFT JOIN suppliers s ON s.id=a.supplier_id ORDER BY a.created_at DESC`).all();
     const header = 'code,acc_type,name,unit_price,unit,supplier_name,quantity_on_hand,low_stock_threshold,reorder_qty,status,notes';
-    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const esc = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
     const csv = [header, ...rows.map(r => [r.code,r.acc_type,r.name,r.unit_price,r.unit,r.supplier_name||r.supplier,r.quantity_on_hand,r.low_stock_threshold,r.reorder_qty,r.status,r.notes].map(esc).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=accessories.csv');

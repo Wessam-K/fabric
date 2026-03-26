@@ -35,7 +35,7 @@ router.get('/export', requirePermission('customers', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT * FROM customers ORDER BY created_at DESC`).all();
     const header = 'code,name,customer_type,phone,email,address,city,tax_number,credit_limit,contact_name,payment_terms,status,notes';
-    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const esc = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
     const csv = [header, ...rows.map(r => [r.code,r.name,r.customer_type,r.phone,r.email,r.address,r.city,r.tax_number,r.credit_limit,r.contact_name,r.payment_terms,r.status,r.notes].map(esc).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=customers.csv');

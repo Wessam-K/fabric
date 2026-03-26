@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import { useAuth } from '../context/AuthContext';
 
 const ACC_TYPES = [
   { value: '', label: 'الكل', icon: null },
@@ -37,6 +38,7 @@ const emptyForm = { code: '', acc_type: 'button', name: '', unit_price: '', unit
 
 export default function Accessories() {
   const toast = useToast();
+  const { can } = useAuth();
   const [list, setList] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -223,9 +225,9 @@ export default function Accessories() {
                 </div>
                 {/* Actions */}
                 <div className="flex gap-1 mt-3 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => { setStockModal(a); setStockAdjust({ qty_change: '', notes: '' }); }} className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg text-[10px]">تعديل مخزون</button>
-                  <button onClick={() => openEdit(a)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={14} /></button>
-                  <button onClick={() => handleDelete(a.code)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
+                  {can('accessories', 'edit') && <button onClick={() => { setStockModal(a); setStockAdjust({ qty_change: '', notes: '' }); }} className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg text-[10px]">تعديل مخزون</button>}
+                  {can('accessories', 'edit') && <button onClick={() => openEdit(a)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={14} /></button>}
+                  {can('accessories', 'delete') && <button onClick={() => handleDelete(a.code)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>}
                 </div>
               </div>
             );

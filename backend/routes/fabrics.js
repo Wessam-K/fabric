@@ -68,7 +68,7 @@ router.get('/export', requirePermission('fabrics', 'view'), (req, res) => {
   try {
     const rows = db.prepare(`SELECT f.*, s.name as supplier_name FROM fabrics f LEFT JOIN suppliers s ON s.id=f.supplier_id ORDER BY f.created_at DESC`).all();
     const header = 'code,name,fabric_type,color,price_per_m,supplier_name,available_meters,low_stock_threshold,status,notes';
-    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const esc = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
     const csv = [header, ...rows.map(r => [r.code,r.name,r.fabric_type,r.color,r.price_per_m,r.supplier_name||r.supplier,r.available_meters,r.low_stock_threshold,r.status,r.notes].map(esc).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=fabrics.csv');

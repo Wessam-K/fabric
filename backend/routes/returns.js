@@ -28,6 +28,10 @@ router.post('/sales', requirePermission('returns', 'create'), (req, res) => {
   try {
     const { customer_id, invoice_id, reason, notes, items } = req.body;
     if (!customer_id || !items?.length) return res.status(400).json({ error: 'العميل والأصناف مطلوبان' });
+    for (const it of items) {
+      if ((it.quantity || 0) <= 0) return res.status(400).json({ error: 'الكمية يجب أن تكون موجبة' });
+      if ((it.unit_price || 0) < 0) return res.status(400).json({ error: 'السعر لا يمكن أن يكون سالب' });
+    }
 
     const result = db.transaction(() => {
       const retNum = generateNextNumber(db, 'sales_return');
@@ -114,6 +118,10 @@ router.post('/purchases', requirePermission('returns', 'create'), (req, res) => 
   try {
     const { supplier_id, purchase_order_id, reason, notes, items } = req.body;
     if (!supplier_id || !items?.length) return res.status(400).json({ error: 'المورد والأصناف مطلوبان' });
+    for (const it of items) {
+      if ((it.quantity || 0) <= 0) return res.status(400).json({ error: 'الكمية يجب أن تكون موجبة' });
+      if ((it.unit_price || 0) < 0) return res.status(400).json({ error: 'السعر لا يمكن أن يكون سالب' });
+    }
 
     const result = db.transaction(() => {
       const retNum = generateNextNumber(db, 'purchase_return');

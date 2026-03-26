@@ -7,12 +7,14 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import { useAuth } from '../context/AuthContext';
 import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 
 const TYPE_MAP = { fabric: 'أقمشة', accessory: 'اكسسوارات', both: 'أقمشة واكسسوارات', other: 'أخرى' };
 
 export default function Suppliers() {
   const toast = useToast();
+  const { can } = useAuth();
   const [suppliers, setSuppliers] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -177,7 +179,7 @@ export default function Suppliers() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => openEdit(s)} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-600">تعديل</button>
+                        {can('suppliers', 'edit') && <button onClick={() => openEdit(s)} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-600">تعديل</button>}
                         {s.balance > 0 && (
                           <button onClick={() => setShowPayment(s.id)} className="text-xs px-2 py-1 bg-green-50 hover:bg-green-100 rounded text-green-700">دفع</button>
                         )}
