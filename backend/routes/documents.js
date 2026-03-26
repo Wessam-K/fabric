@@ -6,7 +6,7 @@ const fs = require('fs');
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 
-const uploadDir = path.join(__dirname, '..', 'uploads', 'documents');
+const uploadDir = path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), 'uploads', 'documents');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({

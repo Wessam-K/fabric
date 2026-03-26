@@ -180,7 +180,7 @@ export default function Invoices() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => navigate(`/invoices/${inv.id}`)} title="عرض"
+                        <button onClick={() => navigate(`/invoices/${inv.id}/view`)} title="عرض"
                           className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-blue-600"><Eye size={15} /></button>
                         <button onClick={() => { setEditInvoice(inv); setShowForm(true); }} title="تعديل"
                           className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-amber-600"><Pencil size={15} /></button>
@@ -240,8 +240,9 @@ function InvoiceForm({ invoice, onClose, onSaved }) {
   }, []);
 
   const subtotal = items.reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0), 0);
-  const taxAmt = subtotal * ((parseFloat(taxPct) || 0) / 100);
-  const total = subtotal + taxAmt - (parseFloat(discount) || 0);
+  const discountAmt = parseFloat(discount) || 0;
+  const taxAmt = (subtotal - discountAmt) * ((parseFloat(taxPct) || 0) / 100);
+  const total = subtotal - discountAmt + taxAmt;
 
   const addItem = () => setItems([...items, { description: '', quantity: 1, unit_price: 0, model_code: '', variant: '' }]);
   const removeItem = (i) => setItems(items.filter((_, idx) => idx !== i));

@@ -121,7 +121,7 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between p-3 border-b border-gray-100 dark:border-white/8">
             <span className="text-sm font-bold text-[#1a1a2e] dark:text-white">الإشعارات</span>
             {unreadCount > 0 && (
-              <button onClick={markAllRead} className="text-[10px] text-[#c9a84c] hover:underline">تحديد الكل كمقروع</button>
+              <button onClick={markAllRead} className="text-[10px] text-[#c9a84c] hover:underline">تحديد الكل كمقروء</button>
             )}
           </div>
           <div className="overflow-y-auto flex-1">

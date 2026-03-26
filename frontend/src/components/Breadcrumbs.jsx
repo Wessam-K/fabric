@@ -17,20 +17,39 @@ const PATH_LABELS = {
   employees: 'الموظفين',
   attendance: 'الحضور والانصراف',
   payroll: 'الرواتب',
+  leaves: 'الإجازات',
   users: 'المستخدمين',
   settings: 'الإعدادات',
+  permissions: 'الصلاحيات',
   'audit-log': 'سجل المراجعة',
   notifications: 'الإشعارات',
   machines: 'الماكينات',
+  maintenance: 'الصيانة',
   accounting: 'المحاسبة',
   coa: 'دليل الحسابات',
   journal: 'القيود اليومية',
   'trial-balance': 'ميزان المراجعة',
   profile: 'الملف الشخصي',
   'change-password': 'تغيير كلمة المرور',
+  expenses: 'المصروفات',
+  samples: 'العينات',
+  returns: 'المرتجعات',
+  shipping: 'الشحن',
+  quality: 'الجودة',
+  quotations: 'عروض الأسعار',
+  'sales-orders': 'أوامر البيع',
+  mrp: 'تخطيط الموارد',
+  exports: 'التصدير',
+  documents: 'المستندات',
+  backups: 'النسخ الاحتياطي',
+  'knowledge-base': 'قاعدة المعرفة',
+  'stage-templates': 'قوالب المراحل',
+  scheduling: 'الجدولة',
   new: 'جديد',
   edit: 'تعديل',
   bom: 'قائمة المواد',
+  view: 'عرض',
+  print: 'طباعة',
 };
 
 export default function Breadcrumbs() {
@@ -51,7 +70,7 @@ export default function Breadcrumbs() {
         <span key={i} className="flex items-center gap-1">
           <ChevronLeft size={10} />
           {c.isLast ? (
-            <span className="text-[#1a1a2e] font-bold">{c.label}</span>
+            <span className="text-[#1a1a2e] dark:text-white font-bold">{c.label}</span>
           ) : (
             <Link to={c.path} className="hover:text-[#c9a84c] transition-colors">{c.label}</Link>
           )}

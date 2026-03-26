@@ -5,6 +5,47 @@
 
 ---
 
+## Phase F — Production Audit v4 + NSIS Installer (2026-03-26)
+
+### F1: Critical Backend Fixes
+- **Auto-Journal column mismatch** (`autojournal.js`): Changed `journal_entry_id` → `entry_id` matching schema — fixed entire auto-journal feature being silently broken
+- **Leave approval permission** (`hr.js`): Changed from `hr:view` to `hr:edit` — prevented any viewer from approving/rejecting leaves
+- **Leave date range DoS** (`hr.js`): Added 90-day maximum limit on approved leave attendance inserts
+- **Returns stock adjustment** (`returns.js`): Both sales returns (add back to stock) and purchase returns (deduct from stock) now actually adjust inventory on approval — previously approve only changed status
+
+### F2: Critical Frontend Fixes
+- **Invoice navigation** (`Invoices.jsx`): Fixed route from `/invoices/${id}` → `/invoices/${id}/view` — view button was showing 404
+- **Tax calculation** (`Invoices.jsx`, `PurchaseOrders.jsx`): Tax now computed on `(subtotal - discount)` instead of bare `subtotal` — was overcharging clients
+- **Permission module names** (`WorkOrdersList.jsx`, `PurchaseOrders.jsx`): Fixed `workorders` → `work_orders` and `purchaseorders` → `purchase_orders` — non-admin users were blocked from legitimate actions
+- **Missing `btn-secondary` CSS** (`index.css`): Added class definition — 15+ export/import buttons across the app were unstyled/invisible
+- **Missing keyframe animations** (`index.css`): Added `slideIn`, `slideInRight`, `slideInLeft`, `fadeIn` — Toast, HelpButton, Fabrics drawer animations were silently failing
+
+### F3: Dark Mode Completeness
+- **Tailwind v4 dark mode** (`index.css`): Added `@custom-variant dark (&:where(.dark, .dark *))` — the `dark:` utility prefix was completely non-functional in Tailwind v4
+- **Global dark utility overrides** (`index.css`): Added 50+ CSS overrides for `bg-white`, `bg-gray-*`, `text-gray-*`, `border-gray-*`, `shadow-*`, hover states, and sticky cells — covers 400+ instances across 46 files
+- **Breadcrumbs dark mode** (`Breadcrumbs.jsx`): Added `dark:text-white` to active breadcrumb
+- **Missing breadcrumb labels** (`Breadcrumbs.jsx`): Added Arabic labels for 15+ missing routes (samples, returns, shipping, quality, etc.)
+
+### F4: Upload Safety for Production
+- **Uploads stored in userData** (`server.js`, `models.js`, `documents.js`, `expenses.js`): Redirected all upload directories to `WK_DB_DIR` (= `%APPDATA%/wk-hub/uploads/`) in production — prevents data loss on app update
+
+### F5: Electron Build + NSIS Installer
+- **NSIS installer target** (`package.json`): Added `nsis` to win targets — now builds a proper `WK-Hub Setup 2.0.0.exe` installer
+- **NSIS config**: `oneClick: false`, `allowToChangeInstallationDirectory: true`, desktop + start menu shortcuts
+- **Icon**: Generated app icon (`assets/icon.png`)
+
+### F6: Typo Fix
+- **NotificationBell** (`NotificationBell.jsx`): Fixed Arabic typo "كمقروع" → "كمقروء"
+
+### DB Update Safety (verified)
+- DB stored in `app.getPath('userData')` (`%APPDATA%/wk-hub/`) — NOT in install directory
+- DB files excluded from build package (*.db, *.db-shm, *.db-wal)
+- Pre-migration backup runs before every app start
+- `addColumnSafe()` pattern for all ALTER TABLE operations (idempotent)
+- New installs over existing ones: DB preserved, uploads preserved (now in userData), migrations auto-run
+
+---
+
 ## Phase E — Production Audit v3 (2026-03-26)
 
 ### E1: Critical Security Fixes

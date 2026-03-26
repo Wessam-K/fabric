@@ -7,7 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-const uploadsDir = path.join(__dirname, '..', 'uploads', 'receipts');
+const uploadsDir = path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), 'uploads', 'receipts');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const receiptStorage = multer.diskStorage({

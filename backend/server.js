@@ -91,7 +91,12 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/uploads', requireAuth, express.static(path.join(__dirname, 'uploads')));
+// ── Upload directory: use WK_DB_DIR (userData) in production, local in dev ──
+const UPLOADS_DIR = path.join(process.env.WK_DB_DIR || __dirname, 'uploads');
+const fsMod = require('fs');
+if (!fsMod.existsSync(UPLOADS_DIR)) fsMod.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+app.use('/uploads', requireAuth, express.static(UPLOADS_DIR));
 
 // ═══ Pagination ceiling — prevent DoS via huge limit values ═══
 const MAX_PAGE_SIZE = 500;

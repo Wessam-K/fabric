@@ -45,7 +45,7 @@ function createJournalEntry(req, description, lines, refType, refId) {
     .run(entryNumber, description, refType || null, refId || null, totalDebit, totalCredit, req.user?.id || null);
 
     const jeId = result.lastInsertRowid;
-    const insLine = db.prepare('INSERT INTO journal_entry_lines (journal_entry_id, account_id, description, debit, credit) VALUES (?,?,?,?,?)');
+    const insLine = db.prepare('INSERT INTO journal_entry_lines (entry_id, account_id, description, debit, credit) VALUES (?,?,?,?,?)');
     for (const l of lines) {
       insLine.run(jeId, l.account_id, l.description || description, l.debit || 0, l.credit || 0);
     }

@@ -848,7 +848,7 @@ router.post('/leaves', requirePermission('hr', 'create'), (req, res) => {
 });
 
 // PATCH /api/hr/leaves/:id — approve/reject
-router.patch('/leaves/:id', requirePermission('hr', 'view'), (req, res) => {
+router.patch('/leaves/:id', requirePermission('hr', 'edit'), (req, res) => {
   try {
     const { status } = req.body;
     if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'الحالة غير صالحة' });
@@ -859,10 +859,12 @@ router.patch('/leaves/:id', requirePermission('hr', 'view'), (req, res) => {
     db.prepare(`UPDATE leave_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?`)
       .run(status, req.user?.id || null, req.params.id);
 
-    // If approved, mark attendance as 'leave' for the date range
+    // If approved, mark attendance as 'leave' for the date range (max 90 days)
     if (status === 'approved') {
       const start = new Date(leave.start_date);
       const end = new Date(leave.end_date);
+      const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
+      if (diffDays > 90) return res.status(400).json({ error: 'مدة الإجازة لا يمكن أن تتجاوز 90 يومًا' });
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().slice(0, 10);
         const dayNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];

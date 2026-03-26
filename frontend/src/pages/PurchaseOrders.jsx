@@ -88,8 +88,9 @@ export default function PurchaseOrders() {
   };
 
   const formSubtotal = form.items.reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
-  const formTax = formSubtotal * ((parseFloat(form.tax_pct) || 0) / 100);
-  const formTotal = formSubtotal + formTax - (parseFloat(form.discount) || 0);
+  const formDiscount = parseFloat(form.discount) || 0;
+  const formTax = (formSubtotal - formDiscount) * ((parseFloat(form.tax_pct) || 0) / 100);
+  const formTotal = formSubtotal - formDiscount + formTax;
 
   const handleCreate = async () => {
     if (!form.po_number || !form.supplier_id) { toast.error('رقم الأمر والمورد مطلوبان'); return; }
@@ -151,7 +152,7 @@ export default function PurchaseOrders() {
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="purchaseorders" />
           <button onClick={() => exportFromBackend('/purchase-orders/export', 'purchase-orders').catch(() => {})} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
-          <PermissionGuard module="purchaseorders" action="create">
+          <PermissionGuard module="purchase_orders" action="create">
             <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> أمر شراء جديد</button>
           </PermissionGuard>
         </div>} />

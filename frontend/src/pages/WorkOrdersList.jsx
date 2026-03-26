@@ -75,7 +75,7 @@ export default function WorkOrdersList() {
               <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}><ListIcon size={16} /></button>
               <button onClick={() => setViewMode('kanban')} className={`p-1.5 rounded-md ${viewMode === 'kanban' ? 'bg-white shadow-sm' : ''}`}><LayoutGrid size={16} /></button>
             </div>
-            <PermissionGuard module="workorders" action="create">
+            <PermissionGuard module="work_orders" action="create">
               <button onClick={() => navigate('/work-orders/new')} className="btn btn-gold">
                 <Plus size={16} /> أمر إنتاج جديد
               </button>

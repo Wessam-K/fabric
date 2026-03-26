@@ -6,7 +6,7 @@ const path = require('path');
 const db = require('../database');
 
 const fs = require('fs');
-const uploadDir = path.join(__dirname, '..', 'uploads', 'models');
+const uploadDir = path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), 'uploads', 'models');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
 const storage = multer.diskStorage({

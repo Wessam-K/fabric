@@ -73,7 +73,18 @@ router.patch('/sales/:id/approve', requirePermission('returns', 'edit'), (req, r
     if (!sr) return res.status(404).json({ error: 'مرتجع غير موجود' });
     if (sr.status !== 'draft') return res.status(400).json({ error: 'المرتجع ليس في حالة مسودة' });
 
-    db.prepare("UPDATE sales_returns SET status='approved' WHERE id=?").run(id);
+    db.transaction(() => {
+      db.prepare("UPDATE sales_returns SET status='approved' WHERE id=?").run(id);
+      // Adjust stock: return items back to inventory
+      const items = db.prepare('SELECT * FROM sales_return_items WHERE return_id=?').all(id);
+      for (const item of items) {
+        if (item.item_type === 'fabric' && item.item_code) {
+          db.prepare('UPDATE fabrics SET available_meters = available_meters + ? WHERE code = ?').run(item.quantity || 0, item.item_code);
+        } else if (item.item_type === 'accessory' && item.item_code) {
+          db.prepare('UPDATE accessories SET quantity_on_hand = quantity_on_hand + ? WHERE code = ?').run(item.quantity || 0, item.item_code);
+        }
+      }
+    })();
     logAudit(req, 'APPROVE', 'sales_return', id, sr.return_number);
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -145,7 +156,18 @@ router.patch('/purchases/:id/approve', requirePermission('returns', 'edit'), (re
     if (!pr) return res.status(404).json({ error: 'مرتجع غير موجود' });
     if (pr.status !== 'draft') return res.status(400).json({ error: 'المرتجع ليس في حالة مسودة' });
 
-    db.prepare("UPDATE purchase_returns SET status='approved' WHERE id=?").run(id);
+    db.transaction(() => {
+      db.prepare("UPDATE purchase_returns SET status='approved' WHERE id=?").run(id);
+      // Adjust stock: deduct returned items from inventory
+      const items = db.prepare('SELECT * FROM purchase_return_items WHERE return_id=?').all(id);
+      for (const item of items) {
+        if (item.item_type === 'fabric' && item.item_code) {
+          db.prepare('UPDATE fabrics SET available_meters = MAX(0, available_meters - ?) WHERE code = ?').run(item.quantity || 0, item.item_code);
+        } else if (item.item_type === 'accessory' && item.item_code) {
+          db.prepare('UPDATE accessories SET quantity_on_hand = MAX(0, quantity_on_hand - ?) WHERE code = ?').run(item.quantity || 0, item.item_code);
+        }
+      }
+    })();
     logAudit(req, 'APPROVE', 'purchase_return', id, pr.return_number);
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
