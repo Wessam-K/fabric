@@ -6,6 +6,7 @@ import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import { useAuth } from '../context/AuthContext';
 import { exportFromBackend } from '../utils/exportUtils';
 import { useConfirm } from '../components/ConfirmDialog';
 
@@ -23,6 +24,7 @@ export default function Invoices() {
   const navigate = useNavigate();
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
+  const { can } = useAuth();
   const [invoices, setInvoices] = useState([]);
   const [totals, setTotals] = useState({});
   const [loading, setLoading] = useState(true);
@@ -182,8 +184,10 @@ export default function Invoices() {
                       <div className="flex items-center justify-center gap-1">
                         <button onClick={() => navigate(`/invoices/${inv.id}/view`)} title="عرض"
                           className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-blue-600"><Eye size={15} /></button>
-                        <button onClick={() => { setEditInvoice(inv); setShowForm(true); }} title="تعديل"
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-amber-600"><Pencil size={15} /></button>
+                        {can('invoices', 'edit') && (
+                          <button onClick={() => { setEditInvoice(inv); setShowForm(true); }} title="تعديل"
+                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-amber-600"><Pencil size={15} /></button>
+                        )}
                         {inv.status === 'draft' && (
                           <button onClick={() => updateStatus(inv.id, 'sent')} title="إرسال"
                             className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors text-gray-400 hover:text-blue-600"><Send size={15} /></button>
@@ -192,8 +196,10 @@ export default function Invoices() {
                           <button onClick={() => updateStatus(inv.id, 'paid')} title="تم الدفع"
                             className="p-1.5 hover:bg-green-50 rounded-lg transition-colors text-gray-400 hover:text-green-600"><CheckCircle size={15} /></button>
                         )}
-                        <button onClick={() => deleteInvoice(inv.id)} title="حذف"
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
+                        {can('invoices', 'delete') && (
+                          <button onClick={() => deleteInvoice(inv.id)} title="حذف"
+                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
+                        )}
                       </div>
                     </td>
                   </tr>

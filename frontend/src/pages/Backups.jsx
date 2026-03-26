@@ -3,11 +3,13 @@ import { Database, Plus, Trash2, Download, RefreshCw, Shield, X } from 'lucide-r
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { useConfirm } from '../components/ConfirmDialog';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
 
 export default function Backups() {
   const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const { can } = useAuth();
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,13 +34,15 @@ export default function Backups() {
   };
 
   const remove = async (id) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذه النسخة؟')) return;
+    const ok = await confirm({ title: 'حذف نسخة احتياطية', message: 'هل أنت متأكد من حذف هذه النسخة؟', variant: 'danger' });
+    if (!ok) return;
     try { await api.delete(`/backups/${id}`); toast.success('تم الحذف'); load(); }
     catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
   };
 
   const restore = async (id) => {
-    if (!window.confirm('تحذير: سيتم استبدال قاعدة البيانات الحالية. هل أنت متأكد؟')) return;
+    const ok = await confirm({ title: 'استعادة نسخة احتياطية', message: 'تحذير: سيتم استبدال قاعدة البيانات الحالية. هل أنت متأكد؟', variant: 'danger' });
+    if (!ok) return;
     try {
       const { data } = await api.post(`/backups/${id}/restore`);
       toast.success('يرجى إعادة تشغيل الخادم لتطبيق النسخة الاحتياطية');
@@ -60,6 +64,7 @@ export default function Backups() {
 
   return (
     <div className="p-4 lg:p-6 max-w-5xl mx-auto">
+      <ConfirmDialog />
       <PageHeader title="النسخ الاحتياطية" icon={Database} />
 
       {/* Info card */}

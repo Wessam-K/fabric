@@ -896,7 +896,11 @@ router.delete('/:id', requirePermission('work_orders', 'delete'), (req, res) => 
         if (meters > 0) {
           db.prepare('UPDATE fabric_inventory_batches SET used_meters = MAX(0, used_meters - ?) WHERE id=?').run(meters, wfb.batch_id);
           const batch = db.prepare('SELECT fabric_code FROM fabric_inventory_batches WHERE id=?').get(wfb.batch_id);
-          if (batch) db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) + ? WHERE code=?').run(meters, batch.fabric_code);
+          if (batch) {
+            db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) + ? WHERE code=?').run(meters, batch.fabric_code);
+            db.prepare(`INSERT INTO fabric_stock_movements (fabric_code, movement_type, qty_meters, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+              .run(batch.fabric_code, 'return', meters, 'work_order', woId, 'إرجاع قماش - حذف أمر تشغيل ' + wo.wo_number, userId);
+          }
         }
       }
       // Return accessories
@@ -911,7 +915,11 @@ router.delete('/:id', requirePermission('work_orders', 'delete'), (req, res) => 
           const returnQty = (ad.quantity_per_piece || 0) * totalPieces;
           if (returnQty > 0) {
             const acc = db.prepare('SELECT id, quantity_on_hand FROM accessories WHERE code=?').get(ad.accessory_code);
-            if (acc) db.prepare('UPDATE accessories SET quantity_on_hand=? WHERE id=?').run((acc.quantity_on_hand || 0) + returnQty, acc.id);
+            if (acc) {
+              db.prepare('UPDATE accessories SET quantity_on_hand=? WHERE id=?').run((acc.quantity_on_hand || 0) + returnQty, acc.id);
+              db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+                .run(ad.accessory_code, 'return', returnQty, 'work_order', woId, 'إرجاع إكسسوار - حذف أمر تشغيل ' + wo.wo_number, userId);
+            }
           }
         }
       }
@@ -1267,11 +1275,15 @@ router.patch('/:id/accessory-consumption/:consumptionId', requirePermission('wor
     const newPrice = unit_price !== undefined ? parseFloat(unit_price) : record.unit_price;
     const delta = newQty - (record.actual_qty || 0);
 
+    const wo = db.prepare('SELECT wo_number FROM work_orders WHERE id=?').get(woId);
     const transaction = db.transaction(() => {
       db.prepare('UPDATE wo_accessory_consumption SET actual_qty=?, unit_price=?, total_cost=? WHERE id=?')
         .run(newQty, newPrice, newQty * newPrice, cId);
       if (delta !== 0 && record.accessory_code) {
         db.prepare('UPDATE accessories SET quantity_on_hand = MAX(0, quantity_on_hand - ?) WHERE code=?').run(delta, record.accessory_code);
+        const mvType = delta > 0 ? 'consumption' : 'return';
+        db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+          .run(record.accessory_code, mvType, Math.abs(delta), 'work_order', woId, 'تعديل استهلاك إكسسوار - أمر تشغيل ' + (wo?.wo_number || woId), req.user?.id || null);
       }
     });
     transaction();

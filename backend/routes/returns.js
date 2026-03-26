@@ -35,16 +35,16 @@ router.post('/sales', requirePermission('returns', 'create'), (req, res) => {
       for (const it of items) { totalAmount += (it.quantity || 0) * (it.unit_price || 0); }
       // Calculate tax from settings
       const taxRatePct = parseFloat(db.prepare("SELECT value FROM settings WHERE key='tax_rate'").get()?.value) || 14;
-      const taxAmount = Math.round(totalAmount * taxRatePct) / 100;
+      const taxAmount = Math.round(totalAmount * (taxRatePct / 100) * 100) / 100;
 
       const r = db.prepare(`INSERT INTO sales_returns (return_number, customer_id, invoice_id, return_date, reason, notes, subtotal, tax_amount, total, status, created_by)
         VALUES (?,?,?,datetime('now','localtime'),?,?,?,?,?,'draft',?)`)
         .run(retNum, customer_id, invoice_id || null, reason || null, notes || null, totalAmount, taxAmount, totalAmount + taxAmount, req.user.id);
       const retId = r.lastInsertRowid;
 
-      const ins = db.prepare('INSERT INTO sales_return_items (return_id, description, model_code, quantity, unit_price, total) VALUES (?,?,?,?,?,?)');
+      const ins = db.prepare('INSERT INTO sales_return_items (return_id, item_type, item_code, description, model_code, quantity, unit_price, total) VALUES (?,?,?,?,?,?,?,?)');
       for (const it of items) {
-        ins.run(retId, it.description || it.product_description, it.model_code || null, it.quantity, it.unit_price, (it.quantity || 0) * (it.unit_price || 0));
+        ins.run(retId, it.item_type || null, it.item_code || null, it.description || it.product_description, it.model_code || null, it.quantity, it.unit_price, (it.quantity || 0) * (it.unit_price || 0));
       }
 
       return { id: retId, return_number: retNum };
@@ -119,10 +119,12 @@ router.post('/purchases', requirePermission('returns', 'create'), (req, res) => 
       const retNum = generateNextNumber(db, 'purchase_return');
       let totalAmount = 0;
       for (const it of items) { totalAmount += (it.quantity || 0) * (it.unit_price || 0); }
+      const taxRatePct = parseFloat(db.prepare("SELECT value FROM settings WHERE key='tax_rate'").get()?.value) || 14;
+      const taxAmount = Math.round(totalAmount * (taxRatePct / 100) * 100) / 100;
 
-      const r = db.prepare(`INSERT INTO purchase_returns (return_number, supplier_id, purchase_order_id, return_date, reason, notes, subtotal, total, status, created_by)
-        VALUES (?,?,?,datetime('now','localtime'),?,?,?,?,'draft',?)`)
-        .run(retNum, supplier_id, purchase_order_id || null, reason || null, notes || null, totalAmount, totalAmount, req.user.id);
+      const r = db.prepare(`INSERT INTO purchase_returns (return_number, supplier_id, purchase_order_id, return_date, reason, notes, subtotal, tax_amount, total, status, created_by)
+        VALUES (?,?,?,datetime('now','localtime'),?,?,?,?,?,'draft',?)`)
+        .run(retNum, supplier_id, purchase_order_id || null, reason || null, notes || null, totalAmount, taxAmount, totalAmount + taxAmount, req.user.id);
       const retId = r.lastInsertRowid;
 
       const ins = db.prepare('INSERT INTO purchase_return_items (return_id, item_type, item_code, description, quantity, unit_price, total) VALUES (?,?,?,?,?,?,?)');

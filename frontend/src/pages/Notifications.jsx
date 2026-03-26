@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 
 const TYPE_LABELS = { low_stock: 'مخزون منخفض', low_stock_fabric: 'مخزون قماش', low_stock_accessory: 'مخزون إكسسوار', overdue: 'متأخر', overdue_invoice: 'فاتورة متأخرة', overdue_work_order: 'أمر متأخر', overdue_maintenance: 'صيانة متأخرة', maintenance_upcoming: 'صيانة قادمة', maintenance_stale: 'صيانة معلقة', expense_pending: 'مصروف معلق', machine_broken: 'ماكينة معطلة', machine_idle: 'ماكينة متوقفة', info: 'معلومات', warning: 'تنبيه', system: 'نظام' };
 const TYPE_COLORS = { low_stock: 'bg-orange-100 text-orange-700', low_stock_fabric: 'bg-orange-100 text-orange-700', low_stock_accessory: 'bg-orange-100 text-orange-700', overdue: 'bg-red-100 text-red-700', overdue_invoice: 'bg-red-100 text-red-700', overdue_work_order: 'bg-red-100 text-red-700', overdue_maintenance: 'bg-red-100 text-red-700', maintenance_upcoming: 'bg-yellow-100 text-yellow-700', maintenance_stale: 'bg-yellow-100 text-yellow-700', expense_pending: 'bg-purple-100 text-purple-700', machine_broken: 'bg-red-100 text-red-700', machine_idle: 'bg-gray-100 text-gray-700', info: 'bg-blue-100 text-blue-700', warning: 'bg-yellow-100 text-yellow-700', system: 'bg-gray-100 text-gray-600' };
-const NAV_MAP = { fabric: '/inventory/fabrics', accessory: '/accessories', work_order: '/work-orders', invoice: '/invoices', purchase_order: '/purchase-orders' };
+const NAV_MAP = { fabric: '/fabrics', accessory: '/accessories', work_order: '/work-orders', invoice: '/invoices', purchase_order: '/purchase-orders', customer: '/customers', maintenance: '/maintenance', machine: '/machines', expense: '/expenses' };
 
 export default function Notifications() {
   const [items, setItems] = useState([]);

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Printer, ArrowRight, Download, Copy, Check } from 'lucide-react';
 import api from '../utils/api';
+import { downloadCSV } from '../utils/formatters';
 import HelpButton from '../components/HelpButton';
 
 const STATUS_MAP = {
@@ -45,14 +46,7 @@ export default function InvoiceView() {
       'السعر': item.unit_price,
       'المجموع': item.total,
     }));
-    const keys = Object.keys(rows[0]);
-    const csv = [keys.join(','), ...rows.map(r => keys.map(k => `"${r[k] ?? ''}"`).join(','))].join('\n');
-    const BOM = '\uFEFF';
-    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `invoice-${invoice.invoice_number}.csv`; a.click();
-    URL.revokeObjectURL(url);
+    downloadCSV(rows, `invoice-${invoice.invoice_number}`);
   };
 
   if (loading) return <div className="flex items-center justify-center h-screen"><div className="animate-spin h-10 w-10 border-4 border-[#c9a84c] border-t-transparent rounded-full" /></div>;

@@ -5,8 +5,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'wk-hub.db');
-const BACKUP_DIR = path.join(__dirname, 'backups');
+const DB_DIR = process.env.WK_DB_DIR || __dirname;
+const DB_PATH = path.join(DB_DIR, 'wk-hub.db');
+const BACKUP_DIR = path.join(DB_DIR, 'backups');
 const MAX_BACKUPS = 10;
 
 function backup() {

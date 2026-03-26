@@ -5,6 +5,46 @@
 
 ---
 
+## Phase G — Production Audit v5 — Full App Audit (2025-07-24)
+
+### G1: Critical Backend Fixes
+- **Sales return tax formula** (`returns.js`): Fixed `Math.round(totalAmount * taxRatePct) / 100` → `Math.round(totalAmount * (taxRatePct / 100) * 100) / 100` — was computing entirely wrong tax amounts
+- **Sales return items missing columns** (`returns.js`): POST now includes `item_type` and `item_code` in INSERT — approve stock adjustment was NEVER executing because those columns were always NULL
+- **Production role seed** (`database.js`): Fixed `ccproduction` → `production` — the production role had zero permissions seeded
+- **Backup DB path** (`backup.js`): Changed from `path.join(__dirname, ...)` to `process.env.WK_DB_DIR || __dirname` — was backing up wrong/stale DB in production
+- **CSV header quoting + BOM** (`csv.js`): Headers now quoted for Arabic with commas, added UTF-8 BOM for Excel compatibility
+- **V20 index table name** (`database.js`): Fixed `po_items` → `purchase_order_items` — index was silently failing
+
+### G2: Critical Frontend Fixes
+- **CSV injection — Reports.jsx**: Removed unsafe local `downloadCSV()`, imported safe version from `utils/formatters.js`
+- **CSV injection — InvoiceView.jsx**: Same fix — replaced unsafe CSV export with shared safe utility
+- **CSV injection — TrialBalance.jsx**: Replaced duplicate sanitizer with shared import
+- **Invoice permissions** (`Invoices.jsx`): Edit/Delete buttons now wrapped with `can('invoices','edit/delete')` checks
+
+### G3: High-Priority Backend Fixes
+- **WO Delete stock movement logs** (`workorders.js`): DELETE endpoint now logs fabric and accessory stock movements (was silently returning inventory with no audit trail)
+- **Accessory consumption PATCH logging** (`workorders.js`): Now logs to `accessory_stock_movements` when adjusting consumption quantities
+- **Purchase returns tax** (`returns.js`): Added tax calculation matching sales returns
+- **V14 migration cleanup** (`database.js`): Clarified non-existent `roles` table reference is a harmless no-op
+
+### G4: Frontend UX Fixes
+- **Payroll.jsx**: Replaced 4 `alert()` calls with `toast.error()` — stops UI blocking
+- **Backups.jsx**: Replaced 2 `window.confirm()` with `useConfirm()` ConfirmDialog — consistent destructive action confirmations
+- **Notifications.jsx NAV_MAP**: Aligned routes with NotificationBell.jsx, added missing entries (customer, maintenance, machine, expense)
+- **Dark mode status badges** (`index.css`): Added 20+ color-100/50 dark overrides for blue, green, red, yellow, purple, orange, amber, indigo, emerald, teal, rose, cyan — fixes bright badges in dark mode across 11+ pages
+
+### G5: Database Migration V34
+- Added `item_type TEXT` and `item_code TEXT` columns to `sales_return_items`
+- Added `tax_amount REAL` column to `purchase_returns`
+- Idempotent — uses `ALTER TABLE ... ADD COLUMN` wrapped in try/catch
+
+### G6: Build
+- Frontend: Vite production build (2553 modules, 105 KB CSS + 1.7 MB JS)
+- Electron: `WK-Hub Setup 2.0.0.exe` (103.6 MB), `WK-Hub 2.0.0.exe` (103.4 MB)
+- Tests: 58/58 pass
+
+---
+
 ## Phase F — Production Audit v4 + NSIS Installer (2026-03-26)
 
 ### F1: Critical Backend Fixes

@@ -6,6 +6,7 @@ import api from '../../utils/api';
 import { exportPayrollToExcel } from '../../utils/exportExcel';
 import HelpButton from '../../components/HelpButton';
 import { useConfirm } from '../../components/ConfirmDialog';
+import { useToast } from '../../components/Toast';
 
 const PERIOD_STATUS = {
   draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-700' },
@@ -17,6 +18,7 @@ const PERIOD_STATUS = {
 export default function Payroll() {
   const navigate = useNavigate();
   const { confirm, ConfirmDialog } = useConfirm();
+  const toast = useToast();
   const [periods, setPeriods] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
   const [records, setRecords] = useState([]);
@@ -49,7 +51,7 @@ export default function Payroll() {
       loadPeriods();
       loadRecords(res.data.id);
     } catch (err) {
-      alert(err.response?.data?.error || 'خطأ');
+      toast.error(err.response?.data?.error || 'خطأ');
     }
   }
 
@@ -60,7 +62,7 @@ export default function Payroll() {
       loadRecords(periodId);
       loadPeriods();
     } catch (err) {
-      alert(err.response?.data?.error || 'خطأ في الحساب');
+      toast.error(err.response?.data?.error || 'خطأ في الحساب');
     } finally {
       setCalculating(false);
     }
@@ -72,7 +74,7 @@ export default function Payroll() {
       loadRecords(periodId);
       loadPeriods();
     } catch (err) {
-      alert(err.response?.data?.error || 'خطأ');
+      toast.error(err.response?.data?.error || 'خطأ');
     }
   }
 
@@ -84,7 +86,7 @@ export default function Payroll() {
       loadRecords(periodId);
       loadPeriods();
     } catch (err) {
-      alert(err.response?.data?.error || 'خطأ');
+      toast.error(err.response?.data?.error || 'خطأ');
     }
   }
 

@@ -725,7 +725,7 @@ function initializeDatabase() {
         'invoices:*','suppliers:*','purchase_orders:*','inventory:view',
         'reports:*','payroll:view'
       ],
-      ccproduction: [
+      production: [
         'dashboard:view','models:*','fabrics:*','accessories:*','work_orders:*',
         'inventory:view','reports:view'
       ],
@@ -1498,14 +1498,9 @@ function runMigrations() {
     ];
     for (const p of accPerms) insAccPerm.run(...p);
 
-    // Grant accounting permissions to admin role
-      const adminRole = db.prepare("SELECT id FROM roles WHERE name = 'admin'").get();
-      if (adminRole) {
-        const accPermDefs = db.prepare("SELECT id FROM permission_definitions WHERE module = 'accounting'").all();
-        const insRP = db.prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?,?)');
-        for (const pd of accPermDefs) insRP.run(adminRole.id, pd.id);
-      }
-    } catch {} // permission_definitions may not exist on fresh DB
+    // Grant accounting permissions — V14 used a roles table that doesn't exist,
+    // so this block is wrapped in try/catch and harmlessly skips.
+    } catch {} // permission_definitions or roles table may not exist
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (14)`);
   }
@@ -1737,7 +1732,7 @@ function runMigrations() {
       'CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status)',
       'CREATE INDEX IF NOT EXISTS idx_po_supplier_id ON purchase_orders(supplier_id)',
       'CREATE INDEX IF NOT EXISTS idx_po_number ON purchase_orders(po_number)',
-      'CREATE INDEX IF NOT EXISTS idx_po_items_po_id ON po_items(po_id)',
+      'CREATE INDEX IF NOT EXISTS idx_po_items_po_id ON purchase_order_items(po_id)',
       'CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)',
       'CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)',
       'CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)',
@@ -2461,6 +2456,19 @@ function runMigrations() {
     } catch(e) { console.error('V33: history limits settings:', e.message); }
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (33)`);
+  }
+
+  // ──── V34 — Add item_type/item_code to sales_return_items, tax_amount to purchase_returns ────
+  const v34 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 34').get();
+  if (!v34) {
+    const addCol = (table, col, def) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch {}
+    };
+    addCol('sales_return_items', 'item_type', "TEXT CHECK(item_type IN ('fabric','accessory','other'))");
+    addCol('sales_return_items', 'item_code', 'TEXT');
+    addCol('purchase_returns', 'tax_amount', 'REAL DEFAULT 0');
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (34)`);
   }
 }
 

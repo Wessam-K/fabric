@@ -4,6 +4,7 @@ import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
+import { downloadCSV } from '../utils/formatters';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
 import { Bar, Pie, Line } from 'react-chartjs-2';
 import { useToast } from '../components/Toast';
@@ -53,18 +54,6 @@ function KPICard({ label, value, icon: Icon, color }) {
       <p className="text-xs text-gray-400 mt-0.5">{label}</p>
     </div>
   );
-}
-
-function downloadCSV(rows, filename) {
-  if (!rows || rows.length === 0) return;
-  const keys = Object.keys(rows[0]);
-  const csv = [keys.join(','), ...rows.map(r => keys.map(k => `"${r[k] ?? ''}"`).join(','))].join('\n');
-  const BOM = '\uFEFF';
-  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
 }
 
 const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
