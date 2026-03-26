@@ -23,17 +23,18 @@ test.describe('00 — Auth Setup', () => {
     await snap(page, '01-login-page');
 
     // Invalid login attempt
-    await page.fill('input[type="text"], input[name="username"]', 'admin');
-    await page.fill('input[type="password"]', 'wrongpass');
-    await page.click('button[type="submit"]');
+    await page.getByPlaceholder('ahmed.manager').fill('admin');
+    await page.getByPlaceholder('••••••••').fill('wrongpass');
+    await page.getByRole('button', { name: /تسجيل الدخول/ }).click();
     await page.waitForTimeout(1500);
     await snap(page, '01-login-error');
 
     // Valid login
-    await page.fill('input[type="password"]', '');
-    await page.fill('input[type="password"]', '123456');
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/dashboard/, { timeout: 15000 });
+    await page.getByPlaceholder('ahmed.manager').fill('admin');
+    await page.getByPlaceholder('••••••••').fill('123456');
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: /تسجيل الدخول/ }).click();
+    await page.waitForURL(/dashboard|change-password/, { timeout: 30000 });
     await page.waitForLoadState('networkidle');
     await snap(page, '01-login-success-dashboard');
 
@@ -204,5 +205,12 @@ test.describe('All Pages', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2000);
     await snap(page, '19-reports-dashboard');
+  });
+
+  test('20 exports center', async ({ page }) => {
+    await page.goto('/exports');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
+    await snap(page, '20-exports-center');
   });
 });

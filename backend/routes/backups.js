@@ -50,7 +50,9 @@ router.post('/:id/restore', requirePermission('backups', 'create'), (req, res) =
   try {
     const backup = db.prepare('SELECT * FROM backups WHERE id=?').get(req.params.id);
     if (!backup) return res.status(404).json({ error: 'النسخة الاحتياطية غير موجودة' });
-    if (!fs.existsSync(backup.file_path)) return res.status(404).json({ error: 'ملف النسخة الاحتياطية غير موجود' });
+    // Reconstruct path safely from filename only
+    const safePath = path.join(backupDir, path.basename(backup.file_name));
+    if (!fs.existsSync(safePath)) return res.status(404).json({ error: 'ملف النسخة الاحتياطية غير موجود' });
 
     // For safety, we don't auto-restore — just provide the file path
     // Restoration must be done by an admin who stops the server first
@@ -69,9 +71,10 @@ router.delete('/:id', requirePermission('backups', 'delete'), (req, res) => {
     const backup = db.prepare('SELECT * FROM backups WHERE id=?').get(id);
     if (!backup) return res.status(404).json({ error: 'النسخة الاحتياطية غير موجودة' });
 
-    // Delete the file
-    if (fs.existsSync(backup.file_path)) {
-      fs.unlinkSync(backup.file_path);
+    // Delete the file — safely reconstruct path
+    const safePath = path.join(backupDir, path.basename(backup.file_name));
+    if (fs.existsSync(safePath)) {
+      fs.unlinkSync(safePath);
     }
     db.prepare('DELETE FROM backups WHERE id=?').run(id);
     logAudit(req, 'DELETE', 'backup', id, backup.file_name);

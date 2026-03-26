@@ -48,3 +48,13 @@ npm-debug.log*
 
 # Backups
 backups/
+
+# Playwright auth state
+.auth-state.json
+
+# Sweep/debug artifacts
+sweep-*.txt
+screenshots/
+
+# Security docs with creds
+SECRETS.md

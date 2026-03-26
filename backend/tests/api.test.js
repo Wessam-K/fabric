@@ -43,14 +43,20 @@ function req(method, path, body) {
 before(async () => {
   // Step 1: attempt first-run admin creation (may 403 if already exists)
   await request('POST', '/api/setup/create-admin', {
-    username: 'admin', full_name: 'Admin', password: '123456',
+    username: 'admin', full_name: 'Admin', password: 'Admin123',
   });
 
-  // Step 2: login
-  const loginRes = await request('POST', '/api/auth/login', {
+  // Step 2: login (try strong password first, then seed password)
+  let loginRes = await request('POST', '/api/auth/login', {
     username: 'admin',
-    password: '123456',
+    password: 'Admin123',
   });
+  if (loginRes.status !== 200 || !loginRes.body.token) {
+    loginRes = await request('POST', '/api/auth/login', {
+      username: 'admin',
+      password: '123456',
+    });
+  }
   if (loginRes.status === 200 && loginRes.body.token) {
     TOKEN = loginRes.body.token;
   } else {

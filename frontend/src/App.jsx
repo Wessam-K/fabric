@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useState } from 'react';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench, Calculator, Send, CalendarClock, CheckSquare, FileSpreadsheet, ShoppingBag, Beaker, RotateCcw, FolderOpen, Database } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench, Calculator, Send, CalendarClock, CheckSquare, FileSpreadsheet, ShoppingBag, Beaker, RotateCcw, FolderOpen, Database, Download, Sun, Moon } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import Dashboard from './pages/Dashboard';
 import Fabrics from './pages/Fabrics';
 import Accessories from './pages/Accessories';
@@ -12,6 +13,7 @@ import SettingsPage from './pages/Settings';
 import PrintView from './pages/PrintView';
 import InvoicePrint from './pages/InvoicePrint';
 import Reports from './pages/Reports';
+import ExportsCenter from './pages/ExportsCenter';
 import Invoices from './pages/Invoices';
 import InvoiceView from './pages/InvoiceView';
 import ChartOfAccounts from './pages/ChartOfAccounts';
@@ -59,7 +61,9 @@ import Samples from './pages/Samples';
 import Returns from './pages/Returns';
 import Documents from './pages/Documents';
 import Backups from './pages/Backups';
+import KnowledgeBase from './pages/KnowledgeBase';
 import QuickActions from './components/QuickActions';
+import HelpButton from './components/HelpButton';
 import { ToastProvider } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -71,6 +75,69 @@ function ProtectedRoute({ children, perm }) {
     return <div className="flex items-center justify-center min-h-screen text-red-400 text-lg">ليس لديك صلاحية للوصول لهذه الصفحة</div>;
   }
   return children;
+}
+
+// Maps current route to help content page key
+function RouteAwareHelpButton() {
+  const location = useLocation();
+  const path = location.pathname;
+  const PAGE_KEY_MAP = {
+    '/dashboard': 'dashboard',
+    '/models': 'models',
+    '/models/new': 'modelform',
+    '/fabrics': 'fabrics',
+    '/accessories': 'accessories',
+    '/work-orders': 'workorders',
+    '/work-orders/new': 'workorderform',
+    '/invoices': 'invoices',
+    '/customers': 'customers',
+    '/suppliers': 'suppliers',
+    '/purchase-orders': 'purchaseorders',
+    '/machines': 'machines',
+    '/maintenance': 'maintenance',
+    '/expenses': 'expenses',
+    '/reports': 'reports',
+    '/settings': 'settings',
+    '/users': 'users',
+    '/permissions': 'permissions',
+    '/audit-log': 'auditlog',
+    '/notifications': 'notifications',
+    '/inventory/fabrics': 'inventory',
+    '/inventory/accessories': 'inventory',
+    '/mrp': 'mrp',
+    '/shipping': 'shipping',
+    '/returns': 'returns',
+    '/scheduling': 'scheduling',
+    '/quality': 'quality',
+    '/quotations': 'quotations',
+    '/sales-orders': 'salesorders',
+    '/samples': 'samples',
+    '/stage-templates': 'stagetemplates',
+    '/hr/employees': 'employees',
+    '/hr/attendance': 'attendance',
+    '/hr/payroll': 'payroll',
+    '/hr/leaves': 'leaves',
+    '/accounting/coa': 'chartofaccounts',
+    '/accounting/journal': 'journalentries',
+    '/accounting/trial-balance': 'trialbalance',
+    '/documents': 'documents',
+    '/backups': 'backups',
+    '/profile': 'profile',
+  };
+
+  let pageKey = PAGE_KEY_MAP[path];
+  if (!pageKey) {
+    if (path.match(/^\/models\/.+\/edit$/)) pageKey = 'modelform';
+    else if (path.match(/^\/models\/.+\/bom$/)) pageKey = 'bomtemplates';
+    else if (path.match(/^\/work-orders\/\d+$/)) pageKey = 'workorderdetail';
+    else if (path.match(/^\/work-orders\/\d+\/edit$/)) pageKey = 'workorderform';
+    else if (path.match(/^\/invoices\/\d+\/view$/)) pageKey = 'invoiceview';
+    else if (path.match(/^\/customers\/\d+$/)) pageKey = 'customers';
+    else if (path.match(/^\/suppliers\/\d+$/)) pageKey = 'suppliers';
+    else if (path.match(/^\/machines\/\d+$/)) pageKey = 'machines';
+  }
+
+  return <HelpButton pageKey={pageKey || 'dashboard'} />;
 }
 
 function AppLayout() {
@@ -175,6 +242,7 @@ function AppLayout() {
     {
       items: [
         { path: '/reports', label: 'التقارير', icon: BarChart2, hide: () => !can('reports', 'view') },
+        { path: '/exports', label: 'مركز التصدير', icon: Download, hide: () => !can('reports', 'view') },
       ],
     },
     {
@@ -205,7 +273,7 @@ function AppLayout() {
   const activeGroup = openGroup ?? getActiveGroup();
 
   return (
-    <div className="flex min-h-screen bg-[#f8f9fb]">
+    <div className="flex min-h-screen bg-[#f8f9fb] dark:bg-[#0f0f1a]">
       {/* Mobile overlay */}
       {mobileOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
@@ -324,12 +392,14 @@ function AppLayout() {
       {/* Main content */}
       <main className="flex-1 min-w-0">
         {/* Top header bar */}
-        <header className="sticky top-0 z-30 bg-white border-b border-gray-200 flex items-center gap-3 px-4 h-14">
-          <button onClick={() => setMobileOpen(true)} className="lg:hidden text-[#1a1a2e] p-1">
+        <header className="sticky top-0 z-30 bg-white dark:bg-[#1a1a2e] border-b border-gray-200 dark:border-white/8 flex items-center gap-3 px-4 h-14">
+          <button onClick={() => setMobileOpen(true)} className="lg:hidden text-[#1a1a2e] dark:text-gray-300 p-1">
             <Menu size={20} />
           </button>
           <span className="lg:hidden text-sm font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</span>
           <div className="flex-1"><GlobalSearch /></div>
+          <ThemeToggle />
+          <RouteAwareHelpButton />
           <NotificationBell />
         </header>
         <div className="p-4 lg:p-0">
@@ -357,6 +427,7 @@ function AppLayout() {
           <Route path="/expenses" element={<ProtectedRoute perm={['expenses','view']}><Expenses /></ProtectedRoute>} />
           <Route path="/purchase-orders" element={<ProtectedRoute perm={['purchase_orders','view']}><PurchaseOrders /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute perm={['reports','view']}><Reports /></ProtectedRoute>} />
+          <Route path="/exports" element={<ProtectedRoute perm={['reports','view']}><ExportsCenter /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute perm={['invoices','view']}><Invoices /></ProtectedRoute>} />
           <Route path="/accounting/coa" element={<ProtectedRoute perm={['accounting','view']}><ChartOfAccounts /></ProtectedRoute>} />
           <Route path="/accounting/journal" element={<ProtectedRoute perm={['accounting','view']}><JournalEntries /></ProtectedRoute>} />
@@ -385,6 +456,7 @@ function AppLayout() {
           <Route path="/returns" element={<ProtectedRoute perm={['returns','view']}><Returns /></ProtectedRoute>} />
           <Route path="/documents" element={<ProtectedRoute perm={['documents','view']}><Documents /></ProtectedRoute>} />
           <Route path="/backups" element={<ProtectedRoute perm={['backups','view']}><Backups /></ProtectedRoute>} />
+          <Route path="/knowledge-base" element={<KnowledgeBase />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/change-password" element={<ChangePassword />} />
           {/* Legacy redirects */}
@@ -402,6 +474,16 @@ function AppLayout() {
 function LegacyWORedirect() {
   const { id } = useParams();
   return <Navigate to={`/work-orders/${id}`} replace />;
+}
+
+function ThemeToggle() {
+  const { isDark, toggle } = useTheme();
+  return (
+    <button onClick={toggle} title={isDark ? 'الوضع الفاتح' : 'الوضع الداكن'}
+      className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors">
+      {isDark ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  );
 }
 
 function AuthRouter() {
@@ -425,13 +507,15 @@ function AuthRouter() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <BrowserRouter>
-          <AuthProvider>
-            <AuthRouter />
-          </AuthProvider>
-        </BrowserRouter>
-      </ToastProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              <AuthRouter />
+            </AuthProvider>
+          </BrowserRouter>
+        </ToastProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

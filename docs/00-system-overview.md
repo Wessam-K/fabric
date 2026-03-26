@@ -10,7 +10,7 @@
 | Field | Value |
 |-------|-------|
 | Name | **WK-Hub** (نظام إدارة المصنع) |
-| Version | 2.0.0 (`package.json`) — schema V23 |
+| Version | 2.0.0 (`package.json`) — schema V33 |
 | App ID | `com.wkhub.factory` |
 | Description | Factory ERP for garment/textile manufacturing |
 | Repository | `https://github.com/Wessam-K/fabric.git` |
@@ -23,12 +23,12 @@
 ### Backend
 | Component | Technology | Version |
 |-----------|-----------|---------|
-| Runtime | Node.js | 22.13.1 |
+| Runtime | Node.js | 22.16.0 |
 | Framework | Express | 4.21.1 |
-| Database | SQLite via better-sqlite3 | 11.7.0 |
+| Database | SQLite via better-sqlite3 | 11.10.0 |
 | Auth | JWT (jsonwebtoken 9.0.3) + bcryptjs 3.0.3 |
 | Security | Helmet 8.1.0, CORS 2.8.5 |
-| Logging | Morgan 1.10.1 |
+| Logging | Morgan 1.10.1 + Winston 3.19.0 (Electron) |
 | File Upload | Multer 1.4.5-lts.1 |
 | Excel | xlsx 0.18.5 |
 | Config | dotenv 16.4.7 |
@@ -39,12 +39,12 @@
 | UI Library | React | 19 |
 | Build Tool | Vite | 6.4.1 |
 | CSS | Tailwind CSS | 4 |
-| HTTP Client | fetch (native) via `utils/api.js` |
+| HTTP Client | axios via `utils/api.js` |
 
 ### Desktop
 | Component | Technology |
 |-----------|-----------|
-| Shell | Electron (via `electron.js`) |
+| Shell | Electron 41.0.2 (via `electron.js`) |
 | Builder | electron-builder (win x64: dir + portable) |
 | E2E Tests | Playwright 1.58.2 |
 
@@ -56,7 +56,7 @@
 ┌─────────────────────────────────────────────────────┐
 │                  Electron Shell                      │
 │  ┌─────────────────┐    ┌────────────────────────┐  │
-│  │  Backend :9005   │    │  Frontend :9173 (dev)  │  │
+│  │  Backend :9002   │    │  Frontend :9173 (dev)  │  │
 │  │  Express + SQLite│◄──►│  React 19 + Vite       │  │
 │  │  33 route files  │    │  50 pages, 28 comps    │  │
 │  └────────┬─────────┘    └────────────────────────┘  │

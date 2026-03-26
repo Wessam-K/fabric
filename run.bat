@@ -48,7 +48,7 @@ echo ═════════════════════════
 echo   Backend:  http://localhost:9002
 echo   Frontend: http://localhost:9173
 echo ═══════════════════════════════════════════
-echo   Login: admin / 123456
+echo   Use your configured credentials to login
 echo   Press Ctrl+C to stop
 echo ═══════════════════════════════════════════
 echo.

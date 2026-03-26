@@ -7,7 +7,8 @@ let refreshPromise = null;
 
 function parseJwtExp(token) {
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(base64));
     return payload.exp || 0;
   } catch { return 0; }
 }
@@ -44,7 +45,7 @@ api.interceptors.request.use(async config => {
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401) {
+    if (err.response?.status === 401 && !window.location.hash?.includes('login') && !window.location.pathname?.endsWith('/login')) {
       localStorage.removeItem('wk_token');
       localStorage.removeItem('wk_user');
       window.location.href = '/login';

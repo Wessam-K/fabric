@@ -112,7 +112,7 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center text-gray-600 text-xs mt-6">WK-Hub v15 — نظام إدارة المصنع</p>
+        <p className="text-center text-gray-600 text-xs mt-6">WK-Hub v{__APP_VERSION__} — نظام إدارة المصنع</p>
       </div>
     </div>
   );

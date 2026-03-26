@@ -478,7 +478,11 @@ function initializeDatabase() {
       status        TEXT DEFAULT 'active' CHECK(status IN ('active','inactive','suspended')),
       last_login    TEXT,
       created_at    TEXT DEFAULT (datetime('now')),
-      created_by    INTEGER REFERENCES users(id)
+      created_by    INTEGER REFERENCES users(id),
+      must_change_password   INTEGER DEFAULT 0,
+      failed_login_attempts  INTEGER DEFAULT 0,
+      locked_until           TEXT,
+      password_changed_at    TEXT
     );
 
     CREATE TABLE IF NOT EXISTS audit_log (
@@ -2280,16 +2284,19 @@ function runMigrations() {
   // ──── V25 — Audit Round 3: performance indexes ────
   const v25 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 25').get();
   if (!v25) {
-    db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read);
-      CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status);
-      CREATE INDEX IF NOT EXISTS idx_attendance_emp_date ON attendance(employee_id, work_date);
-      CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
-      CREATE INDEX IF NOT EXISTS idx_po_items_po ON purchase_order_items(po_id);
-      CREATE INDEX IF NOT EXISTS idx_wo_stages_wo ON wo_stages(wo_id);
-      CREATE INDEX IF NOT EXISTS idx_wo_stages_name ON wo_stages(stage_name);
-      CREATE INDEX IF NOT EXISTS idx_invoices_status_due ON invoices(status, due_date);
-    `);
+    const idxStmts = [
+      `CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read)`,
+      `CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status)`,
+      `CREATE INDEX IF NOT EXISTS idx_attendance_emp_date ON attendance(employee_id, work_date)`,
+      `CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_items_po ON purchase_order_items(po_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_wo_stages_wo ON wo_stages(wo_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_wo_stages_name ON wo_stages(stage_name)`,
+      `CREATE INDEX IF NOT EXISTS idx_invoices_status_due ON invoices(status, due_date)`,
+    ];
+    for (const stmt of idxStmts) {
+      try { db.exec(stmt); } catch(e) { /* table may not exist yet */ }
+    }
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (25)`);
   }
 

@@ -117,9 +117,9 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-[22rem] sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 z-[100] max-h-[32rem] overflow-hidden flex flex-col" dir="rtl">
-          <div className="flex items-center justify-between p-3 border-b border-gray-100">
-            <span className="text-sm font-bold text-[#1a1a2e]">الإشعارات</span>
+        <div className="absolute left-0 top-full mt-2 w-[22rem] sm:w-96 bg-white dark:bg-[#1a1a2e] rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 z-[100] max-h-[32rem] overflow-hidden flex flex-col" dir="rtl">
+          <div className="flex items-center justify-between p-3 border-b border-gray-100 dark:border-white/8">
+            <span className="text-sm font-bold text-[#1a1a2e] dark:text-white">الإشعارات</span>
             {unreadCount > 0 && (
               <button onClick={markAllRead} className="text-[10px] text-[#c9a84c] hover:underline">تحديد الكل كمقروع</button>
             )}
@@ -129,9 +129,9 @@ export default function NotificationBell() {
               <div className="space-y-2 p-3">
                 {[1,2,3].map(i => (
                   <div key={i} className="animate-pulse space-y-1.5 py-2">
-                    <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                    <div className="h-2.5 bg-gray-100 rounded w-full"></div>
-                    <div className="h-2 bg-gray-50 rounded w-1/3"></div>
+                    <div className="h-3 bg-gray-200 dark:bg-white/10 rounded w-3/4"></div>
+                    <div className="h-2.5 bg-gray-100 dark:bg-white/5 rounded w-full"></div>
+                    <div className="h-2 bg-gray-50 dark:bg-white/3 rounded w-1/3"></div>
                   </div>
                 ))}
               </div>
@@ -147,11 +147,11 @@ export default function NotificationBell() {
             ) : (
               notifications.map(n => (
                 <div key={n.id} onClick={() => handleNotificationClick(n)}
-                  className={`px-3 py-2.5 border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors group relative ${!n.is_read ? 'bg-blue-50/50' : ''}`}>
+                  className={`px-3 py-2.5 border-b border-gray-50 dark:border-white/5 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group relative ${!n.is_read ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}>
                   <div className="flex items-start gap-2">
                     <span className="text-sm mt-0.5 shrink-0">{getIcon(n.type)}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-[#1a1a2e]">{n.title}</p>
+                      <p className="text-xs font-bold text-[#1a1a2e] dark:text-white">{n.title}</p>
                       <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed line-clamp-2">{n.body || n.message}</p>
                       <p className="text-[9px] text-gray-300 mt-1">{n.created_at ? new Date(n.created_at).toLocaleString('ar-EG') : ''}</p>
                     </div>
@@ -164,7 +164,7 @@ export default function NotificationBell() {
               ))
             )}
           </div>
-          <div className="border-t border-gray-100 p-2 text-center">
+          <div className="border-t border-gray-100 dark:border-white/8 p-2 text-center">
             <button onClick={() => { navigate('/notifications'); setOpen(false); }}
               className="text-[11px] text-[#c9a84c] hover:underline">عرض الكل</button>
           </div>

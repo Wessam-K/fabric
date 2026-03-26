@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useMemo, useEffect } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 
 export default function ImageUpload({ value, onChange, label, size = 'md', className = '' }) {
@@ -10,8 +10,14 @@ export default function ImageUpload({ value, onChange, label, size = 'md', class
     if (file) onChange(file);
   };
 
-  const imgSrc = value instanceof File ? URL.createObjectURL(value)
-    : (typeof value === 'string' && value) ? value : null;
+  const imgSrc = useMemo(() => {
+    if (value instanceof File) return URL.createObjectURL(value);
+    return (typeof value === 'string' && value) ? value : null;
+  }, [value]);
+
+  useEffect(() => {
+    return () => { if (value instanceof File && imgSrc) URL.revokeObjectURL(imgSrc); };
+  }, [imgSrc, value]);
 
   return (
     <div className={className}>

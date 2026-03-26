@@ -5,6 +5,41 @@
 
 ---
 
+## Phase D — Dashboard Refactoring, Dark Mode, Drag-and-Drop, Security Audit (2026-03-26)
+
+### D1: App-Wide Dark Mode
+- **Files**: `index.css`, `Shared.jsx`, `GlobalSearch.jsx`, `NotificationBell.jsx`, `HelpButton.jsx`, `ErrorBoundary.jsx`
+- **Change**: Added CSS-level dark overrides for badges, buttons, form-label, page-subtitle, empty-state, body text. Added `dark:` classes to Modal, ConfirmDialog, Tabs, Skeleton, TableSkeleton, search, notifications, help panel, error boundary
+- **Reason**: Dark toggle previously only affected dashboard page
+
+### D2: Widget Drag-and-Drop Reordering
+- **Files**: `DashboardConfigContext.jsx`, `Dashboard.jsx`, `DashboardConfigPanel.jsx`
+- **Change**: Added `widgetOrder` array (persisted per-user), `moveWidget()`, `DraggableWidget` wrapper component, `WidgetRenderer` ordered rendering, config panel with drag handles + numbered positions
+- **Reason**: Users requested reorderable dashboard widgets
+
+### D3: Security Audit Fixes (18 Critical Issues)
+- **server.js**: Hardened health endpoint (removed metadata leaks), added transaction to create-admin
+- **routes/users.js**: Enforced strong password policy (8+ chars, uppercase, digit)
+- **routes/backups.js**: Path traversal fix — reconstruct paths via `path.basename()`
+- **routes/fabrics.js**: Auto-create upload directory
+- **electron.js**: Validated export buffer (50MB limit, extension whitelist), restricted cache IPC keys, sanitized log levels
+- **seed.js**: bcrypt cost 12, `must_change_password=1` for all seed users
+- **api.js**: Fixed 401 redirect loop, URL-safe Base64 in JWT parsing
+- **ImageUpload.jsx**: Fixed memory leak with `URL.revokeObjectURL()`
+- **.gitignore**: Added `.auth-state.json`, `SECRETS.md`, `sweep-*.txt`, `screenshots/`
+- **run.bat**: Removed default credentials display
+
+### D4: Hardcoded Data Fix
+- **Login.jsx**: Changed hardcoded `v15` → dynamic `__APP_VERSION__` from package.json
+- **vite.config.js**: Added `define: { __APP_VERSION__: pkg.version }` from root package.json
+
+### D5: Cleanup
+- Deleted `Dashboard.old.jsx` (stale 403-line file)
+- Deleted empty `e2e/capture-missing.js`
+- API tests updated to handle both seed and fresh-setup scenarios
+
+---
+
 ## Phase A — Stability Fixes
 
 ### A1: Fix auto-journal invoice tax calculation (MATH-1)
@@ -424,6 +459,42 @@
 - **File**: `backend/routes/hr.js`
 - **Change**: Added `fileFilter` restricting uploads to `.xlsx`, `.xls`, `.csv`
 - **Reason**: No file type validation — any file type accepted
+
+---
+
+## Phase 6 — Export System & Electron Enhancement (March 2026)
+
+### E1: Enhanced seed script with consumption tracking
+- **File**: `backend/seed.js`
+- **Changes**:
+  - Fabric inventory batches start with `used_meters=0`, populated by WO consumption
+  - Added `accessory_inventory_batches` creation from POs
+  - Added `wo_fabric_consumption`, `wo_accessory_consumption`, `wo_waste`, `wo_accessories_detail` records
+  - Inventory finalization syncs batch `used_meters` and recalculates `fabrics.available_meters`
+  - Cost snapshots computed from real consumption data
+- **Result**: 4,745 records across 44 entity tables
+
+### E2: Comprehensive export system — 18 endpoints
+- **File**: `backend/routes/exports.js`
+- **New endpoints**: suppliers, fabric-usage, accessory-usage, wo-cost-breakdown, model-profitability, po-by-supplier, inventory-valuation, waste-analysis, financial-summary, customers, quality-report, payroll, employees, machines, stage-progress, production-timeline, purchase-summary, full-export
+- **Features**: CSV + Excel (XLSX) format, Arabic column headers, RTL Excel, date filtering, catalog endpoint
+- **Registered**: `app.use('/api/exports', requireAuth, exportsRouter)` in `server.js`
+
+### E3: Frontend Exports Center page
+- **File**: `frontend/src/pages/ExportsCenter.jsx` (NEW)
+- **Features**: Category-grouped export cards, CSV/XLSX download buttons, date range filter, search, responsive grid
+- **Route**: `/exports` with `reports:view` permission
+- **Nav**: Added to sidebar under "التقارير" section
+
+### E4: Electron desktop app enhancement
+- **Files**: `electron.js` (rewritten), `preload.js` (NEW), `lib/logger.js`, `lib/cache.js`, `lib/migrator.js`, `lib/security.js` (ALL NEW)
+- **Logging**: Winston with daily rotation (combined/error/audit logs), 30/60/90 day retention, sensitive field redaction, error code taxonomy
+- **Caching**: Memory + disk two-tier cache with TTL, prefix invalidation
+- **Security**: CSP headers, navigation restriction, DevTools blocking in production, ASAR integrity check, debugger detection
+- **DB Migration**: Pre-launch backup, restore capability, backup pruning (keep 10)
+- **IPC**: 12 invoke + 11 send + 11 receive channels, all whitelisted in preload.js
+- **Error handling**: Global uncaughtException/unhandledRejection with Arabic error dialogs
+- **Build**: preload.js and lib/**/* added to electron-builder files config
 - **Severity**: P1 (Security)
 
 ### R5-08: Add performance indexes (V26 migration)

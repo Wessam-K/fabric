@@ -41,6 +41,7 @@ const returnsRouter = require('./routes/returns');
 const documentsRouter = require('./routes/documents');
 const backupsRouter = require('./routes/backups');
 const autojournalRouter = require('./routes/autojournal');
+const exportsRouter = require('./routes/exports');
 
 const app = express();
 const PORT = process.env.PORT || 9002;
@@ -114,20 +115,11 @@ app.use('/api/auth/login', (req, res, next) => {
 
 // ═══ Health check (public, no auth) ═══
 app.get('/api/health', (req, res) => {
-  let dbStatus = 'ok', dbVersion = null, userCount = null;
+  let dbStatus = 'ok';
   try {
-    const ver = db.prepare('SELECT MAX(version) as v FROM schema_migrations').get();
-    dbVersion = ver?.v;
-    userCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE status='active'").get().c;
-  } catch (e) { dbStatus = 'error: ' + e.message; }
-  res.json({
-    status: 'ok', app: 'WK-Hub', version: 'v20-enterprise',
-    timestamp: new Date().toISOString(),
-    uptime_seconds: Math.floor(process.uptime()),
-    database: { status: dbStatus, schema_version: dbVersion, active_users: userCount },
-    node_version: process.version,
-    memory_mb: Math.round(process.memoryUsage().rss / 1024 / 1024),
-  });
+    db.prepare('SELECT 1').get();
+  } catch (e) { dbStatus = 'error'; }
+  res.json({ status: 'ok', app: 'WK-Hub', database: dbStatus });
 });
 
 // ═══ Public routes (no auth) ═══
@@ -143,14 +135,18 @@ app.get('/api/setup/status', (req, res) => {
 
 app.post('/api/setup/create-admin', (req, res) => {
   try {
-    const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
-    if (count > 0) return res.status(403).json({ error: 'تم إكمال الإعداد بالفعل' });
     const { username, full_name, password } = req.body;
     if (!username || !full_name || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
     if (password.length < 8 || !/[A-Z]/.test(password) || !/\d/.test(password)) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل مع حرف كبير ورقم' });
     const hash = bcrypt.hashSync(password, 12);
-    const result = db.prepare('INSERT INTO users (username, full_name, password_hash, role, status) VALUES (?,?,?,?,?)')
-      .run(username, full_name, hash, 'superadmin', 'active');
+    const createAdmin = db.transaction(() => {
+      const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+      if (count > 0) return null;
+      return db.prepare('INSERT INTO users (username, full_name, password_hash, role, status) VALUES (?,?,?,?,?)')
+        .run(username, full_name, hash, 'superadmin', 'active');
+    });
+    const result = createAdmin();
+    if (!result) return res.status(403).json({ error: 'تم إكمال الإعداد بالفعل' });
     res.json({ message: 'تم إنشاء حساب مدير النظام', user_id: result.lastInsertRowid });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ أثناء إنشاء الحساب' }); }
 });
@@ -188,6 +184,7 @@ app.use('/api/returns', requireAuth, returnsRouter);
 app.use('/api/documents', requireAuth, documentsRouter);
 app.use('/api/backups', requireAuth, backupsRouter);
 app.use('/api/auto-journal', requireAuth, autojournalRouter);
+app.use('/api/exports', requireAuth, exportsRouter);
 
 // Dashboard
 app.get('/api/dashboard', requireAuth, (req, res) => {
@@ -339,7 +336,7 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
 app.get('/api/search', requireAuth, (req, res) => {
   try {
     const { q } = req.query;
-    if (!q || q.length < 2) return res.json({ models: [], fabrics: [], accessories: [], invoices: [], suppliers: [], workOrders: [], purchaseOrders: [] });
+    if (!q || q.length < 2 || q.length > 100) return res.json({ models: [], fabrics: [], accessories: [], invoices: [], suppliers: [], workOrders: [], purchaseOrders: [] });
     const searchLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='search_results_limit'").get()?.value) || 8;
     const like = `%${q}%`;
     const models = db.prepare(`SELECT model_code, model_name, serial_number, category FROM models WHERE status='active' AND (model_code LIKE ? OR model_name LIKE ? OR serial_number LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);

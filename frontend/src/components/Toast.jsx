@@ -10,8 +10,12 @@ export function ToastProvider({ children }) {
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+    const duration = type === 'error' ? 5000 : 3500;
+    setToasts(prev => {
+      const next = [...prev, { id, message, type }];
+      return next.length > 5 ? next.slice(-5) : next;
+    });
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
   }, []);
 
   const toast = useMemo(() => ({
@@ -23,7 +27,7 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={toast}>
       {children}
-      <div className="fixed top-4 left-4 z-50 space-y-2 no-print" style={{ direction: 'rtl' }}>
+      <div className="fixed top-4 left-4 z-50 space-y-2 no-print" role="status" aria-live="polite" style={{ direction: 'rtl' }}>
         {toasts.map(t => (
           <div key={t.id} className={`flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm text-white animate-[slideIn_0.3s_ease] ${
             t.type === 'success' ? 'bg-green-600' : t.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
