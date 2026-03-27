@@ -605,6 +605,35 @@ app.get('/api/import/templates', requireAuth, (req, res) => {
   ]);
 });
 
+// ═══════════════════════════════════════════
+//  Activity Feed & Session Management
+// ═══════════════════════════════════════════
+
+// GET /api/activity-feed — recent actions across the system
+app.get('/api/activity-feed', requireAuth, (req, res) => {
+  try {
+    const limit = Math.min(100, parseInt(req.query.limit) || 30);
+    const feed = db.prepare(`
+      SELECT al.id, al.action, al.entity_type, al.entity_id, al.details, al.created_at,
+        u.full_name as user_name
+      FROM audit_log al
+      LEFT JOIN users u ON u.id = al.user_id
+      ORDER BY al.created_at DESC
+      LIMIT ?
+    `).all(limit);
+    res.json(feed);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/sessions/current — current session info
+app.get('/api/sessions/current', requireAuth, (req, res) => {
+  try {
+    const user = req.user;
+    const loginTime = db.prepare("SELECT created_at FROM audit_log WHERE user_id = ? AND action = 'LOGIN' ORDER BY created_at DESC LIMIT 1").get(user.id);
+    res.json({ user_id: user.id, username: user.username, full_name: user.full_name, role: user.role, last_login: loginTime?.created_at || null });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 // Global search — filter by user module permissions
 app.get('/api/search', requireAuth, (req, res) => {
   try {
