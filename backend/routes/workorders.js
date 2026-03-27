@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
+const notificationEmitter = require('../lib/notificationEmitter');
 
 // ═══════════════════════════════════════════════
 // COST CALCULATION (used by multiple endpoints)
@@ -635,6 +636,17 @@ router.patch('/:id/status', requirePermission('work_orders', 'edit'), (req, res)
     doStatusChange();
 
     logAudit(req, 'STATUS_CHANGE', 'work_order', woId, `${wo.status} → ${status}`);
+
+    // Emit real-time notification for status change
+    const statusLabels = { in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغى', delivered: 'تم التسليم' };
+    notificationEmitter.emit('notification', {
+      user_id: null,
+      type: 'work_order_status',
+      title: `أمر العمل ${wo.wo_number} → ${statusLabels[status] || status}`,
+      entity_type: 'work_order',
+      entity_id: woId,
+    });
+
     res.json(getFullWO(woId));
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

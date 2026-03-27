@@ -368,6 +368,117 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// ═══ Dashboard KPI Endpoints ═══
+
+// GET /api/dashboard/chart/revenue-trend — monthly revenue last 12 months
+app.get('/api/dashboard/chart/revenue-trend', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT strftime('%Y-%m', created_at) as month,
+        COALESCE(SUM(CASE WHEN status='paid' THEN total ELSE 0 END),0) as revenue,
+        COUNT(*) as invoice_count
+      FROM invoices WHERE created_at >= date('now','-12 months')
+      GROUP BY month ORDER BY month
+    `).all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/dashboard/chart/production-status — WO status distribution
+app.get('/api/dashboard/chart/production-status', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT status, COUNT(*) as count FROM work_orders GROUP BY status`).all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/dashboard/chart/top-customers — top 10 customers by revenue
+app.get('/api/dashboard/chart/top-customers', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT customer_name, SUM(total) as total_revenue, COUNT(*) as invoice_count
+      FROM invoices WHERE status NOT IN ('cancelled','draft')
+      GROUP BY customer_id ORDER BY total_revenue DESC LIMIT 10
+    `).all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/dashboard/chart/inventory-alerts — low stock items summary
+app.get('/api/dashboard/chart/inventory-alerts', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
+  try {
+    const fabrics = db.prepare(`SELECT code, name, available_meters as qty, low_stock_threshold as threshold, 'fabric' as type FROM fabrics WHERE status='active' AND available_meters < COALESCE(low_stock_threshold,10) AND COALESCE(low_stock_threshold,10) > 0`).all();
+    const accessories = db.prepare(`SELECT code, name, quantity_on_hand as qty, low_stock_threshold as threshold, 'accessory' as type FROM accessories WHERE status='active' AND quantity_on_hand < COALESCE(low_stock_threshold,10) AND COALESCE(low_stock_threshold,10) > 0`).all();
+    res.json([...fabrics, ...accessories]);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/dashboard/kpis/production — production KPIs with period comparison
+app.get('/api/dashboard/kpis/production', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
+  try {
+    const thisMonth = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month')").get().c;
+    const lastMonth = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month','-1 month') AND completed_date < date('now','start of month')").get().c;
+    const avgCycleTime = db.prepare("SELECT AVG(JULIANDAY(completed_date) - JULIANDAY(created_at)) as v FROM work_orders WHERE status='completed' AND completed_date IS NOT NULL AND created_at IS NOT NULL").get().v || 0;
+    const onTimeCount = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND completed_date <= due_date AND due_date IS NOT NULL").get().c;
+    const totalWithDue = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND due_date IS NOT NULL").get().c;
+    const onTimeRate = totalWithDue > 0 ? Math.round((onTimeCount / totalWithDue) * 100) : 100;
+    res.json({
+      completed_this_month: thisMonth,
+      completed_last_month: lastMonth,
+      completion_change_pct: lastMonth > 0 ? Math.round(((thisMonth - lastMonth) / lastMonth) * 100) : 0,
+      avg_cycle_days: Math.round(avgCycleTime * 10) / 10,
+      on_time_delivery_rate: onTimeRate,
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/dashboard/kpis/finance — financial KPIs
+app.get('/api/dashboard/kpis/finance', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
+  try {
+    const revenueThisMonth = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='paid' AND created_at >= date('now','start of month')").get().v;
+    const revenueSameMonthLastYear = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='paid' AND strftime('%m', created_at) = strftime('%m','now') AND strftime('%Y', created_at) = CAST(CAST(strftime('%Y','now') AS INTEGER) - 1 AS TEXT)").get().v;
+    const arOverdue = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='overdue'").get().v;
+    // AR aging
+    const ar030 = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status NOT IN ('paid','cancelled','draft') AND due_date >= date('now','-30 days')").get().v;
+    const ar3160 = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status NOT IN ('paid','cancelled','draft') AND due_date < date('now','-30 days') AND due_date >= date('now','-60 days')").get().v;
+    const ar6190 = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status NOT IN ('paid','cancelled','draft') AND due_date < date('now','-60 days') AND due_date >= date('now','-90 days')").get().v;
+    const ar90plus = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status NOT IN ('paid','cancelled','draft') AND due_date < date('now','-90 days')").get().v;
+    res.json({
+      revenue_this_month: Math.round(revenueThisMonth * 100) / 100,
+      revenue_same_month_ly: Math.round(revenueSameMonthLastYear * 100) / 100,
+      ar_overdue: Math.round(arOverdue * 100) / 100,
+      ar_aging: {
+        '0_30': Math.round(ar030 * 100) / 100,
+        '31_60': Math.round(ar3160 * 100) / 100,
+        '61_90': Math.round(ar6190 * 100) / 100,
+        '90_plus': Math.round(ar90plus * 100) / 100,
+      },
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/dashboard/kpis/hr — HR KPIs
+app.get('/api/dashboard/kpis/hr', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const totalEmployees = db.prepare("SELECT COUNT(*) as c FROM employees WHERE status='active'").get().c;
+    const presentToday = db.prepare("SELECT COUNT(*) as c FROM attendance WHERE work_date=? AND attendance_status != 'absent'").get(today).c;
+    const attendanceRate = totalEmployees > 0 ? Math.round((presentToday / totalEmployees) * 100) : 0;
+    const pendingLeaves = db.prepare("SELECT COUNT(*) as c FROM leave_requests WHERE status='pending'").get().c;
+    const payrollThisMonth = db.prepare("SELECT COALESCE(SUM(net_salary),0) as v FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pp.period_month=strftime('%Y-%m','now')").get().v;
+    // Department headcount
+    const departments = db.prepare("SELECT department, COUNT(*) as count FROM employees WHERE status='active' AND department IS NOT NULL GROUP BY department ORDER BY count DESC").all();
+    res.json({
+      total_employees: totalEmployees,
+      present_today: presentToday,
+      attendance_rate: attendanceRate,
+      pending_leave_requests: pendingLeaves,
+      payroll_this_month: Math.round(payrollThisMonth * 100) / 100,
+      departments,
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 // Global search — filter by user module permissions
 app.get('/api/search', requireAuth, (req, res) => {
   try {

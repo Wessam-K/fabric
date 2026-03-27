@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { requireRole, logAudit } = require('../middleware/auth');
+const notificationEmitter = require('../lib/notificationEmitter');
 
 // Helper to get currency symbol from settings
 const getCurrencySymbol = () => {
@@ -10,6 +11,35 @@ const getCurrencySymbol = () => {
     return row?.value || 'ج.م';
   } catch { return 'ج.م'; }
 };
+
+// GET /api/notifications/stream — SSE endpoint for real-time push notifications
+router.get('/stream', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  const userId = req.user ? req.user.id : null;
+  const listener = (notification) => {
+    if (notification.user_id === userId || notification.user_id === null) {
+      res.write(`data: ${JSON.stringify(notification)}\n\n`);
+    }
+  };
+
+  notificationEmitter.on('notification', listener);
+
+  // Heartbeat every 30s to keep connection alive
+  const heartbeat = setInterval(() => {
+    try { res.write(': heartbeat\n\n'); } catch {}
+  }, 30000);
+
+  req.on('close', () => {
+    notificationEmitter.off('notification', listener);
+    clearInterval(heartbeat);
+  });
+});
 
 // GET /api/notifications/count — unread count only (lightweight poll) — MUST be before /:id
 router.get('/count', (req, res) => {
@@ -248,8 +278,20 @@ function generateNotifications() {
 // Helper: create notification (used by other routes)
 function createNotification(userId, type, title, body, referenceType, referenceId) {
   try {
-    db.prepare(`INSERT INTO notifications (user_id, type, title, body, reference_type, reference_id) VALUES (?,?,?,?,?,?)`)
+    const result = db.prepare(`INSERT INTO notifications (user_id, type, title, body, reference_type, reference_id) VALUES (?,?,?,?,?,?)`)
       .run(userId, type, title, body, referenceType || null, referenceId || null);
+    // Emit SSE event
+    notificationEmitter.emit('notification', {
+      id: result.lastInsertRowid,
+      user_id: userId,
+      type,
+      title,
+      body,
+      reference_type: referenceType || null,
+      reference_id: referenceId || null,
+      is_read: 0,
+      created_at: new Date().toISOString(),
+    });
   } catch (err) { console.error('Notification creation failed:', err.message); }
 }
 

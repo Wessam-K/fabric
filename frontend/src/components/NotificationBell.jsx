@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, X, RefreshCw } from 'lucide-react';
 import api from '../utils/api';
+import useNotificationStream from '../hooks/useNotificationStream';
 
 const NAV_MAP = {
   fabric: '/fabrics',
@@ -70,6 +71,13 @@ export default function NotificationBell() {
     document.addEventListener('visibilitychange', handleVisibility);
     return () => { stopPolling(); document.removeEventListener('visibilitychange', handleVisibility); };
   }, [load]);
+
+  // SSE for real-time push notifications
+  const handleSSE = useCallback((notification) => {
+    setNotifications(prev => [notification, ...prev.slice(0, 19)]);
+    setUnreadCount(prev => prev + 1);
+  }, []);
+  useNotificationStream(handleSSE);
 
   useEffect(() => {
     const handleClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };

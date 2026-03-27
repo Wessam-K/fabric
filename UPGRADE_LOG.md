@@ -68,3 +68,18 @@
 - **Also changed:** `backend/server.js` — Rate limiter bypassed in test mode (`NODE_ENV=test`) to allow lockout tests to run without hitting IP-based rate limit
 - **Tests:** 80/80 pass ✅ (58 original + 22 new)
 
+## Category B — Enterprise Features
+
+### B1. Real-Time Notification System (SSE)
+- **New file:** `backend/lib/notificationEmitter.js` — EventEmitter singleton for pub/sub
+- **Modified:** `backend/routes/notifications.js`
+  - Added `GET /api/notifications/stream` — SSE endpoint with per-user filtering, 30s heartbeat
+  - Updated `createNotification()` to emit SSE events alongside DB insert
+- **Modified:** `backend/routes/workorders.js`
+  - Added notification emission on WO status change (broadcast to all connected clients)
+- **New file:** `frontend/src/hooks/useNotificationStream.js` — Fetch-based SSE client with auto-reconnect
+- **Modified:** `frontend/src/components/NotificationBell.jsx`
+  - Integrated SSE hook alongside existing polling (progressive enhancement)
+  - New notifications from SSE prepended to list + unread count incremented
+- **Tests:** 80/80 pass ✅
+
