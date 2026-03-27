@@ -5,6 +5,37 @@
 
 ---
 
+## Phase I — Production Audit v7 — Permission & Access Control Hardening (2025-07-24)
+
+### I1: Backend Security — Dashboard Permission Guard
+- **server.js**: Dashboard endpoint (`GET /api/dashboard`) upgraded from `requireAuth` to `requirePermission('dashboard', 'view')` — blocks users without dashboard access from seeing financial summaries, revenue, payables, and production metrics
+
+### I2: Backend Security — Global Search Permission Filtering
+- **server.js**: Global search (`GET /api/search`) now respects per-module permissions via `canUser()` — each entity type (models, fabrics, accessories, invoices, suppliers, work_orders, purchase_orders, customers, machines, maintenance, expenses) only searched if the user has the corresponding `module:view` permission
+
+### I3: Backend Security — Barcode Cross-Module Access Control
+- **barcode.js**: Universal barcode lookup now checks entity-specific permissions before returning results — `machines:view`, `maintenance:view`, `fabrics:view`, `accessories:view`, `models:view`, `work_orders:view`, `suppliers:view`, `customers:view`, `invoices:view`, `purchase_orders:view`
+
+### I4: Backend Logic — Stage Advance Reject-Only Operations
+- **workorders.js**: Fixed validation to allow reject-only operations (`qty_to_pass: 0, qty_rejected: N`) — previously `!qty_to_pass` blocked zero-pass, a common need for quality inspectors rejecting entire batches
+
+### I5: Backend Performance — Journal Entries Pagination
+- **accounting.js**: `GET /api/accounting/journal` now supports pagination (`page`, `limit` params) returning `{ data, total, page, pages }` — prevents performance issues with large transaction volumes
+- **JournalEntries.jsx**: Frontend updated to handle both paginated and legacy response formats
+
+### I6: Backend Security — Export Catalog Permission
+- **exports.js**: `GET /api/exports/catalog` now requires `requirePermission('reports', 'view')` — previously any authenticated user could enumerate available export types
+
+### I7: Auth Module — Inline Permission Helper
+- **middleware/auth.js**: Added `canUser(user, module, action)` utility for inline permission checking (used by search and barcode endpoints). Refactored `requirePermission` to use this shared logic. Exported as part of auth module.
+
+### I8: Build
+- All 58 API tests pass
+- Frontend: Vite production build (2553 modules, 105 KB CSS + 1.7 MB JS)
+- Electron: `WK-Hub Setup 2.0.0.exe` + `WK-Hub 2.0.0.exe`
+
+---
+
 ## Phase H — Production Audit v6 — Full Line-by-Line Audit (2026-03-27)
 
 ### H1: Backend Security — CSV Injection Protection (7 files)

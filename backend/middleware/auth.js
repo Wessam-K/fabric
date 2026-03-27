@@ -50,25 +50,22 @@ function requireRole(...roles) {
   };
 }
 
+function canUser(user, mod, action) {
+  if (!user) return false;
+  if (user.role === 'superadmin') return true;
+  try {
+    const userPerm = db.prepare('SELECT allowed FROM user_permissions WHERE user_id=? AND module=? AND action=?').get(user.id, mod, action);
+    if (userPerm) return !!userPerm.allowed;
+    const rolePerm = db.prepare('SELECT allowed FROM role_permissions WHERE role=? AND module=? AND action=?').get(user.role, mod, action);
+    return !!(rolePerm && rolePerm.allowed);
+  } catch { return false; }
+}
+
 function requirePermission(module, action) {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'غير مصرح' });
-    if (req.user.role === 'superadmin') return next();
-    try {
-      // Check user-specific override first
-      const userPerm = db.prepare('SELECT allowed FROM user_permissions WHERE user_id=? AND module=? AND action=?').get(req.user.id, module, action);
-      if (userPerm) {
-        if (userPerm.allowed) return next();
-        return res.status(403).json({ error: 'ليس لديك صلاحية للقيام بهذا الإجراء' });
-      }
-      // Fall back to role permission
-      const rolePerm = db.prepare('SELECT allowed FROM role_permissions WHERE role=? AND module=? AND action=?').get(req.user.role, module, action);
-      if (rolePerm && rolePerm.allowed) return next();
-      return res.status(403).json({ error: 'ليس لديك صلاحية للقيام بهذا الإجراء' });
-    } catch (err) {
-      console.error('Permission check DB error:', err.message);
-      return res.status(403).json({ error: 'خطأ في التحقق من الصلاحيات' });
-    }
+    if (canUser(req.user, module, action)) return next();
+    return res.status(403).json({ error: 'ليس لديك صلاحية للقيام بهذا الإجراء' });
   };
 }
 
@@ -92,4 +89,4 @@ function logAudit(req, action, entityType, entityId, entityLabel, oldValues = nu
   } catch(e) { console.error('Audit log error:', e.message); }
 }
 
-module.exports = { generateToken, requireAuth, requireRole, requirePermission, logAudit };
+module.exports = { generateToken, requireAuth, requireRole, requirePermission, canUser, logAudit };

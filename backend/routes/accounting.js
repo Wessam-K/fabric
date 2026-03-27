@@ -54,7 +54,7 @@ router.put('/coa/:id', requirePermission('accounting', 'edit'), (req, res) => {
 // GET /api/accounting/journal
 router.get('/journal', requirePermission('accounting', 'view'), (req, res) => {
   try {
-    const { status, search, from, to } = req.query;
+    const { status, search, from, to, page, limit: lim } = req.query;
     let sql = `SELECT je.*, u.full_name AS created_by_name,
       (SELECT SUM(debit) FROM journal_entry_lines WHERE entry_id = je.id) AS total_debit
       FROM journal_entries je LEFT JOIN users u ON je.created_by = u.id WHERE 1=1`;
@@ -63,9 +63,18 @@ router.get('/journal', requirePermission('accounting', 'view'), (req, res) => {
     if (search) { sql += ' AND (je.entry_number LIKE ? OR je.description LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
     if (from) { sql += ' AND je.entry_date >= ?'; params.push(from); }
     if (to) { sql += ' AND je.entry_date <= ?'; params.push(to); }
+
+    const countSql = sql.replace(/SELECT je\.\*.*?FROM/, 'SELECT COUNT(*) as c FROM');
+    const total = db.prepare(countSql).get(...params)?.c || 0;
+
     sql += ' ORDER BY je.entry_date DESC, je.id DESC';
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const perPage = Math.min(200, Math.max(1, parseInt(lim) || 50));
+    sql += ' LIMIT ? OFFSET ?';
+    params.push(perPage, (pageNum - 1) * perPage);
+
     const rows = db.prepare(sql).all(...params);
-    res.json(rows);
+    res.json({ data: rows, total, page: pageNum, pages: Math.ceil(total / perPage) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

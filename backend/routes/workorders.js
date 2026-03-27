@@ -937,10 +937,11 @@ router.patch('/:id/stage-advance', requirePermission('work_orders', 'edit'), (re
     const woId = parseInt(req.params.id);
     const { from_stage_id, qty_to_pass, qty_rejected, rejection_reason, notes } = req.body;
 
-    if (!from_stage_id || !qty_to_pass) return res.status(400).json({ error: 'from_stage_id و qty_to_pass مطلوبان' });
+    if (!from_stage_id) return res.status(400).json({ error: 'from_stage_id مطلوب' });
     const qPass = parseInt(qty_to_pass) || 0;
     const qReject = parseInt(qty_rejected) || 0;
     if (qPass < 0 || qReject < 0) return res.status(400).json({ error: 'الكميات يجب أن تكون موجبة' });
+    if (qPass + qReject === 0) return res.status(400).json({ error: 'يجب تحديد كمية تمرير أو رفض' });
 
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
     if (!wo) return res.status(404).json({ error: 'أمر الشغل غير موجود' });

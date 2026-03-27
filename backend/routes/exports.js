@@ -735,7 +735,7 @@ router.get('/purchase-summary', requirePermission('reports', 'view'), (req, res)
 // ═══════════════════════════════════════════════
 // 19. EXPORT CATALOG (lists available exports)
 // ═══════════════════════════════════════════════
-router.get('/catalog', (req, res) => {
+router.get('/catalog', requirePermission('reports', 'view'), (req, res) => {
   res.json([
     { key: 'suppliers', label: 'الموردين', icon: 'Users', description: 'بيانات الموردين وإحصائيات الشراء' },
     { key: 'fabric-usage', label: 'استهلاك الأقمشة', icon: 'Scissors', description: 'تحليل استخدام الأقمشة والمخزون' },

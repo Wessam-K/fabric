@@ -7,7 +7,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 
 const db = require('./database');
-const { requireAuth, logAudit } = require('./middleware/auth');
+const { requireAuth, requirePermission, canUser, logAudit } = require('./middleware/auth');
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
 const hrRouter = require('./routes/hr');
@@ -208,7 +208,7 @@ app.use('/api/auto-journal', requireAuth, autojournalRouter);
 app.use('/api/exports', requireAuth, exportsRouter);
 
 // Dashboard
-app.get('/api/dashboard', requireAuth, (req, res) => {
+app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
   try {
     // Get configurable limits from settings
     const dashboardListLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='dashboard_list_limit'").get()?.value) || 5;
@@ -353,29 +353,30 @@ app.get('/api/dashboard', requireAuth, (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
-// Global search
+// Global search — filter by user module permissions
 app.get('/api/search', requireAuth, (req, res) => {
   try {
     const { q } = req.query;
     if (!q || q.length < 2 || q.length > 100) return res.json({ models: [], fabrics: [], accessories: [], invoices: [], suppliers: [], workOrders: [], purchaseOrders: [] });
     const searchLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='search_results_limit'").get()?.value) || 8;
     const like = `%${q}%`;
-    const models = db.prepare(`SELECT model_code, model_name, serial_number, category FROM models WHERE status='active' AND (model_code LIKE ? OR model_name LIKE ? OR serial_number LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
-    const fabrics = db.prepare(`SELECT code, name, fabric_type, price_per_m FROM fabrics WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit);
-    const accessories = db.prepare(`SELECT code, name, acc_type, unit_price FROM accessories WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit);
-    const invoices = db.prepare(`SELECT id, invoice_number, customer_name, total, status FROM invoices WHERE invoice_number LIKE ? OR customer_name LIKE ? LIMIT ?`).all(like, like, searchLimit);
-    const suppliers = db.prepare(`SELECT id, code, name, supplier_type FROM suppliers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR contact_name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
-    const workOrders = db.prepare(`SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.assigned_to, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ? LIMIT ?`).all(like, like, like, like, searchLimit);
-    const purchaseOrders = db.prepare(`SELECT po.id, po.po_number, po.status, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.po_number LIKE ? OR s.name LIKE ? LIMIT ?`).all(like, like, searchLimit);
-    const customers = db.prepare(`SELECT id, code, name, phone, city FROM customers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR phone LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
+    const u = req.user;
+    const models = canUser(u,'models','view') ? db.prepare(`SELECT model_code, model_name, serial_number, category FROM models WHERE status='active' AND (model_code LIKE ? OR model_name LIKE ? OR serial_number LIKE ?) LIMIT ?`).all(like, like, like, searchLimit) : [];
+    const fabrics = canUser(u,'fabrics','view') ? db.prepare(`SELECT code, name, fabric_type, price_per_m FROM fabrics WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit) : [];
+    const accessories = canUser(u,'accessories','view') ? db.prepare(`SELECT code, name, acc_type, unit_price FROM accessories WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit) : [];
+    const invoices = canUser(u,'invoices','view') ? db.prepare(`SELECT id, invoice_number, customer_name, total, status FROM invoices WHERE invoice_number LIKE ? OR customer_name LIKE ? LIMIT ?`).all(like, like, searchLimit) : [];
+    const suppliers = canUser(u,'suppliers','view') ? db.prepare(`SELECT id, code, name, supplier_type FROM suppliers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR contact_name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit) : [];
+    const workOrders = canUser(u,'work_orders','view') ? db.prepare(`SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.assigned_to, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ? LIMIT ?`).all(like, like, like, like, searchLimit) : [];
+    const purchaseOrders = canUser(u,'purchase_orders','view') ? db.prepare(`SELECT po.id, po.po_number, po.status, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.po_number LIKE ? OR s.name LIKE ? LIMIT ?`).all(like, like, searchLimit) : [];
+    const customers = canUser(u,'customers','view') ? db.prepare(`SELECT id, code, name, phone, city FROM customers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR phone LIKE ?) LIMIT ?`).all(like, like, like, searchLimit) : [];
     let maintenanceOrders = [], expensesResults = [];
     let machines = [];
     try {
-      machines = db.prepare(`SELECT id, code, name, barcode, machine_type, status FROM machines WHERE status != 'inactive' AND (code LIKE ? OR name LIKE ? OR barcode LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
+      if (canUser(u,'machines','view')) machines = db.prepare(`SELECT id, code, name, barcode, machine_type, status FROM machines WHERE status != 'inactive' AND (code LIKE ? OR name LIKE ? OR barcode LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
     } catch (e) { console.error('search machines:', e.message); }
     try {
-      maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
-      expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT ?`).all(like, like, searchLimit);
+      if (canUser(u,'maintenance','view')) maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
+      if (canUser(u,'expenses','view')) expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT ?`).all(like, like, searchLimit);
     } catch (e) { console.error('search maintenance/expenses:', e.message); }
     res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults, machines });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

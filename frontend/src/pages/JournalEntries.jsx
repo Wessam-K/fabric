@@ -25,7 +25,8 @@ export default function JournalEntries() {
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
       const [entriesRes, coaRes] = await Promise.all([api.get('/accounting/journal', { params }), api.get('/accounting/coa')]);
-      setEntries(entriesRes.data);
+      const eData = entriesRes.data;
+      setEntries(Array.isArray(eData) ? eData : (eData.data || []));
       setAccounts(coaRes.data.filter(a => a.is_active));
     } catch { toast.error('فشل التحميل'); }
     finally { setLoading(false); }
