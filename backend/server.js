@@ -54,7 +54,7 @@ app.use(helmet({
 if (process.env.NODE_ENV !== 'test') app.use(morgan('short'));
 const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:9173', 'http://localhost:9174', 'app://.'];
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:9173', 'http://localhost:9174', `http://localhost:${PORT}`, 'app://.'];
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || corsOrigins.includes(origin) || corsOrigins.includes('*')) {
@@ -402,7 +402,7 @@ app.use((err, req, res, _next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`WK-Hub Factory API v20-enterprise running on http://localhost:${PORT}`);
+  console.log(`WK-Factory API running on http://localhost:${PORT}`);
   // Run notification generation on startup and every 5 minutes
   try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
   setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);

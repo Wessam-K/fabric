@@ -72,7 +72,7 @@ function initSubsystems() {
   initLogger(getLogsDir());
   initCache({ diskDir: getCacheDir(), stdTTL: 300, maxKeys: 500 });
 
-  getLogger().info('WK-Hub starting', {
+  getLogger().info('WK-Factory starting', {
     version: APP_VERSION,
     isDev,
     electron: process.versions.electron,
@@ -111,7 +111,14 @@ function startBackend() {
 
     getLogger().info('Starting backend', { serverPath, port: BACKEND_PORT, dbDir: getDbDir() });
 
-    backendProcess = spawn(process.execPath, [serverPath], {
+    // Use bundled Node.js runtime (not Electron binary) so native modules (better-sqlite3) work
+    const nodeExe = isDev
+      ? process.execPath
+      : path.join(process.resourcesPath, 'node-runtime', 'node.exe');
+
+    getLogger().info('Using Node runtime', { nodeExe, exists: fs.existsSync(nodeExe) });
+
+    backendProcess = spawn(nodeExe, [serverPath], {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: getBackendCwd(),
@@ -176,7 +183,7 @@ function createWindow() {
     height: 850,
     minWidth: 900,
     minHeight: 600,
-    title: `WK-Hub v${APP_VERSION} — نظام إدارة المصنع`,
+    title: `WK-Factory v${APP_VERSION} — نظام إدارة المصنع`,
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       nodeIntegration: false,

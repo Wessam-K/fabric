@@ -9,6 +9,9 @@ node_modules/
 # Electron build output
 dist-electron/
 
+# Bundled Node.js runtime (81MB — download from nodejs.org)
+node-runtime/
+
 # Frontend build output
 frontend/dist/
 
@@ -58,3 +61,4 @@ screenshots/
 
 # Security docs with creds
 SECRETS.md
+backend/wk-hub.db.bak
