@@ -114,3 +114,55 @@
   - `POST /period-close` — Close accounting period (validates no unposted entries)
 - **Tests:** 80/80 pass ✅
 
+### B5. Multi-Location Inventory System
+- **Migration V36**: warehouses, warehouse_zones, fabric_location_stock, accessory_location_stock, inventory_transfers, inventory_transfer_lines
+- **File:** `backend/routes/inventory.js` — 9 new endpoints (warehouse CRUD, zones, stock-by-location, transfers, stock valuation, reorder alerts)
+- **Tests:** 80/80 pass ✅
+
+### B6. HR Leave Management & Org Chart
+- **Migration V37**: employees.reports_to column, leave_balances table
+- **File:** `backend/routes/hr.js` — 5 new endpoints (leave-balances CRUD, leave-calendar, org-chart, employee reporting)
+- **Tests:** 80/80 pass ✅
+
+### B7. CRM Lite
+- **Migration V38**: customer_contacts, customer_notes tables
+- **File:** `backend/routes/customers.js` — 7 new endpoints (timeline, profitability, contacts CRUD, notes CRUD)
+- **Tests:** 80/80 pass ✅
+
+### B8. Enhanced Global Search
+- **File:** `backend/server.js` — category filter, employees/accounts search, counts + total
+- **Tests:** 80/80 pass ✅
+
+### B9. PWA Support
+- `frontend/public/manifest.json`, `frontend/public/sw.js`, updated index.html + main.jsx
+- **Tests:** 80/80 pass ✅
+
+### B10. Document Print Templates
+- **File:** `backend/routes/documents.js` — invoice, quotation, payslip HTML templates
+- **Tests:** 80/80 pass ✅
+
+### B11. BI Reports
+- **File:** `backend/server.js` — executive-summary, cost-analysis, inventory-abc, hr-analytics
+- **Tests:** 80/80 pass ✅
+
+### B12. Bulk Import & Export
+- **File:** `backend/server.js` — POST /api/import/bulk + GET /api/import/templates
+- **Tests:** 80/80 pass ✅
+
+## Category C — Premium Polish
+
+- C1: Keyboard shortcuts hook (`frontend/src/hooks/useKeyboardShortcuts.js`)
+- C2: Dark mode already present (`ThemeContext.jsx`)
+- C5: Activity feed API (`GET /api/activity-feed`)
+- C7: Number formatting already present (`formatters.js`)
+- C8: Session management API (`GET /api/sessions/current`)
+- C10: Print quality already present (`print.css`)
+- **Tests:** 80/80 pass ✅
+
+## Category D — Security Improvements
+
+- D1: Token blacklist/revocation in `middleware/auth.js` + `routes/auth.js`
+- D2: MIME magic byte validation in `routes/documents.js`
+- D3: Request ID tracing middleware (X-Request-ID) in `server.js`
+- D4: Input field length limits (10K chars) middleware in `server.js`
+- **Tests:** 80/80 pass ✅
