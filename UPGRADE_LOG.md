@@ -83,3 +83,34 @@
   - New notifications from SSE prepended to list + unread count incremented
 - **Tests:** 80/80 pass ✅
 
+### B2. Dashboard KPI Endpoints
+- **File:** `backend/server.js`
+- **7 new endpoints added to `/api/dashboard/`:**
+  - `GET /revenue-trend` — Monthly revenue totals from invoices (12 months)
+  - `GET /production-status` — Work order counts by status
+  - `GET /top-customers` — Top 10 customers by revenue with order counts
+  - `GET /inventory-alerts` — Low stock items (below reorder point)
+  - `GET /production-kpis?period=week|month|quarter` — Completion rate, avg lead time, period comparison
+  - `GET /finance-kpis` — Outstanding AR/AP, cash balance, AR aging breakdown
+  - `GET /hr-kpis` — Active/total employees, department distribution, recent hires
+- **Tests:** 80/80 pass ✅
+
+### B3. Production Gantt Chart & Scheduling API
+- **File:** `backend/routes/scheduling.js`
+- **3 new endpoints:**
+  - `GET /gantt` — Work orders with timing data for Gantt rendering (filters: start_date, end_date, status, line_id, customer_id)
+  - `PUT /:id/reschedule` — Drag-drop reschedule (updates planned_start, planned_end, optional line_id)
+  - `GET /conflicts` — Machine double-booking + line overload detection
+- **Tests:** 80/80 pass ✅
+
+### B4. Advanced Financial Statements
+- **File:** `backend/routes/accounting.js`
+- **7 new endpoints:**
+  - `GET /income-statement?from=&to=` — Revenue, COGS, expenses, gross/net profit
+  - `GET /balance-sheet?date=` — Assets, Liabilities, Equity with retained earnings, balance check
+  - `GET /general-ledger?account_id=&from=&to=` — GL detail per account with running balance, paginated
+  - `GET /aged-receivables` — AR aging (0-30, 31-60, 61-90, 90+ days) by customer
+  - `GET /aged-payables` — AP aging by supplier
+  - `POST /period-close` — Close accounting period (validates no unposted entries)
+- **Tests:** 80/80 pass ✅
+

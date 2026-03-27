@@ -153,4 +153,94 @@ router.delete('/:id', requirePermission('scheduling', 'delete'), (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// ═══════════════════════════════════════════
+// Gantt Chart & Advanced Scheduling
+// ═══════════════════════════════════════════
+
+// GET /api/scheduling/gantt — returns WOs with timing data for Gantt chart
+router.get('/gantt', requirePermission('scheduling', 'view'), (req, res) => {
+  try {
+    const { start_date, end_date, status, line_id, customer_id } = req.query;
+    let where = "wo.status NOT IN ('cancelled')";
+    const params = [];
+    if (start_date) { where += ' AND wo.due_date >= ?'; params.push(start_date); }
+    if (end_date) { where += ' AND wo.created_at <= ?'; params.push(end_date); }
+    if (status) { where += ' AND wo.status = ?'; params.push(status); }
+    if (line_id) { where += ' AND ps.production_line_id = ?'; params.push(parseInt(line_id)); }
+    if (customer_id) { where += ' AND wo.customer_id = ?'; params.push(parseInt(customer_id)); }
+
+    const items = db.prepare(`
+      SELECT wo.id, wo.wo_number, wo.status, wo.quantity, wo.priority,
+        wo.created_at, wo.start_date, wo.due_date, wo.completed_date,
+        m.model_code, m.model_name,
+        c.name as customer_name,
+        ps.planned_start, ps.planned_end, ps.production_line_id,
+        pl.name as line_name,
+        (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id) as total_stages,
+        (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id AND status='completed') as completed_stages
+      FROM work_orders wo
+      LEFT JOIN models m ON m.id = wo.model_id
+      LEFT JOIN customers c ON c.id = wo.customer_id
+      LEFT JOIN production_schedule ps ON ps.work_order_id = wo.id AND ps.status != 'cancelled'
+      LEFT JOIN production_lines pl ON pl.id = ps.production_line_id
+      WHERE ${where}
+      ORDER BY COALESCE(ps.planned_start, wo.created_at) ASC
+    `).all(...params);
+
+    res.json(items);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// PUT /api/scheduling/:id/reschedule — drag-drop reschedule from Gantt
+router.put('/:id/reschedule', requirePermission('scheduling', 'edit'), (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { planned_start, planned_end } = req.body;
+    if (!planned_start || !planned_end) return res.status(400).json({ error: 'تاريخ البداية والنهاية مطلوبان' });
+
+    const old = db.prepare('SELECT * FROM production_schedule WHERE id=?').get(id);
+    if (!old) return res.status(404).json({ error: 'غير موجود' });
+
+    db.prepare("UPDATE production_schedule SET planned_start=?, planned_end=?, updated_at=datetime('now','localtime') WHERE id=?")
+      .run(planned_start, planned_end, id);
+    logAudit(req, 'reschedule', 'schedule', id, `Reschedule #${id}`, old, { planned_start, planned_end });
+    res.json(db.prepare('SELECT * FROM production_schedule WHERE id=?').get(id));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/scheduling/conflicts — detect overlapping resource allocations
+router.get('/conflicts', requirePermission('scheduling', 'view'), (req, res) => {
+  try {
+    // Find machines double-booked
+    const machineConflicts = db.prepare(`
+      SELECT a.id as schedule_a, b.id as schedule_b, a.machine_id,
+        m.name as machine_name,
+        a.planned_start as a_start, a.planned_end as a_end,
+        b.planned_start as b_start, b.planned_end as b_end
+      FROM production_schedule a
+      JOIN production_schedule b ON a.machine_id = b.machine_id AND a.id < b.id
+      JOIN machines m ON m.id = a.machine_id
+      WHERE a.status NOT IN ('cancelled','completed') AND b.status NOT IN ('cancelled','completed')
+        AND a.machine_id IS NOT NULL
+        AND a.planned_start < b.planned_end AND a.planned_end > b.planned_start
+    `).all();
+
+    // Find overloaded production lines
+    const lineOverloads = db.prepare(`
+      SELECT ps.production_line_id, pl.name as line_name,
+        DATE(ps.planned_start) as work_date,
+        SUM(wo.quantity) as total_scheduled,
+        pl.capacity_per_day as capacity
+      FROM production_schedule ps
+      JOIN work_orders wo ON wo.id = ps.work_order_id
+      JOIN production_lines pl ON pl.id = ps.production_line_id
+      WHERE ps.status NOT IN ('cancelled','completed')
+      GROUP BY ps.production_line_id, DATE(ps.planned_start)
+      HAVING total_scheduled > capacity
+    `).all();
+
+    res.json({ machine_conflicts: machineConflicts, line_overloads: lineOverloads });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 module.exports = router;
