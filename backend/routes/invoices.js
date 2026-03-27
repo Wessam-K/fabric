@@ -127,6 +127,7 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
   try {
     const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
     if (!invoice) return res.status(404).json({ error: 'غير موجود' });
+    if (['paid', 'cancelled'].includes(invoice.status)) return res.status(400).json({ error: 'لا يمكن تعديل فاتورة مدفوعة أو ملغاة' });
 
     const { customer_name, customer_phone, customer_email, customer_id, notes, tax_pct, discount, due_date, items, status } = req.body;
 

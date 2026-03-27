@@ -4,6 +4,7 @@ import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import { useConfirm } from '../components/ConfirmDialog';
+import { useToast } from '../components/Toast';
 
 const ROLES = [
   { value: 'superadmin', label: 'مدير النظام' },
@@ -34,6 +35,7 @@ const ACTION_LABELS = { view: 'عرض', create: 'إنشاء', edit: 'تعديل'
 
 export default function UsersPage() {
   const { confirm, ConfirmDialog } = useConfirm();
+  const toast = useToast();
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
   const [showDrawer, setShowDrawer] = useState(false);
@@ -97,13 +99,13 @@ export default function UsersPage() {
     try {
       await api.patch(`/users/${resetPass.userId}/reset-password`, { new_password: resetPass.password });
       setResetPass({ show: false, userId: null, password: '' });
-    } catch (err) { alert(err.response?.data?.error || 'حدث خطأ'); }
+    } catch (err) { toast.error(err.response?.data?.error || 'حدث خطأ'); }
   }
 
   async function handleDeactivate(u) {
     const ok = await confirm({ title: 'تعطيل الحساب', message: `تعطيل حساب ${u.full_name}؟` });
     if (!ok) return;
-    try { await api.delete(`/users/${u.id}`); load(); } catch (err) { alert(err.response?.data?.error || 'حدث خطأ'); }
+    try { await api.delete(`/users/${u.id}`); load(); } catch (err) { toast.error(err.response?.data?.error || 'حدث خطأ'); }
   }
 
   // Start editing role permissions
@@ -137,7 +139,7 @@ export default function UsersPage() {
       await api.put(`/permissions/roles/${selectedRole}`, { permissions: roleEditing });
       setRolePerms(prev => ({ ...prev, [selectedRole]: roleEditing }));
       setRoleEditing(null);
-    } catch (err) { alert(err.response?.data?.error || 'حدث خطأ'); }
+    } catch (err) { toast.error(err.response?.data?.error || 'حدث خطأ'); }
     setSaving(false);
   }
 
@@ -184,7 +186,7 @@ export default function UsersPage() {
       await api.put(`/permissions/user/${userPermsTarget.id}`, { permissions: userOverrides });
       setUserPermsTarget(null);
       setTab('users');
-    } catch (err) { alert(err.response?.data?.error || 'حدث خطأ'); }
+    } catch (err) { toast.error(err.response?.data?.error || 'حدث خطأ'); }
     setSaving(false);
   }
 
@@ -556,3 +558,4 @@ export default function UsersPage() {
     </div>
   );
 }
+

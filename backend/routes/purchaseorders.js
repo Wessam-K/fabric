@@ -314,6 +314,10 @@ router.patch('/:id/receive', requirePermission('purchase_orders', 'edit'), (req,
 router.delete('/:id', requirePermission('purchase_orders', 'delete'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const po = db.prepare('SELECT status FROM purchase_orders WHERE id=?').get(id);
+    if (!po) return res.status(404).json({ error: 'غير موجود' });
+    if (po.status === 'received') return res.status(400).json({ error: 'لا يمكن إلغاء أمر شراء تم استلامه بالكامل' });
+    if (po.status === 'cancelled') return res.status(400).json({ error: 'أمر الشراء ملغي بالفعل' });
     db.prepare("UPDATE purchase_orders SET status='cancelled' WHERE id=?").run(id);
     logAudit(req, 'DELETE', 'purchase_order', id, `PO#${id}`);
     res.json({ success: true });

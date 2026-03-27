@@ -5,9 +5,11 @@ import { useToast } from '../../components/Toast';
 import HelpButton from '../../components/HelpButton';
 import { PageHeader, LoadingState, Tabs, Modal, EmptyState } from '../../components/ui';
 import { exportToExcel } from '../../utils/exportExcel';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Leaves() {
   const toast = useToast();
+  const { can } = useAuth();
   const [leaves, setLeaves] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +104,7 @@ export default function Leaves() {
                       <td><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[l.status] || ''}`}>{STATUS[l.status] || l.status}</span></td>
                       <td className="text-xs text-gray-500 max-w-[150px] truncate">{l.reason || '—'}</td>
                       <td>
-                        {l.status === 'pending' && (
+                        {l.status === 'pending' && can('hr', 'edit') && (
                           <div className="flex gap-1">
                             <button onClick={() => handleAction(l.id, 'approved')} className="text-[10px] px-2 py-0.5 bg-green-100 text-green-700 rounded-full hover:bg-green-200">قبول</button>
                             <button onClick={() => handleAction(l.id, 'rejected')} className="text-[10px] px-2 py-0.5 bg-red-100 text-red-700 rounded-full hover:bg-red-200">رفض</button>

@@ -100,10 +100,10 @@ router.get('/defect-codes', requirePermission('quality', 'view'), (req, res) => 
 // POST /api/quality/defect-codes
 router.post('/defect-codes', requirePermission('quality', 'create'), (req, res) => {
   try {
-    const { code, name_ar, name_en, severity, category } = req.body;
+    const { code, name_ar, severity, category } = req.body;
     if (!code || !name_ar) return res.status(400).json({ error: 'الكود والاسم مطلوبان' });
-    const result = db.prepare('INSERT INTO qc_defect_codes (code, name_ar, name_en, severity, category) VALUES (?,?,?,?,?)')
-      .run(code, name_ar, name_en || null, severity || 'minor', category || null);
+    const result = db.prepare('INSERT INTO qc_defect_codes (code, name_ar, severity, category) VALUES (?,?,?,?)')
+      .run(code, name_ar, severity || 'minor', category || null);
     logAudit(req, 'CREATE', 'qc_defect_code', result.lastInsertRowid, code);
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

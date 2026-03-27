@@ -7,6 +7,7 @@ import { exportPayrollToExcel } from '../../utils/exportExcel';
 import HelpButton from '../../components/HelpButton';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { useToast } from '../../components/Toast';
+import { useAuth } from '../../context/AuthContext';
 
 const PERIOD_STATUS = {
   draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-700' },
@@ -19,6 +20,7 @@ export default function Payroll() {
   const navigate = useNavigate();
   const { confirm, ConfirmDialog } = useConfirm();
   const toast = useToast();
+  const { can } = useAuth();
   const [periods, setPeriods] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
   const [records, setRecords] = useState([]);
@@ -165,13 +167,13 @@ export default function Payroll() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold">{selectedPeriod.period_name}</h2>
             <div className="flex gap-2">
-              {selectedPeriod.status === 'draft' && (
+              {can('payroll', 'edit') && selectedPeriod.status === 'draft' && (
                 <button onClick={() => calculatePayroll(selectedPeriod.id)} disabled={calculating}
                   className="flex items-center gap-1 px-4 py-2 bg-blue-500 text-white rounded-xl text-sm hover:bg-blue-600 disabled:opacity-50">
                   <Calculator size={14} /> {calculating ? 'جاري الحساب...' : 'حساب الرواتب'}
                 </button>
               )}
-              {selectedPeriod.status === 'calculated' && (
+              {can('payroll', 'edit') && selectedPeriod.status === 'calculated' && (
                 <>
                   <button onClick={() => calculatePayroll(selectedPeriod.id)} disabled={calculating}
                     className="flex items-center gap-1 px-4 py-2 bg-blue-500 text-white rounded-xl text-sm hover:bg-blue-600 disabled:opacity-50">
@@ -183,7 +185,7 @@ export default function Payroll() {
                   </button>
                 </>
               )}
-              {selectedPeriod.status === 'approved' && (
+              {can('payroll', 'edit') && selectedPeriod.status === 'approved' && (
                 <button onClick={() => payPeriod(selectedPeriod.id)}
                   className="flex items-center gap-1 px-4 py-2 bg-purple-500 text-white rounded-xl text-sm hover:bg-purple-600">
                   <CreditCard size={14} /> تسجيل الصرف

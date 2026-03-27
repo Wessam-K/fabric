@@ -6,12 +6,14 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../components/ConfirmDialog';
 
 const CATEGORY_LABELS = { general: 'عام', contract: 'عقد', invoice: 'فاتورة', report: 'تقرير', certificate: 'شهادة', specification: 'مواصفات', drawing: 'رسم', photo: 'صورة', other: 'أخرى' };
 
 export default function Documents() {
   const toast = useToast();
   const { can } = useAuth();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [docs, setDocs] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -63,7 +65,8 @@ export default function Documents() {
   };
 
   const remove = async (id) => {
-    if (!window.confirm('هل أنت متأكد؟')) return;
+    const ok = await confirm({ title: 'حذف المستند', message: 'هل أنت متأكد من حذف هذا المستند؟' });
+    if (!ok) return;
     try { await api.delete(`/documents/${id}`); toast.success('تم الحذف'); load(); setShowDetail(false); }
     catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
   };
@@ -77,6 +80,7 @@ export default function Documents() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto">
+      <ConfirmDialog />
       <PageHeader title="المستندات" icon={FileText} />
 
       <div className="flex flex-wrap gap-3 items-center mb-6">

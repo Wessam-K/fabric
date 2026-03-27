@@ -683,19 +683,19 @@ function calculateEmployeePay(employee, attendanceSummary, adjustments, settings
   const food = employee.food_allowance;
   const other_allow = employee.other_allowances;
 
-  const gross_pay = base_pay + overtime_pay + housing + transport + food + other_allow;
+  const bonuses = adjustments.filter(a => a.adj_type === 'bonus').reduce((s, a) => s + a.amount, 0);
+  const extra_deductions = adjustments.filter(a => a.adj_type === 'deduction').reduce((s, a) => s + a.amount, 0);
+  const loan_repayments = adjustments.filter(a => a.adj_type === 'loan_repayment').reduce((s, a) => s + a.amount, 0);
+
+  const gross_pay = base_pay + overtime_pay + housing + transport + food + other_allow + bonuses;
 
   const absence_deduction = employee.salary_type === 'monthly' ? daily_rate * attendanceSummary.absent_days : 0;
   const late_deduction = ((attendanceSummary.total_late_minutes || 0) / 60) * hourly_rate;
   const social = employee.social_insurance;
   const tax = employee.tax_deduction;
 
-  const bonuses = adjustments.filter(a => a.adj_type === 'bonus').reduce((s, a) => s + a.amount, 0);
-  const extra_deductions = adjustments.filter(a => a.adj_type === 'deduction').reduce((s, a) => s + a.amount, 0);
-  const loan_repayments = adjustments.filter(a => a.adj_type === 'loan_repayment').reduce((s, a) => s + a.amount, 0);
-
   const total_deductions = absence_deduction + late_deduction + social + tax + extra_deductions + loan_repayments + employee.other_deductions_fixed;
-  const net_pay = Math.max(0, (gross_pay + bonuses) - total_deductions);
+  const net_pay = Math.max(0, gross_pay - total_deductions);
 
   return {
     base_pay: Math.round(base_pay * 100) / 100,

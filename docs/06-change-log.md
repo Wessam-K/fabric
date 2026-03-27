@@ -5,6 +5,57 @@
 
 ---
 
+## Phase J — Production Audit v8 — Deep Line-by-Line Audit (2025-07-24)
+
+### J1: Backend CRITICAL — Quality Defect Codes Insert Crash
+- **quality.js**: Removed `name_en` from `INSERT INTO qc_defect_codes` — column does not exist in schema, causing every defect-code creation to throw a SQLite error
+
+### J2: Backend HIGH — Invoice PUT Allows Editing Paid/Cancelled
+- **invoices.js**: Added status guard on `PUT /api/invoices/:id` — now returns 400 if invoice status is `paid` or `cancelled`, preventing accidental edits to finalized invoices
+
+### J3: Backend HIGH — PO DELETE Bypasses Status Checks
+- **purchaseorders.js**: Added status check on `DELETE /api/purchase-orders/:id` — blocks cancellation of already-received or already-cancelled POs
+
+### J4: Backend HIGH — Shipping PUT Allows Editing Delivered/Cancelled
+- **shipping.js**: Added status guard on `PUT /api/shipping/:id` — returns 400 if shipment status is `delivered` or `cancelled`
+
+### J5: Backend HIGH — Returns Approval Missing Stock Movement Records
+- **returns.js**: Sales return approval (`POST /api/returns/sales/:id/approve`) now inserts `fabric_stock_movements` and `accessory_stock_movements` records with `movement_type: 'return'` for audit trail
+- **returns.js**: Purchase return approval (`POST /api/returns/purchases/:id/approve`) same stock movement records added
+
+### J6: Backend MEDIUM — Payroll Gross Pay Excludes Bonuses
+- **hr.js**: `gross_pay` now calculated as `base_pay + overtime + allowances + bonuses` (previously bonuses were excluded from gross and added separately to net). `net_pay = Math.max(0, gross_pay - total_deductions)`
+
+### J7: Frontend HIGH — PurchaseOrders Missing Permission Guards
+- **PurchaseOrders.jsx**: Added `useAuth` import and `can()` guards on Send, Receive, and Cancel buttons — previously any logged-in user could trigger these actions
+
+### J8: Frontend HIGH — HR/Payroll Missing Permission Guards
+- **HR/Payroll.jsx**: Added `useAuth` import and `can('payroll','edit')` guards on Calculate, Approve, and Pay buttons
+
+### J9: Frontend HIGH — HR/Leaves Missing Permission Guards
+- **HR/Leaves.jsx**: Added `useAuth` import and `can('hr','edit')` guard on Approve and Reject buttons
+
+### J10: Frontend MEDIUM — Quotations Send Button Unguarded
+- **Quotations.jsx**: Added `can('quotations','edit')` guard on Send button in detail modal
+
+### J11: Frontend MEDIUM — alert() Replaced with Toast (2 pages)
+- **HR/Employees.jsx**: Replaced `alert()` with `toast.error()` via `useToast` hook
+- **Users.jsx**: Replaced all 4 `alert()` calls with `toast.error()` via `useToast` hook
+
+### J12: Frontend MEDIUM — window.confirm() Replaced with ConfirmDialog
+- **Documents.jsx**: Replaced `window.confirm()` with styled `ConfirmDialog` component via `useConfirm` hook
+
+### J13: Frontend MEDIUM — Form Reset After Save (3 pages)
+- **Returns.jsx**: Both sales and purchase return forms now reset to initial state after successful save
+- **Quality.jsx**: Inspections, Templates, and NCR forms now reset after successful save; DefectsTab `name_en` field removed from form state, save handler, and UI (matches backend fix J1)
+
+### J14: Build
+- All 58 API tests pass (0 failures)
+- Frontend: Vite production build (2553 modules, 105 KB CSS + 1.7 MB JS)
+- Electron: `WK-Hub Setup 2.0.0.exe` + `WK-Hub 2.0.0.exe`
+
+---
+
 ## Phase I — Production Audit v7 — Permission & Access Control Hardening (2025-07-24)
 
 ### I1: Backend Security — Dashboard Permission Guard

@@ -92,6 +92,7 @@ function InspectionsTab() {
       await api.post('/quality/inspections', form);
       toast.success('تم إنشاء الفحص');
       setShowModal(false);
+      setForm({ work_order_id: '', template_id: '', inspection_type: 'inline', sample_size: 0, items: [] });
       load();
     } catch (err) { toast.error(err.response?.data?.error || 'فشل الحفظ'); }
   };
@@ -301,7 +302,7 @@ function TemplatesTab() {
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { check_point: '', check_type: 'pass_fail', acceptable_range: '' }] }));
 
   const save = async () => {
-    try { await api.post('/quality/templates', form); toast.success('تم حفظ القالب'); setShowModal(false); load(); }
+    try { await api.post('/quality/templates', form); toast.success('تم حفظ القالب'); setShowModal(false); setForm({ name: '', description: '', items: [{ check_point: '', criteria: '', sort_order: 0 }] }); load(); }
     catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
   };
 
@@ -392,7 +393,7 @@ function NCRTab() {
   useEffect(() => { api.get('/work-orders', { params: { limit: 100 } }).then(r => setWorkOrders(r.data?.data || [])).catch(() => {}); }, []);
 
   const save = async () => {
-    try { await api.post('/quality/ncr', form); toast.success('تم إنشاء تقرير عدم المطابقة'); setShowModal(false); load(); }
+    try { await api.post('/quality/ncr', form); toast.success('تم إنشاء تقرير عدم المطابقة'); setShowModal(false); setForm({ work_order_id: '', inspection_id: '', severity: 'minor', description: '', corrective_action: '' }); load(); }
     catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
   };
 
@@ -469,7 +470,7 @@ function DefectsTab() {
   const [codes, setCodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ code: '', name_ar: '', name_en: '', severity: 'minor', category: '' });
+  const [form, setForm] = useState({ code: '', name_ar: '', severity: 'minor', category: '' });
 
   const load = async () => {
     setLoading(true);
@@ -481,7 +482,7 @@ function DefectsTab() {
   useEffect(() => { load(); }, []);
 
   const save = async () => {
-    try { await api.post('/quality/defect-codes', form); toast.success('تم الحفظ'); setShowModal(false); setForm({ code: '', name_ar: '', name_en: '', severity: 'minor', category: '' }); load(); }
+    try { await api.post('/quality/defect-codes', form); toast.success('تم الحفظ'); setShowModal(false); setForm({ code: '', name_ar: '', severity: 'minor', category: '' }); load(); }
     catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
   };
 
@@ -523,7 +524,6 @@ function DefectsTab() {
                 <div><label className="block text-sm font-medium mb-1">الخطورة</label><select value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="minor">بسيط</option><option value="major">متوسط</option><option value="critical">حرج</option></select></div>
               </div>
               <div><label className="block text-sm font-medium mb-1">الاسم بالعربية *</label><input value={form.name_ar} onChange={e => setForm(f => ({ ...f, name_ar: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
-              <div><label className="block text-sm font-medium mb-1">الاسم بالإنجليزية</label><input value={form.name_en} onChange={e => setForm(f => ({ ...f, name_en: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
               <div><label className="block text-sm font-medium mb-1">الفئة</label><input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="خياطة، قص..." /></div>
             </div>
             <div className="flex justify-end gap-3 p-5 border-t">

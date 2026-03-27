@@ -5,6 +5,7 @@ import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import { useAuth } from '../context/AuthContext';
 import { exportFromBackend } from '../utils/exportUtils';
 
 const STATUS_MAP = {
@@ -19,6 +20,7 @@ const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
 
 export default function PurchaseOrders() {
   const toast = useToast();
+  const { can } = useAuth();
   const [orders, setOrders] = useState([]);
   const [totals, setTotals] = useState({});
   const [loading, setLoading] = useState(true);
@@ -231,9 +233,9 @@ export default function PurchaseOrders() {
                     <td className="px-4 py-3 text-center text-xs text-gray-400">{new Date(po.created_at).toLocaleDateString('ar-EG')}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        {po.status === 'draft' && <button onClick={() => updateStatus(po.id, 'sent')} className="text-[10px] px-2 py-1 bg-blue-50 text-blue-700 rounded">إرسال</button>}
-                        {(po.status === 'sent' || po.status === 'partial') && <button onClick={() => openReceive(po.id)} className="text-[10px] px-2 py-1 bg-green-50 text-green-700 rounded flex items-center gap-1"><Package size={10} /> استلام</button>}
-                        {['draft','sent'].includes(po.status) && <button onClick={() => updateStatus(po.id, 'cancelled')} className="text-[10px] px-2 py-1 bg-red-50 text-red-700 rounded">إلغاء</button>}
+                        {can('purchase_orders', 'edit') && po.status === 'draft' && <button onClick={() => updateStatus(po.id, 'sent')} className="text-[10px] px-2 py-1 bg-blue-50 text-blue-700 rounded">إرسال</button>}
+                        {can('purchase_orders', 'edit') && (po.status === 'sent' || po.status === 'partial') && <button onClick={() => openReceive(po.id)} className="text-[10px] px-2 py-1 bg-green-50 text-green-700 rounded flex items-center gap-1"><Package size={10} /> استلام</button>}
+                        {can('purchase_orders', 'edit') && ['draft','sent'].includes(po.status) && <button onClick={() => updateStatus(po.id, 'cancelled')} className="text-[10px] px-2 py-1 bg-red-50 text-red-700 rounded">إلغاء</button>}
                       </div>
                     </td>
                   </tr>

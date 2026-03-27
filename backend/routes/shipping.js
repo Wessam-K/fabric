@@ -107,6 +107,7 @@ router.put('/:id', requirePermission('shipping', 'edit'), (req, res) => {
     const id = parseInt(req.params.id);
     const old = db.prepare('SELECT * FROM shipments WHERE id=?').get(id);
     if (!old) return res.status(404).json({ error: 'غير موجود' });
+    if (['delivered', 'cancelled'].includes(old.status)) return res.status(400).json({ error: 'لا يمكن تعديل شحنة تم تسليمها أو إلغاؤها' });
 
     const { carrier_name, tracking_number, shipping_method, shipping_cost, weight, packages_count,
       ship_date, expected_delivery, actual_delivery, shipping_address, notes, items } = req.body;

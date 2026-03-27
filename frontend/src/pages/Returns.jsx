@@ -56,7 +56,7 @@ function SalesReturnsTab() {
   const removeItem = (i) => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
 
   const save = async () => {
-    try { await api.post('/returns/sales', form); toast.success('تم إنشاء المرتجع'); setShowModal(false); load(); }
+    try { await api.post('/returns/sales', form); toast.success('تم إنشاء المرتجع'); setShowModal(false); setForm({ customer_id: '', invoice_id: '', reason: '', notes: '', items: [{ product_description: '', quantity: 1, unit_price: 0, reason: '' }] }); load(); }
     catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
   };
 
@@ -187,7 +187,7 @@ function PurchaseReturnsTab() {
   const removeItem = (i) => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
 
   const save = async () => {
-    try { await api.post('/returns/purchases', form); toast.success('تم إنشاء المرتجع'); setShowModal(false); load(); }
+    try { await api.post('/returns/purchases', form); toast.success('تم إنشاء المرتجع'); setShowModal(false); setForm({ supplier_id: '', reason: '', notes: '', items: [{ product_description: '', quantity: 1, unit_price: 0, reason: '' }] }); load(); }
     catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
   };
 

@@ -216,7 +216,7 @@ export default function Quotations() {
                     <ArrowLeftRight size={14} /> تحويل لأمر بيع
                   </button>
                 )}
-                {selected.status === 'draft' && <button onClick={() => changeStatus(selected.id, 'sent')} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm">إرسال</button>}
+                {selected.status === 'draft' && can('quotations', 'edit') && <button onClick={() => changeStatus(selected.id, 'sent')} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm">إرسال</button>}
                 <button onClick={() => setShowDetail(false)} className="p-1.5 hover:bg-gray-200 rounded-lg"><X size={20} /></button>
               </div>
             </div>
