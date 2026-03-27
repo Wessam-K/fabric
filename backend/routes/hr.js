@@ -181,6 +181,10 @@ router.put('/employees/:id', requirePermission('hr', 'edit'), (req, res) => {
     if (!old) return res.status(404).json({ error: 'الموظف غير موجود' });
 
     const d = req.body;
+    const salaryFields = ['base_salary', 'housing_allowance', 'transport_allowance', 'food_allowance', 'other_allowances'];
+    for (const f of salaryFields) {
+      if (d[f] !== undefined && parseFloat(d[f]) < 0) return res.status(400).json({ error: 'قيم الراتب والبدلات لا يمكن أن تكون سالبة' });
+    }
     db.prepare(`
       UPDATE employees SET full_name=?, national_id=?, department=?, job_title=?, employment_type=?,
         salary_type=?, base_salary=?, standard_hours_per_day=?, standard_days_per_month=?,

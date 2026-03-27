@@ -5,6 +5,44 @@
 
 ---
 
+## Phase N — Production Audit v12 — Input Validation Hardening (2025-07-24)
+
+### N1: Backend — WO Expenses Negative Amount Blocked
+- **workorders.js POST /:id/expenses**: Changed `!amount` to `parseFloat(amount) <= 0` — now rejects negative and zero expense amounts
+
+### N2: Backend — Fabric Consumption PATCH Positivity Check
+- **workorders.js PATCH /:id/fabric-consumption/:cId**: Added `actual_meters > 0` validation — prevents setting consumed meters to zero or negative
+
+### N3: Backend — Stage Quantity Negative Bounds Check
+- **workorders.js PATCH /:id/stage-quantity**: Added `quantity_in_stage >= 0` and `quantity_completed >= 0` validation — blocks negative stage quantities
+
+### N4: Backend — Accessory Consumption PATCH Positivity Check
+- **workorders.js PATCH /:id/accessory-consumption/:cId**: Added `actual_qty > 0` validation — prevents setting consumed quantity to zero or negative
+
+### N5: Backend — Quotations PUT Tax/Discount Upper Bound
+- **quotations.js PUT /:id**: Added upper bound (100%) for `discount_percent` and `tax_percent` — was only checking `< 0`, now checks 0–100 range
+
+### N6: Backend — Invoice Create/Update Tax & Status Validation
+- **invoices.js POST + PUT**: Added `tax_pct` range 0–100, `discount >= 0`, and `status` whitelist validation — prevents invalid percentages and arbitrary status strings
+
+### N7: Backend — Purchase Order Tax/Discount Bounds
+- **purchaseorders.js POST + PUT**: Added `tax_pct` range 0–100 and `discount >= 0` validation on both create and update endpoints
+
+### N8: Backend — HR Employee Salary Non-Negative Check
+- **hr.js PUT /employees/:id**: Added validation that `base_salary`, `housing_allowance`, `transport_allowance`, `food_allowance`, and `other_allowances` cannot be negative
+
+### N9: DB Preservation Verified
+- DB stored in `%APPDATA%\WK-Hub\` (separate from install directory)
+- `*.db` files excluded from build package via `extraResources.filter`
+- Schema migrations are versioned and additive with pre-migration backup
+- NSIS update installs over old version without touching AppData DB
+
+### Test Results
+- API tests: **58/58 pass**
+- Build: NSIS installer + portable EXE generated successfully
+
+---
+
 ## Phase M — Production Audit v11 — Invoice Pricing, DELETE Reversal & Validation Hardening (2026-03-27)
 
 ### M1: Backend CRITICAL — WO DELETE Missing V8 Consumption Reversal

@@ -105,6 +105,8 @@ router.post('/', requirePermission('purchase_orders', 'create'), (req, res) => {
       }
     }
 
+    if (tax_pct != null && (parseFloat(tax_pct) < 0 || parseFloat(tax_pct) > 100)) return res.status(400).json({ error: 'نسبة الضريبة يجب أن تكون بين 0 و 100' });
+    if (discount != null && parseFloat(discount) < 0) return res.status(400).json({ error: 'الخصم لا يمكن أن يكون سالباً' });
     const preSubtotal = (items || []).reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
     if ((parseFloat(discount) || 0) > preSubtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
 
@@ -146,6 +148,8 @@ router.put('/:id', requirePermission('purchase_orders', 'edit'), (req, res) => {
     const existing = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { supplier_id, po_type, expected_date, items, notes, tax_pct, discount } = req.body;
+    if (tax_pct != null && (parseFloat(tax_pct) < 0 || parseFloat(tax_pct) > 100)) return res.status(400).json({ error: 'نسبة الضريبة يجب أن تكون بين 0 و 100' });
+    if (discount != null && parseFloat(discount) < 0) return res.status(400).json({ error: 'الخصم لا يمكن أن يكون سالباً' });
 
     const transaction = db.transaction(() => {
       let subtotal;

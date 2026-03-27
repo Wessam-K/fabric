@@ -707,6 +707,8 @@ router.patch('/:id/stage-quantity', requirePermission('work_orders', 'edit'), (r
     const woId = parseInt(req.params.id);
     const { stage_id, quantity_in_stage, quantity_completed, assigned_to, notes } = req.body;
     if (!stage_id) return res.status(400).json({ error: 'معرف المرحلة مطلوب' });
+    if (quantity_in_stage !== undefined && (isNaN(parseInt(quantity_in_stage)) || parseInt(quantity_in_stage) < 0)) return res.status(400).json({ error: 'الكمية في المرحلة لا يمكن أن تكون سالبة' });
+    if (quantity_completed !== undefined && (isNaN(parseInt(quantity_completed)) || parseInt(quantity_completed) < 0)) return res.status(400).json({ error: 'الكمية المنجزة لا يمكن أن تكون سالبة' });
 
     const stage = db.prepare('SELECT * FROM wo_stages WHERE id=? AND wo_id=?').get(stage_id, woId);
     if (!stage) return res.status(404).json({ error: 'المرحلة غير موجودة' });
@@ -779,7 +781,7 @@ router.post('/:id/expenses', requirePermission('work_orders', 'edit'), (req, res
   try {
     const woId = parseInt(req.params.id);
     const { description, amount, stage_id, notes } = req.body;
-    if (!description || !amount) return res.status(400).json({ error: 'الوصف والمبلغ مطلوبان' });
+    if (!description || amount == null || parseFloat(amount) <= 0) return res.status(400).json({ error: 'الوصف والمبلغ (أكبر من صفر) مطلوبان' });
 
     db.prepare('INSERT INTO wo_extra_expenses (wo_id,description,amount,stage_id,notes) VALUES (?,?,?,?,?)')
       .run(woId, description, parseFloat(amount), stage_id || null, notes || null);
@@ -1216,6 +1218,7 @@ router.patch('/:id/fabric-consumption/:consumptionId', requirePermission('work_o
 
     const { actual_meters, price_per_meter, notes } = req.body;
     const newMeters = actual_meters !== undefined ? parseFloat(actual_meters) : record.actual_meters;
+    if (actual_meters !== undefined && (isNaN(newMeters) || newMeters <= 0)) return res.status(400).json({ error: 'الكمية المستهلكة يجب أن تكون أكبر من صفر' });
     const newPrice = price_per_meter !== undefined ? parseFloat(price_per_meter) : record.price_per_meter;
     const newCost = (newMeters || 0) * (newPrice || 0);
 
@@ -1347,6 +1350,7 @@ router.patch('/:id/accessory-consumption/:consumptionId', requirePermission('wor
 
     const { actual_qty, unit_price } = req.body;
     const newQty = actual_qty !== undefined ? parseFloat(actual_qty) : record.actual_qty;
+    if (actual_qty !== undefined && (isNaN(newQty) || newQty <= 0)) return res.status(400).json({ error: 'الكمية يجب أن تكون أكبر من صفر' });
     const newPrice = unit_price !== undefined ? parseFloat(unit_price) : record.unit_price;
     const delta = newQty - (record.actual_qty || 0);
 

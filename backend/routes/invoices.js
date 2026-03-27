@@ -75,6 +75,10 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
   try {
     const { invoice_number, customer_name, customer_phone, customer_email, customer_id, notes, tax_pct, discount, due_date, items, status } = req.body;
     if (!invoice_number || !customer_name) return res.status(400).json({ error: 'رقم الفاتورة واسم العميل مطلوبين' });
+    const validStatuses = ['draft', 'sent', 'paid', 'partially_paid', 'overdue', 'cancelled'];
+    if (status && !validStatuses.includes(status)) return res.status(400).json({ error: 'حالة الفاتورة غير صالحة' });
+    if (tax_pct != null && (parseFloat(tax_pct) < 0 || parseFloat(tax_pct) > 100)) return res.status(400).json({ error: 'نسبة الضريبة يجب أن تكون بين 0 و 100' });
+    if (discount != null && parseFloat(discount) < 0) return res.status(400).json({ error: 'الخصم لا يمكن أن يكون سالباً' });
 
     // Validate item values
     if (items?.length) {
@@ -130,6 +134,10 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
     if (['paid', 'cancelled'].includes(invoice.status)) return res.status(400).json({ error: 'لا يمكن تعديل فاتورة مدفوعة أو ملغاة' });
 
     const { customer_name, customer_phone, customer_email, customer_id, notes, tax_pct, discount, due_date, items, status } = req.body;
+    const validStatuses = ['draft', 'sent', 'paid', 'partially_paid', 'overdue', 'cancelled'];
+    if (status && !validStatuses.includes(status)) return res.status(400).json({ error: 'حالة الفاتورة غير صالحة' });
+    if (tax_pct != null && (parseFloat(tax_pct) < 0 || parseFloat(tax_pct) > 100)) return res.status(400).json({ error: 'نسبة الضريبة يجب أن تكون بين 0 و 100' });
+    if (discount != null && parseFloat(discount) < 0) return res.status(400).json({ error: 'الخصم لا يمكن أن يكون سالباً' });
 
     // Only recalculate totals if items are provided
     let subtotal = invoice.subtotal;
