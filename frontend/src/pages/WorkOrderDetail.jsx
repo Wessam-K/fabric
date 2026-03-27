@@ -193,7 +193,7 @@ export default function WorkOrderDetail() {
   };
 
   const handleAddExpense = async () => {
-    if (!expDesc || !expAmount) return;
+    if (!expDesc || !expAmount || parseFloat(expAmount) <= 0) { toast.error('الوصف والمبلغ (أكبر من صفر) مطلوبين'); return; }
     try {
       const { data } = await api.post(`/work-orders/${id}/expenses`, { description: expDesc, amount: parseFloat(expAmount) });
       setWo(data); setExpDesc(''); setExpAmount(''); toast.success('تمت إضافة المصروف');

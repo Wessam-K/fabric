@@ -85,6 +85,7 @@ export default function Accessories() {
       toast.error('الكود والاسم والسعر مطلوبين');
       return;
     }
+    if (parseFloat(form.unit_price) <= 0) { toast.error('السعر يجب أن يكون أكبر من صفر'); return; }
     try {
       const fd = new FormData();
       Object.keys(form).forEach(k => { if (form[k]) fd.append(k, form[k]); });

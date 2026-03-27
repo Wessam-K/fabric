@@ -129,6 +129,7 @@ router.post('/:id/convert-to-so', requirePermission('sales_orders', 'create'), (
     const q = db.prepare('SELECT * FROM quotations WHERE id=?').get(id);
     if (!q) return res.status(404).json({ error: 'عرض السعر غير موجود' });
     if (q.status !== 'sent' && q.status !== 'draft') return res.status(400).json({ error: 'لا يمكن التحويل إلا من حالة مسودة أو مرسل' });
+    if (!q.customer_id) return res.status(400).json({ error: 'عرض السعر يجب أن يكون مرتبط بعميل' });
 
     const soNumber = generateNextNumber(db, 'sales_order');
 

@@ -270,6 +270,10 @@ function InvoiceForm({ invoice, onClose, onSaved }) {
   const handleSave = async () => {
     if (!number.trim() || !customerName.trim()) { toast.error('رقم الفاتورة واسم العميل مطلوبان'); return; }
     if (items.filter(i => i.description).length === 0) { toast.error('أضف عنصر واحد على الأقل'); return; }
+    const validItems = items.filter(i => i.description);
+    if (validItems.some(i => parseFloat(i.quantity || 0) <= 0 || parseFloat(i.unit_price || 0) < 0)) {
+      toast.error('تأكد من أن الكمية أكبر من صفر والسعر غير سالب'); return;
+    }
     setSaving(true);
     try {
       const payload = {

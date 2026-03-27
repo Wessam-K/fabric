@@ -5,6 +5,40 @@
 
 ---
 
+## Phase K — Production Audit v9 — Inventory Integrity & Validation Hardening (2025-07-24)
+
+### K1: Backend CRITICAL — WO PUT Allows Editing Completed/Cancelled WOs
+- **workorders.js**: Added status guard on `PUT /api/work-orders/:id` — now returns 400 if WO status is `completed`, `cancelled`, or `delivered`, preventing accidental edits to finalized work orders
+
+### K2: Backend HIGH — V8 Fabric Consumption Missing Aggregate Update (3 endpoints)
+- **workorders.js POST** `/fabric-consumption`: After updating `fabric_inventory_batches.used_meters`, now also decrements `fabrics.available_meters` — keeps real-time inventory display in sync
+- **workorders.js PATCH** `/fabric-consumption/:id`: Delta change now also applied to `fabrics.available_meters`
+- **workorders.js DELETE** `/fabric-consumption/:id`: Reversal now also increments `fabrics.available_meters`
+
+### K3: Backend HIGH — WO Cancel Doesn't Reverse V8 Consumption
+- **workorders.js**: Cancel endpoint now reverses all `wo_fabric_consumption` records — returns used meters to batch and aggregate, creates stock movement audit trail
+- **workorders.js**: Cancel endpoint now reverses all `wo_accessory_consumption` records — returns consumed quantities to accessories, creates stock movement audit trail
+
+### K4: Backend MEDIUM — Quotation Convert-to-SO Missing Customer Validation
+- **quotations.js**: `POST /api/quotations/:id/convert-to-so` now validates `customer_id` is present before creating sales order — prevents orphaned SOs with null customer
+
+### K5: Frontend HIGH — Expense Amount Validation
+- **WorkOrderDetail.jsx**: `handleAddExpense()` now validates amount > 0 before saving — prevents zero/negative expenses
+
+### K6: Frontend HIGH — Invoice Items Quantity/Price Validation
+- **Invoices.jsx**: `handleSave()` now validates all items have quantity > 0 and non-negative price before saving
+
+### K7: Frontend MEDIUM — Fabric/Accessory Price Validation
+- **Fabrics.jsx**: `handleSave()` now validates `price_per_m > 0` — prevents zero/negative fabric prices
+- **Accessories.jsx**: `handleSave()` now validates `unit_price > 0` — prevents zero/negative accessory prices
+
+### K8: Build
+- All 58 API tests pass (0 failures)
+- Frontend: Vite production build (2553 modules, 105 KB CSS + 1.7 MB JS)
+- Electron: `WK-Hub Setup 2.0.0.exe` + `WK-Hub 2.0.0.exe`
+
+---
+
 ## Phase J — Production Audit v8 — Deep Line-by-Line Audit (2025-07-24)
 
 ### J1: Backend CRITICAL — Quality Defect Codes Insert Crash

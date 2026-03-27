@@ -466,6 +466,9 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
     const woId = parseInt(req.params.id);
     const existing = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
+    if (['completed', 'cancelled', 'delivered'].includes(existing.status)) {
+      return res.status(400).json({ error: 'لا يمكن تعديل أمر تشغيل مكتمل أو ملغي أو تم تسليمه' });
+    }
     const { model_id, priority, due_date, assigned_to, masnaiya, masrouf, margin_pct,
             consumer_price, wholesale_price, quantity, is_size_based,
             fabrics, accessories, sizes, notes,
@@ -1135,6 +1138,11 @@ router.post('/:id/fabric-consumption', requirePermission('work_orders', 'edit'),
         if (inv && inv.available_meters <= 0) {
           db.prepare("UPDATE fabric_inventory_batches SET batch_status='depleted' WHERE id=?").run(batch_id);
         }
+        // Update aggregate fabrics.available_meters
+        const batchData = db.prepare('SELECT fabric_code FROM fabric_inventory_batches WHERE id=?').get(batch_id);
+        if (batchData) {
+          db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) - ? WHERE code=?').run(parseFloat(actual_meters), batchData.fabric_code);
+        }
       }
     });
     transaction();
@@ -1171,6 +1179,13 @@ router.patch('/:id/fabric-consumption/:consumptionId', requirePermission('work_o
         } else if (inv) {
           db.prepare("UPDATE fabric_inventory_batches SET batch_status='available' WHERE id=?").run(record.batch_id);
         }
+        // Update aggregate fabrics.available_meters
+        if (delta !== 0) {
+          const batchData = db.prepare('SELECT fabric_code FROM fabric_inventory_batches WHERE id=?').get(record.batch_id);
+          if (batchData) {
+            db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) - ? WHERE code=?').run(delta, batchData.fabric_code);
+          }
+        }
       }
     });
     transaction();
@@ -1191,6 +1206,11 @@ router.delete('/:id/fabric-consumption/:consumptionId', requirePermission('work_
       if (record.batch_id && record.actual_meters) {
         db.prepare('UPDATE fabric_inventory_batches SET used_meters = MAX(0, used_meters - ?) WHERE id=?').run(record.actual_meters, record.batch_id);
         db.prepare("UPDATE fabric_inventory_batches SET batch_status='available' WHERE id=? AND batch_status='depleted'").run(record.batch_id);
+        // Update aggregate fabrics.available_meters
+        const batchData = db.prepare('SELECT fabric_code FROM fabric_inventory_batches WHERE id=?').get(record.batch_id);
+        if (batchData) {
+          db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) + ? WHERE code=?').run(record.actual_meters, batchData.fabric_code);
+        }
       }
       db.prepare('DELETE FROM wo_fabric_consumption WHERE id=?').run(cId);
     });
@@ -1447,6 +1467,31 @@ router.post('/:id/cancel', requirePermission('work_orders', 'edit'), (req, res) 
                 .run(batch.fabric_code, 'return', meters, 'work_order', woId, 'إرجاع قماش - إلغاء أمر تشغيل ' + wo.wo_number, userId);
             }
           }
+        }
+      }
+
+      // Reverse V8 fabric consumption records
+      const consumptions = db.prepare('SELECT * FROM wo_fabric_consumption WHERE work_order_id=?').all(woId);
+      for (const c of consumptions) {
+        if (c.batch_id && c.actual_meters) {
+          db.prepare('UPDATE fabric_inventory_batches SET used_meters = MAX(0, used_meters - ?) WHERE id=?').run(c.actual_meters, c.batch_id);
+          db.prepare("UPDATE fabric_inventory_batches SET batch_status='available' WHERE id=? AND batch_status='depleted'").run(c.batch_id);
+          const batchData = db.prepare('SELECT fabric_code FROM fabric_inventory_batches WHERE id=?').get(c.batch_id);
+          if (batchData) {
+            db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) + ? WHERE code=?').run(c.actual_meters, batchData.fabric_code);
+            db.prepare(`INSERT INTO fabric_stock_movements (fabric_code, movement_type, qty_meters, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+              .run(batchData.fabric_code, 'return', c.actual_meters, 'work_order', woId, 'إرجاع استهلاك قماش - إلغاء أمر تشغيل ' + wo.wo_number, userId);
+          }
+        }
+      }
+
+      // Reverse V8 accessory consumption records
+      const accConsumptions = db.prepare('SELECT * FROM wo_accessory_consumption WHERE work_order_id=?').all(woId);
+      for (const ac of accConsumptions) {
+        if (ac.accessory_code && ac.actual_qty) {
+          db.prepare('UPDATE accessories SET quantity_on_hand = quantity_on_hand + ? WHERE code=?').run(ac.actual_qty, ac.accessory_code);
+          db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
+            .run(ac.accessory_code, 'return', ac.actual_qty, 'work_order', woId, 'إرجاع استهلاك إكسسوار - إلغاء أمر تشغيل ' + wo.wo_number, userId);
         }
       }
 
