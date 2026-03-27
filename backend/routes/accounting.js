@@ -104,6 +104,12 @@ router.post('/journal', requirePermission('accounting', 'create'), (req, res) =>
     const { entry_number, entry_date, description, reference, lines } = req.body;
     if (!entry_number || !entry_date || !lines?.length) return res.status(400).json({ error: 'البيانات الأساسية مطلوبة' });
 
+    // Enforce period lock
+    const closedDate = db.prepare("SELECT value FROM settings WHERE key='accounting_period_closed_date'").get()?.value;
+    if (closedDate && entry_date <= closedDate) {
+      return res.status(400).json({ error: `لا يمكن إنشاء قيد في فترة مغلقة (مغلق حتى ${closedDate})` });
+    }
+
     // Validate each line has either debit or credit (not both zero or negative)
     for (const line of lines) {
       const debit = parseFloat(line.debit) || 0;
@@ -113,8 +119,8 @@ router.post('/journal', requirePermission('accounting', 'create'), (req, res) =>
       if (!line.account_id) return res.status(400).json({ error: 'الحساب مطلوب لكل سطر' });
     }
 
-    const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
-    const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
+    const totalDebit = lines.reduce((s, l) => s + (parseFloat(l.debit) || 0), 0);
+    const totalCredit = lines.reduce((s, l) => s + (parseFloat(l.credit) || 0), 0);
     if (Math.abs(totalDebit - totalCredit) > 0.01) return res.status(400).json({ error: 'القيد غير متوازن — المدين لا يساوي الدائن' });
 
     const insertEntry = db.prepare('INSERT INTO journal_entries (entry_number, entry_date, description, reference, created_by) VALUES (?,?,?,?,?)');
@@ -368,7 +374,8 @@ router.get('/aged-receivables', requirePermission('accounting', 'view'), (req, r
   try {
     const customers = db.prepare(`
       SELECT i.customer_id, i.customer_name,
-        SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(i.due_date) <= 30 THEN i.total ELSE 0 END) as days_0_30,
+        SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(i.due_date) < 0 THEN i.total ELSE 0 END) as current_due,
+        SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(i.due_date) >= 0 AND JULIANDAY('now') - JULIANDAY(i.due_date) <= 30 THEN i.total ELSE 0 END) as days_0_30,
         SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(i.due_date) > 30 AND JULIANDAY('now') - JULIANDAY(i.due_date) <= 60 THEN i.total ELSE 0 END) as days_31_60,
         SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(i.due_date) > 60 AND JULIANDAY('now') - JULIANDAY(i.due_date) <= 90 THEN i.total ELSE 0 END) as days_61_90,
         SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(i.due_date) > 90 THEN i.total ELSE 0 END) as days_90_plus,
@@ -379,11 +386,11 @@ router.get('/aged-receivables', requirePermission('accounting', 'view'), (req, r
       ORDER BY total_outstanding DESC
     `).all();
     const totals = customers.reduce((acc, c) => {
-      acc.days_0_30 += c.days_0_30; acc.days_31_60 += c.days_31_60;
+      acc.current_due += c.current_due; acc.days_0_30 += c.days_0_30; acc.days_31_60 += c.days_31_60;
       acc.days_61_90 += c.days_61_90; acc.days_90_plus += c.days_90_plus;
       acc.total += c.total_outstanding;
       return acc;
-    }, { days_0_30: 0, days_31_60: 0, days_61_90: 0, days_90_plus: 0, total: 0 });
+    }, { current_due: 0, days_0_30: 0, days_31_60: 0, days_61_90: 0, days_90_plus: 0, total: 0 });
     res.json({ customers, totals });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -393,7 +400,8 @@ router.get('/aged-payables', requirePermission('accounting', 'view'), (req, res)
   try {
     const suppliers = db.prepare(`
       SELECT po.supplier_id, s.name as supplier_name,
-        SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(po.expected_date) <= 30 THEN (po.total_amount - COALESCE(po.paid_amount,0)) ELSE 0 END) as days_0_30,
+        SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(po.expected_date) < 0 THEN (po.total_amount - COALESCE(po.paid_amount,0)) ELSE 0 END) as current_due,
+        SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(po.expected_date) >= 0 AND JULIANDAY('now') - JULIANDAY(po.expected_date) <= 30 THEN (po.total_amount - COALESCE(po.paid_amount,0)) ELSE 0 END) as days_0_30,
         SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(po.expected_date) > 30 AND JULIANDAY('now') - JULIANDAY(po.expected_date) <= 60 THEN (po.total_amount - COALESCE(po.paid_amount,0)) ELSE 0 END) as days_31_60,
         SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(po.expected_date) > 60 AND JULIANDAY('now') - JULIANDAY(po.expected_date) <= 90 THEN (po.total_amount - COALESCE(po.paid_amount,0)) ELSE 0 END) as days_61_90,
         SUM(CASE WHEN JULIANDAY('now') - JULIANDAY(po.expected_date) > 90 THEN (po.total_amount - COALESCE(po.paid_amount,0)) ELSE 0 END) as days_90_plus,
@@ -406,11 +414,11 @@ router.get('/aged-payables', requirePermission('accounting', 'view'), (req, res)
       ORDER BY total_outstanding DESC
     `).all();
     const totals = suppliers.reduce((acc, s) => {
-      acc.days_0_30 += s.days_0_30; acc.days_31_60 += s.days_31_60;
+      acc.current_due += s.current_due; acc.days_0_30 += s.days_0_30; acc.days_31_60 += s.days_31_60;
       acc.days_61_90 += s.days_61_90; acc.days_90_plus += s.days_90_plus;
       acc.total += s.total_outstanding;
       return acc;
-    }, { days_0_30: 0, days_31_60: 0, days_61_90: 0, days_90_plus: 0, total: 0 });
+    }, { current_due: 0, days_0_30: 0, days_31_60: 0, days_61_90: 0, days_90_plus: 0, total: 0 });
     res.json({ suppliers, totals });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -425,6 +433,8 @@ router.post('/period-close', requirePermission('accounting', 'post'), (req, res)
     const unposted = db.prepare("SELECT COUNT(*) as c FROM journal_entries WHERE status='draft' AND entry_date <= ?").get(period_end_date).c;
     if (unposted > 0) return res.status(400).json({ error: `يوجد ${unposted} قيد غير مرحّل قبل تاريخ الإقفال` });
 
+    // Store closed period in settings to enforce locking
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('accounting_period_closed_date', ?)").run(period_end_date);
     logAudit(req, 'PERIOD_CLOSE', 'accounting', null, `Period closed up to ${period_end_date}`);
     res.json({ message: `تم إقفال الفترة حتى ${period_end_date}`, unposted: 0 });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

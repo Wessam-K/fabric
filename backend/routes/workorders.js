@@ -692,7 +692,7 @@ router.patch('/:id/stages/:stageId', requirePermission('work_orders', 'edit'), (
               // Last stage — move pieces to pieces_completed instead of losing them
               db.prepare('UPDATE work_orders SET pieces_completed = COALESCE(pieces_completed,0) + ? WHERE id=?').run(qtyInStage, woId);
               sets.push('quantity_in_stage=0');
-              sets.push('quantity_completed=COALESCE(quantity_completed,0)+' + qtyInStage);
+              sets.push('quantity_completed=COALESCE(quantity_completed,0)+?'); params.push(qtyInStage);
             }
           }
         }

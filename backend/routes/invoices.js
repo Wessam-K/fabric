@@ -139,6 +139,15 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
     if (tax_pct != null && (parseFloat(tax_pct) < 0 || parseFloat(tax_pct) > 100)) return res.status(400).json({ error: 'نسبة الضريبة يجب أن تكون بين 0 و 100' });
     if (discount != null && parseFloat(discount) < 0) return res.status(400).json({ error: 'الخصم لا يمكن أن يكون سالباً' });
 
+    // Validate item values (same as POST)
+    if (items?.length) {
+      for (const item of items) {
+        if ((parseFloat(item.quantity) || 0) < 0 || (parseFloat(item.unit_price) || 0) < 0) {
+          return res.status(400).json({ error: 'الكمية والسعر يجب أن تكون قيم موجبة' });
+        }
+      }
+    }
+
     // Only recalculate totals if items are provided
     let subtotal = invoice.subtotal;
     let total = invoice.total;
@@ -196,8 +205,9 @@ router.patch('/:id/status', requirePermission('invoices', 'edit'), (req, res) =>
     // Status transition validation
     const validTransitions = {
       draft: ['sent', 'cancelled'],
-      sent: ['paid', 'overdue', 'cancelled'],
-      overdue: ['paid', 'cancelled'],
+      sent: ['paid', 'partially_paid', 'overdue', 'cancelled'],
+      overdue: ['paid', 'partially_paid', 'cancelled'],
+      partially_paid: ['paid', 'cancelled'],
       paid: [],
       cancelled: ['draft'],
     };
