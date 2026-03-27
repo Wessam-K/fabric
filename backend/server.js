@@ -479,32 +479,174 @@ app.get('/api/dashboard/kpis/hr', requireAuth, requirePermission('dashboard', 'v
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// ═══════════════════════════════════════════
+//  BI Reports
+// ═══════════════════════════════════════════
+
+// GET /api/reports/executive-summary — high-level KPIs
+app.get('/api/reports/executive-summary', requireAuth, (req, res) => {
+  try {
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const revenue = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status != 'cancelled' AND invoice_date LIKE ?").get(`${thisMonth}%`).v;
+    const expenses = db.prepare("SELECT COALESCE(SUM(amount), 0) as v FROM expenses WHERE is_deleted = 0 AND expense_date LIKE ?").get(`${thisMonth}%`).v;
+    const activeWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status NOT IN ('completed','cancelled')").get().v;
+    const completedWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status = 'completed' AND completed_at LIKE ?").get(`${thisMonth}%`).v;
+    const pendingInvoices = db.prepare("SELECT COUNT(*) as v FROM invoices WHERE status IN ('sent','partial','overdue')").get().v;
+    const totalAR = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status NOT IN ('paid','cancelled','draft')").get().v;
+    const employeeCount = db.prepare("SELECT COUNT(*) as v FROM employees WHERE status = 'active'").get().v;
+    res.json({ month: thisMonth, revenue, expenses, net_income: revenue - expenses, active_work_orders: activeWOs, completed_this_month: completedWOs, pending_invoices: pendingInvoices, total_receivables: totalAR, active_employees: employeeCount });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/reports/cost-analysis — production cost breakdown
+app.get('/api/reports/cost-analysis', requireAuth, (req, res) => {
+  try {
+    const fabricCost = db.prepare("SELECT COALESCE(SUM(actual_cost), 0) as v FROM wo_fabric_batches").get().v;
+    let accessoryCost = 0;
+    try { accessoryCost = db.prepare("SELECT COALESCE(SUM(total_cost), 0) as v FROM wo_accessory_consumption").get().v; } catch {}
+    const laborCost = db.prepare("SELECT COALESCE(SUM(net_salary), 0) as v FROM payroll").get().v;
+    const overheadCost = db.prepare("SELECT COALESCE(SUM(amount), 0) as v FROM expenses WHERE is_deleted = 0").get().v;
+    const woRevenue = db.prepare("SELECT COALESCE(SUM(i.total), 0) as v FROM invoices i WHERE i.status != 'cancelled'").get().v;
+    const totalCost = fabricCost + accessoryCost + laborCost + overheadCost;
+    res.json({ fabric_cost: fabricCost, accessory_cost: accessoryCost, labor_cost: laborCost, overhead_cost: overheadCost, total_cost: totalCost, total_revenue: woRevenue, gross_margin: woRevenue - totalCost, margin_pct: woRevenue > 0 ? Math.round((woRevenue - totalCost) / woRevenue * 10000) / 100 : 0 });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/reports/inventory-abc — ABC analysis of inventory items
+app.get('/api/reports/inventory-abc', requireAuth, (req, res) => {
+  try {
+    const items = db.prepare(`
+      SELECT f.code, f.name, 'fabric' as type,
+        COALESCE(SUM((fib.received_meters - fib.used_meters - fib.wasted_meters) * fib.price_per_meter), 0) as value
+      FROM fabrics f
+      LEFT JOIN fabric_inventory_batches fib ON fib.fabric_code = f.code AND fib.batch_status != 'cancelled'
+      WHERE f.status = 'active'
+      GROUP BY f.code
+      HAVING value > 0
+      ORDER BY value DESC
+    `).all();
+
+    const totalValue = items.reduce((s, i) => s + i.value, 0);
+    let cumulative = 0;
+    for (const item of items) {
+      cumulative += item.value;
+      const pct = totalValue > 0 ? (cumulative / totalValue) * 100 : 0;
+      item.cumulative_pct = Math.round(pct * 100) / 100;
+      item.category = pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C';
+    }
+    res.json({ items, total_value: totalValue });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/reports/hr-analytics — HR metrics
+app.get('/api/reports/hr-analytics', requireAuth, (req, res) => {
+  try {
+    const deptDist = db.prepare("SELECT department, COUNT(*) as count FROM employees WHERE status='active' GROUP BY department ORDER BY count DESC").all();
+    const avgTenure = db.prepare("SELECT AVG(JULIANDAY('now') - JULIANDAY(hire_date)) / 365.25 as v FROM employees WHERE status='active' AND hire_date IS NOT NULL").get().v;
+    const turnover = db.prepare("SELECT COUNT(*) as v FROM employees WHERE status='terminated' AND termination_date >= date('now','-12 months')").get().v;
+    const totalActive = db.prepare("SELECT COUNT(*) as v FROM employees WHERE status='active'").get().v;
+    const recentHires = db.prepare("SELECT COUNT(*) as v FROM employees WHERE status='active' AND hire_date >= date('now','-3 months')").get().v;
+    const avgSalary = db.prepare("SELECT AVG(base_salary) as v FROM employees WHERE status='active' AND base_salary > 0").get().v;
+    const leaveStats = db.prepare("SELECT leave_type, COUNT(*) as count, SUM(CAST(JULIANDAY(end_date) - JULIANDAY(start_date) + 1 AS INTEGER)) as total_days FROM leave_requests WHERE status='approved' AND start_date >= date('now','-12 months') GROUP BY leave_type").all();
+    res.json({ department_distribution: deptDist, avg_tenure_years: avgTenure ? Math.round(avgTenure * 10) / 10 : null, turnover_12m: turnover, active_employees: totalActive, turnover_rate: totalActive > 0 ? Math.round(turnover / totalActive * 10000) / 100 : 0, recent_hires_3m: recentHires, avg_salary: avgSalary ? Math.round(avgSalary) : null, leave_stats: leaveStats });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// ═══════════════════════════════════════════
+//  Bulk Import Wizard
+// ═══════════════════════════════════════════
+
+// POST /api/import/bulk — unified bulk import for any entity
+app.post('/api/import/bulk', requireAuth, (req, res) => {
+  try {
+    const { entity, rows } = req.body;
+    if (!entity || !Array.isArray(rows) || rows.length === 0) return res.status(400).json({ error: 'الكيان والبيانات مطلوبة' });
+    if (rows.length > 1000) return res.status(400).json({ error: 'الحد الأقصى 1000 سجل للدفعة الواحدة' });
+
+    const u = req.user;
+    const results = { imported: 0, skipped: 0, errors: [] };
+
+    const importMap = {
+      suppliers: { perm: 'suppliers', stmt: 'INSERT OR IGNORE INTO suppliers (code, name, supplier_type, contact_name, phone, email, address) VALUES (?,?,?,?,?,?,?)', fields: ['code','name','supplier_type','contact_name','phone','email','address'] },
+      customers: { perm: 'customers', stmt: 'INSERT OR IGNORE INTO customers (code, name, customer_type, phone, email, address, city, tax_number, contact_name) VALUES (?,?,?,?,?,?,?,?,?)', fields: ['code','name','customer_type','phone','email','address','city','tax_number','contact_name'] },
+      fabrics: { perm: 'fabrics', stmt: 'INSERT OR IGNORE INTO fabrics (code, name, fabric_type, price_per_m, color) VALUES (?,?,?,?,?)', fields: ['code','name','fabric_type','price_per_m','color'] },
+      accessories: { perm: 'accessories', stmt: 'INSERT OR IGNORE INTO accessories (code, name, acc_type, unit_price, unit) VALUES (?,?,?,?,?)', fields: ['code','name','acc_type','unit_price','unit'] },
+    };
+
+    const config = importMap[entity];
+    if (!config) return res.status(400).json({ error: 'كيان غير مدعوم', supported: Object.keys(importMap) });
+    if (!canUser(u, config.perm, 'create')) return res.status(403).json({ error: 'لا تملك صلاحية الإضافة' });
+
+    const stmt = db.prepare(config.stmt);
+    const txn = db.transaction(() => {
+      for (let i = 0; i < rows.length; i++) {
+        try {
+          const row = rows[i];
+          const vals = config.fields.map(f => row[f] ?? null);
+          const r = stmt.run(...vals);
+          if (r.changes > 0) results.imported++; else results.skipped++;
+        } catch (e) { results.errors.push({ row: i, error: e.message }); results.skipped++; }
+      }
+    });
+    txn();
+
+    logAudit(req, 'BULK_IMPORT', entity, null, `Imported ${results.imported} of ${rows.length}`);
+    res.json(results);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/import/templates — list available import templates
+app.get('/api/import/templates', requireAuth, (req, res) => {
+  res.json([
+    { entity: 'suppliers', fields: ['code','name','supplier_type','contact_name','phone','email','address'], required: ['code','name'] },
+    { entity: 'customers', fields: ['code','name','customer_type','phone','email','address','city','tax_number','contact_name'], required: ['code','name'] },
+    { entity: 'fabrics', fields: ['code','name','fabric_type','price_per_m','color'], required: ['code','name'] },
+    { entity: 'accessories', fields: ['code','name','acc_type','unit_price','unit'], required: ['code','name'] },
+  ]);
+});
+
 // Global search — filter by user module permissions
 app.get('/api/search', requireAuth, (req, res) => {
   try {
-    const { q } = req.query;
-    if (!q || q.length < 2 || q.length > 100) return res.json({ models: [], fabrics: [], accessories: [], invoices: [], suppliers: [], workOrders: [], purchaseOrders: [] });
+    const { q, category } = req.query;
+    if (!q || q.length < 2 || q.length > 100) return res.json({ models: [], fabrics: [], accessories: [], invoices: [], suppliers: [], workOrders: [], purchaseOrders: [], total: 0 });
     const searchLimit = parseInt(db.prepare("SELECT value FROM settings WHERE key='search_results_limit'").get()?.value) || 8;
     const like = `%${q}%`;
     const u = req.user;
-    const models = canUser(u,'models','view') ? db.prepare(`SELECT model_code, model_name, serial_number, category FROM models WHERE status='active' AND (model_code LIKE ? OR model_name LIKE ? OR serial_number LIKE ?) LIMIT ?`).all(like, like, like, searchLimit) : [];
-    const fabrics = canUser(u,'fabrics','view') ? db.prepare(`SELECT code, name, fabric_type, price_per_m FROM fabrics WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit) : [];
-    const accessories = canUser(u,'accessories','view') ? db.prepare(`SELECT code, name, acc_type, unit_price FROM accessories WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit) : [];
-    const invoices = canUser(u,'invoices','view') ? db.prepare(`SELECT id, invoice_number, customer_name, total, status FROM invoices WHERE invoice_number LIKE ? OR customer_name LIKE ? LIMIT ?`).all(like, like, searchLimit) : [];
-    const suppliers = canUser(u,'suppliers','view') ? db.prepare(`SELECT id, code, name, supplier_type FROM suppliers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR contact_name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit) : [];
-    const workOrders = canUser(u,'work_orders','view') ? db.prepare(`SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.assigned_to, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ? LIMIT ?`).all(like, like, like, like, searchLimit) : [];
-    const purchaseOrders = canUser(u,'purchase_orders','view') ? db.prepare(`SELECT po.id, po.po_number, po.status, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.po_number LIKE ? OR s.name LIKE ? LIMIT ?`).all(like, like, searchLimit) : [];
-    const customers = canUser(u,'customers','view') ? db.prepare(`SELECT id, code, name, phone, city FROM customers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR phone LIKE ?) LIMIT ?`).all(like, like, like, searchLimit) : [];
-    let maintenanceOrders = [], expensesResults = [];
-    let machines = [];
+
+    // Category filter: if specified, only search that category
+    const shouldSearch = (cat) => !category || category === cat;
+
+    const models = shouldSearch('models') && canUser(u,'models','view') ? db.prepare(`SELECT model_code, model_name, serial_number, category FROM models WHERE status='active' AND (model_code LIKE ? OR model_name LIKE ? OR serial_number LIKE ?) LIMIT ?`).all(like, like, like, searchLimit) : [];
+    const fabrics = shouldSearch('fabrics') && canUser(u,'fabrics','view') ? db.prepare(`SELECT code, name, fabric_type, price_per_m FROM fabrics WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit) : [];
+    const accessories = shouldSearch('accessories') && canUser(u,'accessories','view') ? db.prepare(`SELECT code, name, acc_type, unit_price FROM accessories WHERE status='active' AND (code LIKE ? OR name LIKE ?) LIMIT ?`).all(like, like, searchLimit) : [];
+    const invoices = shouldSearch('invoices') && canUser(u,'invoices','view') ? db.prepare(`SELECT id, invoice_number, customer_name, total, status FROM invoices WHERE invoice_number LIKE ? OR customer_name LIKE ? LIMIT ?`).all(like, like, searchLimit) : [];
+    const suppliers = shouldSearch('suppliers') && canUser(u,'suppliers','view') ? db.prepare(`SELECT id, code, name, supplier_type FROM suppliers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR contact_name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit) : [];
+    const workOrders = shouldSearch('workOrders') && canUser(u,'work_orders','view') ? db.prepare(`SELECT wo.id, wo.wo_number, wo.status, wo.priority, wo.assigned_to, m.model_code, m.model_name FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ? LIMIT ?`).all(like, like, like, like, searchLimit) : [];
+    const purchaseOrders = shouldSearch('purchaseOrders') && canUser(u,'purchase_orders','view') ? db.prepare(`SELECT po.id, po.po_number, po.status, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.po_number LIKE ? OR s.name LIKE ? LIMIT ?`).all(like, like, searchLimit) : [];
+    const customers = shouldSearch('customers') && canUser(u,'customers','view') ? db.prepare(`SELECT id, code, name, phone, city FROM customers WHERE status='active' AND (code LIKE ? OR name LIKE ? OR phone LIKE ?) LIMIT ?`).all(like, like, like, searchLimit) : [];
+
+    let maintenanceOrders = [], expensesResults = [], machines = [], employees = [], accounts = [];
     try {
-      if (canUser(u,'machines','view')) machines = db.prepare(`SELECT id, code, name, barcode, machine_type, status FROM machines WHERE status != 'inactive' AND (code LIKE ? OR name LIKE ? OR barcode LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
+      if (shouldSearch('machines') && canUser(u,'machines','view')) machines = db.prepare(`SELECT id, code, name, barcode, machine_type, status FROM machines WHERE status != 'inactive' AND (code LIKE ? OR name LIKE ? OR barcode LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
     } catch (e) { console.error('search machines:', e.message); }
     try {
-      if (canUser(u,'maintenance','view')) maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
-      if (canUser(u,'expenses','view')) expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT ?`).all(like, like, searchLimit);
+      if (shouldSearch('maintenance') && canUser(u,'maintenance','view')) maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
+      if (shouldSearch('expenses') && canUser(u,'expenses','view')) expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT ?`).all(like, like, searchLimit);
     } catch (e) { console.error('search maintenance/expenses:', e.message); }
-    res.json({ models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults, machines });
+    try {
+      if (shouldSearch('employees') && canUser(u,'hr','view')) employees = db.prepare(`SELECT id, emp_code, full_name, department, job_title FROM employees WHERE status='active' AND (emp_code LIKE ? OR full_name LIKE ? OR department LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
+    } catch (e) { console.error('search employees:', e.message); }
+    try {
+      if (shouldSearch('accounts') && canUser(u,'accounting','view')) accounts = db.prepare(`SELECT id, code, name_ar, type FROM chart_of_accounts WHERE is_active=1 AND (code LIKE ? OR name_ar LIKE ?) LIMIT ?`).all(like, like, searchLimit);
+    } catch (e) { console.error('search accounts:', e.message); }
+
+    const result = { models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults, machines, employees, accounts };
+    // Add counts per category and total
+    const counts = {};
+    let total = 0;
+    for (const [key, arr] of Object.entries(result)) { counts[key] = arr.length; total += arr.length; }
+    res.json({ ...result, counts, total });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

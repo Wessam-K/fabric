@@ -333,4 +333,132 @@ router.post('/:id/payments', requirePermission('customers', 'edit'), (req, res) 
   }
 });
 
+// ═══════════════════════════════════════════
+//  CRM — Customer Timeline
+// ═══════════════════════════════════════════
+
+// GET /api/customers/:id/timeline — unified activity timeline
+router.get('/:id/timeline', requirePermission('customers', 'view'), (req, res) => {
+  try {
+    const customerId = req.params.id;
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+
+    const events = [];
+
+    // Work orders
+    db.prepare(`SELECT 'work_order' as type, id as ref_id, wo_number as ref, status, created_at as date, 'أمر عمل: ' || wo_number as summary FROM work_orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT ?`).all(customerId, limit).forEach(r => events.push(r));
+
+    // Invoices
+    db.prepare(`SELECT 'invoice' as type, id as ref_id, invoice_number as ref, status, created_at as date, 'فاتورة: ' || invoice_number || ' - ' || total as summary FROM invoices WHERE customer_id = ? ORDER BY created_at DESC LIMIT ?`).all(customerId, limit).forEach(r => events.push(r));
+
+    // Quotations
+    db.prepare(`SELECT 'quotation' as type, id as ref_id, quotation_number as ref, status, created_at as date, 'عرض سعر: ' || quotation_number as summary FROM quotations WHERE customer_id = ? ORDER BY created_at DESC LIMIT ?`).all(customerId, limit).forEach(r => events.push(r));
+
+    // Payments
+    db.prepare(`SELECT 'payment' as type, id as ref_id, '' as ref, 'completed' as status, payment_date as date, 'دفعة: ' || amount as summary FROM customer_payments WHERE customer_id = ? ORDER BY payment_date DESC LIMIT ?`).all(customerId, limit).forEach(r => events.push(r));
+
+    // Notes
+    db.prepare(`SELECT 'note' as type, cn.id as ref_id, '' as ref, 'info' as status, cn.created_at as date, cn.note as summary FROM customer_notes cn WHERE cn.customer_id = ? ORDER BY cn.created_at DESC LIMIT ?`).all(customerId, limit).forEach(r => events.push(r));
+
+    // Sort chronologically (newest first)
+    events.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    res.json(events.slice(0, limit));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/customers/:id/profitability — customer profitability analysis
+router.get('/:id/profitability', requirePermission('customers', 'view'), (req, res) => {
+  try {
+    const customerId = req.params.id;
+
+    const invoiceTotals = db.prepare(`
+      SELECT COALESCE(SUM(total), 0) as total_revenue,
+        COALESCE(SUM(CASE WHEN status = 'paid' THEN total ELSE 0 END), 0) as collected,
+        COALESCE(SUM(CASE WHEN status NOT IN ('paid','cancelled') THEN total ELSE 0 END), 0) as outstanding,
+        COUNT(*) as invoice_count
+      FROM invoices WHERE customer_id = ?
+    `).get(customerId);
+
+    const woStats = db.prepare(`
+      SELECT COUNT(*) as total_orders,
+        COALESCE(SUM(total_pieces), 0) as total_pieces,
+        AVG(CASE WHEN completed_at IS NOT NULL THEN JULIANDAY(completed_at) - JULIANDAY(created_at) END) as avg_lead_days
+      FROM work_orders WHERE customer_id = ?
+    `).get(customerId);
+
+    const materialCost = db.prepare(`
+      SELECT COALESCE(SUM(wfb.actual_cost), 0) as fabric_cost
+      FROM wo_fabric_batches wfb
+      JOIN work_orders wo ON wo.id = wfb.wo_id
+      WHERE wo.customer_id = ?
+    `).get(customerId).fabric_cost;
+
+    const payments = db.prepare('SELECT COALESCE(SUM(amount), 0) as total_paid FROM customer_payments WHERE customer_id = ?').get(customerId).total_paid;
+
+    res.json({
+      revenue: invoiceTotals.total_revenue,
+      collected: invoiceTotals.collected,
+      outstanding: invoiceTotals.outstanding,
+      invoice_count: invoiceTotals.invoice_count,
+      material_cost: materialCost,
+      gross_margin: invoiceTotals.total_revenue - materialCost,
+      total_orders: woStats.total_orders,
+      total_pieces: woStats.total_pieces,
+      avg_lead_days: woStats.avg_lead_days ? Math.round(woStats.avg_lead_days * 10) / 10 : null,
+      total_paid: payments,
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// ═══════════════════════════════════════════
+//  CRM — Customer Contacts
+// ═══════════════════════════════════════════
+
+// GET /api/customers/:id/contacts
+router.get('/:id/contacts', requirePermission('customers', 'view'), (req, res) => {
+  try {
+    res.json(db.prepare('SELECT * FROM customer_contacts WHERE customer_id = ? ORDER BY is_primary DESC, name').all(req.params.id));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/customers/:id/contacts
+router.post('/:id/contacts', requirePermission('customers', 'edit'), (req, res) => {
+  try {
+    const { name, title, phone, email, is_primary } = req.body;
+    if (!name) return res.status(400).json({ error: 'الاسم مطلوب' });
+    const r = db.prepare('INSERT INTO customer_contacts (customer_id, name, title, phone, email, is_primary) VALUES (?,?,?,?,?,?)').run(req.params.id, name, title || null, phone || null, email || null, is_primary ? 1 : 0);
+    res.status(201).json({ id: r.lastInsertRowid });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// DELETE /api/customers/:id/contacts/:contactId
+router.delete('/:id/contacts/:contactId', requirePermission('customers', 'delete'), (req, res) => {
+  try {
+    db.prepare('DELETE FROM customer_contacts WHERE id = ? AND customer_id = ?').run(req.params.contactId, req.params.id);
+    res.json({ message: 'تم الحذف' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// ═══════════════════════════════════════════
+//  CRM — Customer Notes
+// ═══════════════════════════════════════════
+
+// GET /api/customers/:id/notes
+router.get('/:id/notes', requirePermission('customers', 'view'), (req, res) => {
+  try {
+    res.json(db.prepare(`SELECT cn.*, u.full_name as created_by_name FROM customer_notes cn LEFT JOIN users u ON u.id = cn.created_by WHERE cn.customer_id = ? ORDER BY cn.created_at DESC`).all(req.params.id));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/customers/:id/notes
+router.post('/:id/notes', requirePermission('customers', 'edit'), (req, res) => {
+  try {
+    const { note } = req.body;
+    if (!note) return res.status(400).json({ error: 'الملاحظة مطلوبة' });
+    const r = db.prepare('INSERT INTO customer_notes (customer_id, note, created_by) VALUES (?,?,?)').run(req.params.id, note, req.user?.id || null);
+    res.status(201).json({ id: r.lastInsertRowid });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 module.exports = router;

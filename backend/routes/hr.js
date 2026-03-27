@@ -882,4 +882,118 @@ router.patch('/leaves/:id', requirePermission('hr', 'edit'), (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// ═══════════════════════════════════════════
+//  Leave Balances
+// ═══════════════════════════════════════════
+
+// GET /api/hr/leave-balances — all employees' leave balances for a year
+router.get('/leave-balances', requirePermission('hr', 'view'), (req, res) => {
+  try {
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const balances = db.prepare(`
+      SELECT lb.*, e.full_name, e.emp_code, e.department
+      FROM leave_balances lb
+      JOIN employees e ON e.id = lb.employee_id
+      WHERE lb.year = ? AND e.status = 'active'
+      ORDER BY e.department, e.full_name
+    `).all(year);
+
+    // Also compute actual usage from leave_requests for employees without explicit balance records
+    const usage = db.prepare(`
+      SELECT lr.employee_id, lr.leave_type,
+        SUM(CAST(JULIANDAY(lr.end_date) - JULIANDAY(lr.start_date) + 1 AS INTEGER)) as days_used
+      FROM leave_requests lr
+      WHERE lr.status = 'approved' AND CAST(SUBSTR(lr.start_date, 1, 4) AS INTEGER) = ?
+      GROUP BY lr.employee_id, lr.leave_type
+    `).all(year);
+
+    res.json({ balances, usage, year });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/hr/leave-balances — set an employee's leave entitlement
+router.post('/leave-balances', requirePermission('hr', 'edit'), (req, res) => {
+  try {
+    const { employee_id, leave_type, year, entitled_days, carried_over } = req.body;
+    if (!employee_id || !year) return res.status(400).json({ error: 'الموظف والسنة مطلوبان' });
+
+    db.prepare(`INSERT INTO leave_balances (employee_id, leave_type, year, entitled_days, carried_over)
+      VALUES (?,?,?,?,?) ON CONFLICT(employee_id, leave_type, year)
+      DO UPDATE SET entitled_days = excluded.entitled_days, carried_over = excluded.carried_over
+    `).run(employee_id, leave_type || 'annual', year, entitled_days || 21, carried_over || 0);
+
+    res.status(201).json({ message: 'تم حفظ رصيد الإجازات' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// ═══════════════════════════════════════════
+//  Leave Calendar
+// ═══════════════════════════════════════════
+
+// GET /api/hr/leave-calendar — who is off when
+router.get('/leave-calendar', requirePermission('hr', 'view'), (req, res) => {
+  try {
+    const { month, year } = req.query;
+    const y = parseInt(year) || new Date().getFullYear();
+    const m = parseInt(month) || (new Date().getMonth() + 1);
+    const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+    const endDate = `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`;
+
+    const leaves = db.prepare(`
+      SELECT lr.id, lr.employee_id, e.full_name, e.department, lr.leave_type,
+        lr.start_date, lr.end_date, lr.status
+      FROM leave_requests lr
+      JOIN employees e ON e.id = lr.employee_id
+      WHERE lr.status IN ('approved','pending')
+        AND lr.start_date <= ? AND lr.end_date >= ?
+      ORDER BY lr.start_date
+    `).all(endDate, startDate);
+
+    res.json({ leaves, month: m, year: y });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// ═══════════════════════════════════════════
+//  Org Chart
+// ═══════════════════════════════════════════
+
+// GET /api/hr/org-chart — hierarchical employee structure
+router.get('/org-chart', requirePermission('hr', 'view'), (req, res) => {
+  try {
+    const employees = db.prepare(`
+      SELECT e.id, e.emp_code, e.full_name, e.department, e.job_title, e.reports_to, e.photo,
+        m.full_name as manager_name
+      FROM employees e
+      LEFT JOIN employees m ON m.id = e.reports_to
+      WHERE e.status = 'active'
+      ORDER BY e.department, e.full_name
+    `).all();
+
+    // Build tree structure
+    const byId = {};
+    const roots = [];
+    for (const emp of employees) { byId[emp.id] = { ...emp, children: [] }; }
+    for (const emp of employees) {
+      if (emp.reports_to && byId[emp.reports_to]) {
+        byId[emp.reports_to].children.push(byId[emp.id]);
+      } else {
+        roots.push(byId[emp.id]);
+      }
+    }
+
+    res.json({ tree: roots, flat: employees });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// PUT /api/hr/employees/:id/reporting — set who an employee reports to
+router.put('/employees/:id/reporting', requirePermission('hr', 'edit'), (req, res) => {
+  try {
+    const { reports_to } = req.body;
+    const empId = parseInt(req.params.id);
+    if (reports_to === empId) return res.status(400).json({ error: 'لا يمكن أن يكون المدير هو نفس الموظف' });
+    db.prepare('UPDATE employees SET reports_to = ? WHERE id = ?').run(reports_to || null, empId);
+    res.json({ message: 'تم التحديث' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 module.exports = router;

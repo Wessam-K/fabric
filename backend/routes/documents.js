@@ -107,4 +107,106 @@ router.delete('/:id', requirePermission('documents', 'delete'), (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// ═══════════════════════════════════════════
+//  Print-Ready HTML Templates
+// ═══════════════════════════════════════════
+
+const templateHeader = (title, companyName) => `<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Cairo',sans-serif}
+  body{padding:20px;font-size:12px;color:#333}
+  .header{display:flex;justify-content:space-between;border-bottom:2px solid #1e40af;padding-bottom:10px;margin-bottom:20px}
+  .company{font-size:18px;font-weight:bold;color:#1e40af}
+  .doc-title{font-size:16px;font-weight:bold;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;margin:15px 0}
+  th,td{border:1px solid #ddd;padding:6px 8px;text-align:right}
+  th{background:#f3f4f6;font-weight:600}
+  .total-row{font-weight:bold;background:#f0f9ff}
+  .footer{margin-top:30px;text-align:center;color:#666;font-size:10px;border-top:1px solid #ddd;padding-top:10px}
+  @media print{body{padding:0}.no-print{display:none}}
+</style></head><body>
+<div class="header"><div class="company">${companyName}</div><div>طباعة: ${new Date().toLocaleDateString('ar-EG')}</div></div>`;
+
+const templateFooter = `<div class="footer">WK-Factory ERP — نسخة مطبوعة</div></body></html>`;
+
+// GET /api/documents/template/invoice/:id — printable invoice HTML
+router.get('/template/invoice/:id', requirePermission('invoices', 'view'), (req, res) => {
+  try {
+    const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+    if (!inv) return res.status(404).json({ error: 'الفاتورة غير موجودة' });
+    const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(inv.id);
+    const company = db.prepare("SELECT value FROM settings WHERE key='company_name'").get()?.value || 'WK-Factory';
+
+    let html = templateHeader(`فاتورة ${inv.invoice_number}`, company);
+    html += `<div class="doc-title">فاتورة رقم: ${inv.invoice_number}</div>`;
+    html += `<p>العميل: ${inv.customer_name || '-'} | التاريخ: ${inv.invoice_date || inv.created_at} | الحالة: ${inv.status}</p>`;
+    html += `<table><thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>`;
+    items.forEach((item, i) => {
+      html += `<tr><td>${i + 1}</td><td>${item.description || item.item_code || '-'}</td><td>${item.quantity}</td><td>${item.unit_price}</td><td>${item.total_price}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    html += `<table><tr class="total-row"><td colspan="4">الإجمالي</td><td>${inv.total}</td></tr>`;
+    if (inv.tax_amount) html += `<tr><td colspan="4">الضريبة</td><td>${inv.tax_amount}</td></tr>`;
+    html += `</table>`;
+    html += templateFooter;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/documents/template/quotation/:id — printable quotation HTML
+router.get('/template/quotation/:id', requirePermission('quotations', 'view'), (req, res) => {
+  try {
+    const q = db.prepare('SELECT * FROM quotations WHERE id = ?').get(req.params.id);
+    if (!q) return res.status(404).json({ error: 'عرض السعر غير موجود' });
+    const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ?').all(q.id);
+    const company = db.prepare("SELECT value FROM settings WHERE key='company_name'").get()?.value || 'WK-Factory';
+
+    let html = templateHeader(`عرض سعر ${q.quotation_number}`, company);
+    html += `<div class="doc-title">عرض سعر رقم: ${q.quotation_number}</div>`;
+    html += `<p>العميل: ${q.customer_name || '-'} | التاريخ: ${q.quotation_date || q.created_at} | الحالة: ${q.status}</p>`;
+    if (q.notes) html += `<p>ملاحظات: ${q.notes}</p>`;
+    html += `<table><thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>`;
+    items.forEach((item, i) => {
+      html += `<tr><td>${i + 1}</td><td>${item.description || '-'}</td><td>${item.quantity}</td><td>${item.unit_price}</td><td>${item.total_price || (item.quantity * item.unit_price)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    html += `<table><tr class="total-row"><td colspan="4">الإجمالي</td><td>${q.total || '-'}</td></tr></table>`;
+    html += templateFooter;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/documents/template/payslip/:periodId/:employeeId — printable pay slip
+router.get('/template/payslip/:periodId/:employeeId', requirePermission('hr', 'view'), (req, res) => {
+  try {
+    const p = db.prepare('SELECT * FROM payroll WHERE period_id = ? AND employee_id = ?').get(req.params.periodId, req.params.employeeId);
+    if (!p) return res.status(404).json({ error: 'كشف الراتب غير موجود' });
+    const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(p.employee_id);
+    const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(p.period_id);
+    const company = db.prepare("SELECT value FROM settings WHERE key='company_name'").get()?.value || 'WK-Factory';
+
+    let html = templateHeader(`كشف راتب - ${emp?.full_name || ''}`, company);
+    html += `<div class="doc-title">كشف راتب — ${period?.period_month || ''} / ${period?.period_year || ''}</div>`;
+    html += `<p>الموظف: ${emp?.full_name || '-'} (${emp?.emp_code || '-'}) | القسم: ${emp?.department || '-'} | الوظيفة: ${emp?.job_title || '-'}</p>`;
+    html += `<table><thead><tr><th>البند</th><th>المبلغ</th></tr></thead><tbody>`;
+    html += `<tr><td>الراتب الأساسي</td><td>${p.base_salary || 0}</td></tr>`;
+    if (p.total_allowances) html += `<tr><td>البدلات</td><td>${p.total_allowances}</td></tr>`;
+    if (p.overtime_amount) html += `<tr><td>العمل الإضافي</td><td>${p.overtime_amount}</td></tr>`;
+    if (p.bonus) html += `<tr><td>مكافآت</td><td>${p.bonus}</td></tr>`;
+    if (p.total_deductions) html += `<tr style="color:#dc2626"><td>الخصومات</td><td>-${p.total_deductions}</td></tr>`;
+    html += `<tr class="total-row"><td>صافي الراتب</td><td>${p.net_salary || 0}</td></tr>`;
+    html += `</tbody></table>`;
+    html += templateFooter;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 module.exports = router;

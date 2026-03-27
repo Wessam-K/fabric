@@ -2528,6 +2528,141 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (35)`);
   }
+
+  // ──── V36 — Multi-location inventory, warehouses, transfers, stock valuation ────
+  const v36 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 36').get();
+  if (!v36) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS warehouses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        name_ar TEXT,
+        address TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS warehouse_zones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        zone_type TEXT DEFAULT 'storage',
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(warehouse_id, code)
+      );
+
+      CREATE TABLE IF NOT EXISTS fabric_location_stock (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fabric_code TEXT NOT NULL REFERENCES fabrics(code),
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        zone_id INTEGER REFERENCES warehouse_zones(id),
+        batch_id INTEGER REFERENCES fabric_inventory_batches(id),
+        quantity_meters REAL NOT NULL DEFAULT 0,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS accessory_location_stock (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        accessory_code TEXT NOT NULL REFERENCES accessories(code),
+        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        zone_id INTEGER REFERENCES warehouse_zones(id),
+        batch_id INTEGER REFERENCES accessory_inventory_batches(id),
+        quantity REAL NOT NULL DEFAULT 0,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS inventory_transfers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transfer_number TEXT NOT NULL UNIQUE,
+        from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        to_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+        status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','in_transit','completed','cancelled')),
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        completed_at TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS inventory_transfer_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transfer_id INTEGER NOT NULL REFERENCES inventory_transfers(id),
+        item_type TEXT NOT NULL CHECK(item_type IN ('fabric','accessory')),
+        item_code TEXT NOT NULL,
+        batch_id INTEGER,
+        quantity REAL NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_fls_fabric ON fabric_location_stock (fabric_code);
+      CREATE INDEX IF NOT EXISTS idx_fls_warehouse ON fabric_location_stock (warehouse_id);
+      CREATE INDEX IF NOT EXISTS idx_als_accessory ON accessory_location_stock (accessory_code);
+      CREATE INDEX IF NOT EXISTS idx_als_warehouse ON accessory_location_stock (warehouse_id);
+      CREATE INDEX IF NOT EXISTS idx_it_status ON inventory_transfers (status);
+      CREATE INDEX IF NOT EXISTS idx_itl_transfer ON inventory_transfer_lines (transfer_id);
+
+      INSERT OR IGNORE INTO warehouses (code, name, name_ar, is_default) VALUES ('MAIN', 'Main Warehouse', 'المخزن الرئيسي', 1);
+    `);
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (36)`);
+  }
+
+  // ──── V37 — Employee hierarchy (reports_to) + leave_balances ────
+  const v37 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 37').get();
+  if (!v37) {
+    const addCol = (table, col, def) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch {}
+    };
+    addCol('employees', 'reports_to', 'INTEGER REFERENCES employees(id)');
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS leave_balances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL REFERENCES employees(id),
+        leave_type TEXT NOT NULL DEFAULT 'annual',
+        year INTEGER NOT NULL,
+        entitled_days REAL NOT NULL DEFAULT 21,
+        used_days REAL NOT NULL DEFAULT 0,
+        carried_over REAL NOT NULL DEFAULT 0,
+        UNIQUE(employee_id, leave_type, year)
+      );
+      CREATE INDEX IF NOT EXISTS idx_lb_employee ON leave_balances (employee_id);
+    `);
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (37)`);
+  }
+
+  // ──── V38 — CRM: customer contacts, notes, interaction log ────
+  const v38 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 38').get();
+  if (!v38) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS customer_contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL REFERENCES customers(id),
+        name TEXT NOT NULL,
+        title TEXT,
+        phone TEXT,
+        email TEXT,
+        is_primary INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS customer_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL REFERENCES customers(id),
+        note TEXT NOT NULL,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_cc_customer ON customer_contacts (customer_id);
+      CREATE INDEX IF NOT EXISTS idx_cn_customer ON customer_notes (customer_id);
+    `);
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (38)`);
+  }
 }
 
 initializeDatabase();
