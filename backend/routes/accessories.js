@@ -50,6 +50,7 @@ router.post('/', upload.single('image'), requirePermission('accessories', 'creat
   try {
     const { code, acc_type, name, unit_price, unit, supplier, supplier_id, notes, quantity_on_hand, low_stock_threshold, reorder_qty } = req.body;
     if (!code || !acc_type || !name || unit_price == null) return res.status(400).json({ error: 'الكود والنوع والاسم وسعر الوحدة مطلوبين' });
+    if (parseFloat(unit_price) < 0) return res.status(400).json({ error: 'سعر الوحدة لا يمكن أن يكون سالباً' });
     const image_path = req.file ? `/uploads/accessories/${req.file.filename}` : null;
     // Get defaults from settings
     const defLowStock = parseInt(db.prepare("SELECT value FROM settings WHERE key='low_stock_threshold'").get()?.value) || 20;

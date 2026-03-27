@@ -393,8 +393,10 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
         const ins = db.prepare('INSERT INTO wo_extra_expenses (wo_id,description,amount,stage_id,notes) VALUES (?,?,?,?,?)');
         let total = 0;
         for (const e of extra_expenses) {
-          ins.run(woId, e.description, e.amount || 0, e.stage_id || null, e.notes || null);
-          total += e.amount || 0;
+          const amt = parseFloat(e.amount) || 0;
+          if (amt <= 0) continue;
+          ins.run(woId, e.description, amt, e.stage_id || null, e.notes || null);
+          total += amt;
         }
         db.prepare('UPDATE work_orders SET extra_expenses_total=? WHERE id=?').run(total, woId);
       }
@@ -666,8 +668,13 @@ router.patch('/:id/stages/:stageId', requirePermission('work_orders', 'edit'), (
             const nextStage = db.prepare('SELECT id FROM wo_stages WHERE wo_id=? AND sort_order > ? ORDER BY sort_order LIMIT 1').get(woId, stage.sort_order);
             if (nextStage) {
               db.prepare('UPDATE wo_stages SET quantity_in_stage = quantity_in_stage + ? WHERE id=?').run(qtyInStage, nextStage.id);
+              sets.push('quantity_in_stage=0');
+            } else {
+              // Last stage — move pieces to pieces_completed instead of losing them
+              db.prepare('UPDATE work_orders SET pieces_completed = COALESCE(pieces_completed,0) + ? WHERE id=?').run(qtyInStage, woId);
+              sets.push('quantity_in_stage=0');
+              sets.push('quantity_completed=COALESCE(quantity_completed,0)+' + qtyInStage);
             }
-            sets.push('quantity_in_stage=0');
           }
         }
       }
@@ -922,8 +929,8 @@ router.delete('/:id', requirePermission('work_orders', 'delete'), (req, res) => 
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
     if (!wo) return res.status(404).json({ error: 'غير موجود' });
-    if (wo.status === 'completed' || wo.status === 'cancelled') {
-      return res.status(400).json({ error: 'لا يمكن حذف أمر تشغيل مكتمل أو ملغي' });
+    if (['completed', 'cancelled', 'delivered'].includes(wo.status)) {
+      return res.status(400).json({ error: 'لا يمكن حذف أمر تشغيل مكتمل أو ملغي أو مسلّم' });
     }
     const userId = req.user ? req.user.id : null;
     db.transaction(() => {
@@ -1026,9 +1033,9 @@ router.patch('/:id/stage-advance', requirePermission('work_orders', 'edit'), (re
       db.prepare('UPDATE wo_stages SET quantity_in_stage = quantity_in_stage - ?, quantity_completed = quantity_completed + ?, quantity_rejected = COALESCE(quantity_rejected,0) + ? WHERE id=?')
         .run(qPass + qReject, qPass, qReject, from_stage_id);
 
-      // Mark from stage completed if fully processed
+      // Mark from stage completed if fully processed (all pieces passed or rejected)
       const updatedFrom = db.prepare('SELECT * FROM wo_stages WHERE id=?').get(from_stage_id);
-      if ((updatedFrom.quantity_in_stage || 0) === 0 && (updatedFrom.quantity_completed || 0) > 0) {
+      if ((updatedFrom.quantity_in_stage || 0) === 0 && ((updatedFrom.quantity_completed || 0) > 0 || (updatedFrom.quantity_rejected || 0) > 0)) {
         db.prepare("UPDATE wo_stages SET status='completed', completed_at=datetime('now','localtime'), completed_by_user_id=?, completed_by_name=? WHERE id=? AND status != 'completed'")
           .run(userId, userName, from_stage_id);
       }

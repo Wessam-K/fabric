@@ -5,6 +5,42 @@
 
 ---
 
+## Phase O — Production Audit v13 — Critical Stage Flow & Data Integrity Fixes (2026-03-27)
+
+### O1: Backend CRITICAL — Stage Stall on 100% Rejection Fixed
+- **workorders.js PATCH /stage-advance**: Stage completion condition now checks `quantity_rejected > 0` in addition to `quantity_completed > 0` — previously, if all pieces were rejected (0 passed), the stage would stay `in_progress` forever, stalling the entire work order
+
+### O2: Backend HIGH — Skip Last Stage Piece Loss Fixed
+- **workorders.js PATCH /stages/:stageId (skip)**: When skipping the last stage, pieces are now promoted to `pieces_completed` on the WO and `quantity_completed` on the stage — previously, pieces vanished if no next stage existed
+
+### O3: Backend HIGH — DELETE Now Blocks Delivered Work Orders
+- **workorders.js DELETE /:id**: Added `delivered` to the forbidden-status list — previously inconsistent with PUT (which already blocked `delivered`), allowing soft-delete on delivered WOs
+
+### O4: Backend HIGH — Negative Expenses in WO Create Blocked
+- **workorders.js POST / (create WO)**: Bulk `extra_expenses` array now validates each amount > 0 before insertion — previously allowed negative amounts that could artificially reduce total cost
+
+### O5: Backend HIGH — Negative Fabric Price Blocked
+- **fabrics.js POST /**: Added `price_per_m >= 0` validation — previously allowed negative prices that corrupt inventory valuation
+
+### O6: Backend HIGH — Negative Accessory Price Blocked
+- **accessories.js POST /**: Added `unit_price >= 0` validation — previously allowed negative prices that corrupt cost tracking
+
+### O7: Backend MEDIUM — Negative Sample Cost Blocked
+- **samples.js POST /**: Added `cost >= 0` validation — previously allowed negative cost values
+
+### Test Results
+- API tests: **58/58 pass**
+- Build: NSIS installer + portable EXE generated successfully
+
+### DB Preservation Verified
+- DB stored in `%APPDATA%\WK-Hub\` (userData, separate from install directory)
+- `*.db` files excluded from package via `extraResources.filter`
+- Pre-migration backup auto-created on every app start (keeps last 10)
+- Schema migrations are versioned and additive
+- Installing new setup over existing preserves database and user data
+
+---
+
 ## Phase N — Production Audit v12 — Input Validation Hardening (2025-07-24)
 
 ### N1: Backend — WO Expenses Negative Amount Blocked

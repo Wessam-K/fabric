@@ -51,6 +51,7 @@ router.post('/', upload.single('image'), requirePermission('fabrics', 'create'),
   try {
     const { code, name, fabric_type, price_per_m, supplier, supplier_id, color, notes } = req.body;
     if (!code || !name || !price_per_m) return res.status(400).json({ error: 'الكود والاسم وسعر المتر مطلوبين' });
+    if (parseFloat(price_per_m) < 0) return res.status(400).json({ error: 'سعر المتر لا يمكن أن يكون سالباً' });
     const image_path = req.file ? `/uploads/fabrics/${req.file.filename}` : null;
     const r = db.prepare(`INSERT INTO fabrics (code,name,fabric_type,price_per_m,supplier,supplier_id,color,image_path,notes) VALUES (?,?,?,?,?,?,?,?,?)`)
       .run(code, name, fabric_type || 'main', parseFloat(price_per_m), supplier || null, supplier_id || null, color || null, image_path, notes || null);

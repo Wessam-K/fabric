@@ -46,6 +46,7 @@ router.post('/', requirePermission('samples', 'create'), (req, res) => {
   try {
     const { sample_number, customer_id, model_code, description, fabrics_used, accessories_used, cost, requested_date } = req.body;
     if (!model_code && !description) return res.status(400).json({ error: 'كود الموديل أو الوصف مطلوب' });
+    if (cost != null && parseFloat(cost) < 0) return res.status(400).json({ error: 'التكلفة لا يمكن أن تكون سالبة' });
 
     const result = db.prepare(`INSERT INTO samples 
       (sample_number, model_code, customer_id, description, fabrics_used, accessories_used,
