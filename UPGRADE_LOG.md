@@ -200,3 +200,25 @@
 - **Fix:** Changed to `parseFloat(l.debit) || 0` for explicit numeric coercion
 
 - **Tests:** 80/80 pass ✅
+
+### Fix 7: WO Stage Auto-Complete Missing quantity_in_stage Check
+- **File:** `backend/routes/workorders.js` ~line 717
+- **Bug:** Auto-complete in `PATCH /:id/stages/:stageId` only checked `status` but not `quantity_in_stage === 0`
+- **Fix:** Added `&& (s.quantity_in_stage || 0) === 0` to match the stage-advance endpoint behavior
+
+### Fix 8: Customer Payment Sets Wrong Invoice Status
+- **File:** `backend/routes/customers.js` ~line 323
+- **Bug:** Partial payment set invoice status to `'partial'` but FSM uses `'partially_paid'`
+- **Fix:** Changed to `'partially_paid'` and added `NOT IN ('paid','cancelled')` guard
+
+### Fix 9: Accounting Period Close Not Enforced on Post/Void
+- **File:** `backend/routes/accounting.js`
+- **Bug:** Journal `post` and `void` operations didn't check accounting period close date
+- **Fix:** Added period close date check to both endpoints
+
+### Fix 10: CustomerDetail AR Aging Uses Wrong Date
+- **File:** `frontend/src/pages/CustomerDetail.jsx` ~line 44
+- **Bug:** Used `created_at` for aging calculation instead of `due_date`
+- **Fix:** Changed to `inv.due_date || inv.created_at` with proper fallback
+
+- **Tests:** 80/80 pass ✅

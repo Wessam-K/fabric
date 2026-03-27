@@ -712,11 +712,11 @@ router.patch('/:id/stages/:stageId', requirePermission('work_orders', 'edit'), (
       const lastStage = db.prepare('SELECT quantity_completed FROM wo_stages WHERE wo_id=? ORDER BY sort_order DESC LIMIT 1').get(woId);
       if (lastStage) db.prepare('UPDATE work_orders SET pieces_completed=? WHERE id=?').run(lastStage.quantity_completed || 0, woId);
 
-      // Auto-complete if all stages done
-      const allStages = db.prepare('SELECT status FROM wo_stages WHERE wo_id=?').all(woId);
-      const allDone = allStages.length > 0 && allStages.every(s => s.status === 'completed' || s.status === 'skipped');
+      // Auto-complete if all stages done and no pieces remaining
+      const allStages = db.prepare('SELECT status, quantity_in_stage FROM wo_stages WHERE wo_id=?').all(woId);
+      const allDone = allStages.length > 0 && allStages.every(s => (s.status === 'completed' || s.status === 'skipped') && (s.quantity_in_stage || 0) === 0);
       if (allDone) {
-        db.prepare("UPDATE work_orders SET status='completed', completed_date=datetime('now'), updated_at=datetime('now') WHERE id=? AND status != 'completed'").run(woId);
+        db.prepare("UPDATE work_orders SET status='completed', completed_date=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=? AND status != 'completed'").run(woId);
       } else if (status === 'in_progress') {
         db.prepare("UPDATE work_orders SET status='in_progress', start_date=COALESCE(start_date,datetime('now')), updated_at=datetime('now') WHERE id=? AND status IN ('draft','pending')").run(woId);
       }

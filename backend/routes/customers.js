@@ -318,7 +318,7 @@ router.post('/:id/payments', requirePermission('customers', 'edit'), (req, res) 
           if (totalPaid >= inv.total) {
             db.prepare("UPDATE invoices SET status='paid', updated_at=datetime('now') WHERE id=?").run(invoice_id);
           } else if (totalPaid > 0) {
-            db.prepare("UPDATE invoices SET status='partial', updated_at=datetime('now') WHERE id=? AND status != 'paid'").run(invoice_id);
+            db.prepare("UPDATE invoices SET status='partially_paid', updated_at=datetime('now') WHERE id=? AND status NOT IN ('paid','cancelled')").run(invoice_id);
           }
         }
       }

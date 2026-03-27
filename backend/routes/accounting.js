@@ -149,6 +149,10 @@ router.patch('/journal/:id/post', requirePermission('accounting', 'post'), (req,
     if (!entry) return res.status(404).json({ error: 'القيد غير موجود' });
     if (entry.status === 'posted') return res.status(400).json({ error: 'القيد مرحّل بالفعل' });
     if (entry.status === 'void') return res.status(400).json({ error: 'لا يمكن ترحيل قيد ملغى' });
+    const closedDate = db.prepare("SELECT value FROM settings WHERE key='accounting_period_closed_date'").get()?.value;
+    if (closedDate && entry.entry_date <= closedDate) {
+      return res.status(400).json({ error: `لا يمكن ترحيل قيد في فترة مغلقة (مغلق حتى ${closedDate})` });
+    }
     db.prepare("UPDATE journal_entries SET status = 'posted', posted_at = datetime('now') WHERE id = ?").run(req.params.id);
     logAudit(req, 'POST', 'journal_entry', req.params.id, `${entry.entry_number}`);
     res.json({ success: true });
@@ -161,6 +165,10 @@ router.patch('/journal/:id/void', requirePermission('accounting', 'post'), (req,
     const entry = db.prepare('SELECT * FROM journal_entries WHERE id = ?').get(req.params.id);
     if (!entry) return res.status(404).json({ error: 'القيد غير موجود' });
     if (entry.status === 'void') return res.status(400).json({ error: 'القيد ملغى بالفعل' });
+    const closedDate = db.prepare("SELECT value FROM settings WHERE key='accounting_period_closed_date'").get()?.value;
+    if (closedDate && entry.entry_date <= closedDate) {
+      return res.status(400).json({ error: `لا يمكن إلغاء قيد في فترة مغلقة (مغلق حتى ${closedDate})` });
+    }
     db.prepare("UPDATE journal_entries SET status = 'void' WHERE id = ?").run(req.params.id);
     logAudit(req, 'VOID', 'journal_entry', req.params.id, `${entry.entry_number}`);
     res.json({ success: true });

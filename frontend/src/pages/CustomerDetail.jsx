@@ -41,7 +41,8 @@ export default function CustomerDetail() {
 
   // AR Aging buckets
   const ageBuckets = invoices.filter(i => i.status !== 'paid' && i.status !== 'cancelled').reduce((acc, inv) => {
-    const days = Math.floor((Date.now() - new Date(inv.created_at).getTime()) / 86400000);
+    const dueDate = inv.due_date || inv.created_at;
+    const days = Math.floor((Date.now() - new Date(dueDate).getTime()) / 86400000);
     const bucket = days <= 0 ? 'current' : days <= 30 ? '1_30' : days <= 60 ? '31_60' : days <= 90 ? '61_90' : '90plus';
     acc[bucket] = (acc[bucket] || 0) + (inv.total || 0);
     return acc;
