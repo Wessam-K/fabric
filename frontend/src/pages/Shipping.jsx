@@ -58,6 +58,9 @@ export default function Shipping() {
   const removeItem = (i) => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
 
   const save = async () => {
+    if (form.items.some(i => !i.quantity || parseInt(i.quantity) <= 0)) {
+      toast.error('تأكد من أن جميع العناصر لها كمية أكبر من صفر'); return;
+    }
     try {
       await api.post('/shipping', form);
       toast.success('تم إنشاء الشحنة');

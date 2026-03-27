@@ -61,6 +61,10 @@ export default function Quotations() {
   };
 
   const save = async () => {
+    if (!form.customer_id) { toast.error('العميل مطلوب'); return; }
+    if (form.items.some(i => !i.description || parseFloat(i.quantity || 0) <= 0)) {
+      toast.error('تأكد من أن جميع العناصر لها وصف وكمية أكبر من صفر'); return;
+    }
     try {
       await api.post('/quotations', form);
       toast.success('تم إنشاء عرض السعر');

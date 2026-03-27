@@ -126,6 +126,11 @@ router.put('/:id', requirePermission('expenses', 'edit'), (req, res) => {
       return res.status(400).json({ error: 'لا يمكن تعديل مصروف معتمد' });
     }
     const { expense_type, amount, description, expense_date, reference_type, reference_id, notes, receipt_url } = req.body;
+    if (expense_type) {
+      const validExpenseTypes = ['machine','maintenance','salary','utilities','raw_material','production','transport','other'];
+      if (!validExpenseTypes.includes(expense_type)) return res.status(400).json({ error: 'نوع المصروف غير صالح' });
+    }
+    if (amount != null && parseFloat(amount) <= 0) return res.status(400).json({ error: 'المبلغ يجب أن يكون أكبر من صفر' });
     db.prepare(`UPDATE expenses SET expense_type=COALESCE(?,expense_type), amount=COALESCE(?,amount),
       description=COALESCE(?,description), expense_date=COALESCE(?,expense_date),
       reference_type=COALESCE(?,reference_type), reference_id=COALESCE(?,reference_id),

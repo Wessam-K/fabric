@@ -5,6 +5,46 @@
 
 ---
 
+## Phase M — Production Audit v11 — Invoice Pricing, DELETE Reversal & Validation Hardening (2026-03-27)
+
+### M1: Backend CRITICAL — WO DELETE Missing V8 Consumption Reversal
+- **workorders.js DELETE**: Now reverses all `wo_fabric_consumption` records (restoring batch used_meters, aggregate available_meters) and all `wo_accessory_consumption` records (returning stock) — previously only reversed batch allocations, leaving V8 consumption orphaned
+
+### M2: Backend CRITICAL — WO Partial Invoice Price Validation
+- **workorders.js POST /partial-invoice**: Added validation that `invoice_price_per_piece > 0` — prevents creating invoices with zero/negative pricing
+
+### M3: Backend CRITICAL — WO Create Invoice Price Validation
+- **workorders.js POST /create-invoice**: Added `price <= 0` guard on `unit_price` — blocks invoice creation with zero/negative unit price
+
+### M4: Backend HIGH — Customer Payment on Cancelled/Paid Invoice
+- **customers.js POST /:id/payments**: Added status check blocking payments on `cancelled` or already-`paid` invoices — prevents corrupting invoice payment state
+
+### M5: Backend MEDIUM — Expenses PUT Missing Type Validation
+- **expenses.js PUT**: Added `expense_type` enum validation matching POST endpoint — prevents saving invalid expense types that break filtering/reports. Also added `amount > 0` check.
+
+### M6: Frontend MEDIUM — Quotations Item & Customer Validation
+- **Quotations.jsx**: `save()` now requires customer selection and validates all items have description + quantity > 0
+
+### M7: Frontend MEDIUM — Shipping Item Quantity Validation
+- **Shipping.jsx**: `save()` now validates all items have quantity > 0 before submitting
+
+### M8: Frontend MEDIUM — Samples Quantity Min Attribute
+- **Samples.jsx**: Added `min="1"` to quantity input field
+
+### M9: DB Preservation on Update (Verified)
+- DB stored in `%APPDATA%\wk-hub\` — separate from install directory
+- NSIS installer excludes `*.db` from package — cannot overwrite user data
+- Pre-migration backup runs automatically on app start
+- Schema migrations are versioned and additive (safe ALTER TABLE ADD COLUMN)
+- Users can safely install new setup.exe over existing installation
+
+### M10: Build
+- All 58 API tests pass (0 failures)
+- Frontend: Vite production build (2553 modules, 105 KB CSS + 1.7 MB JS)
+- Electron: `WK-Hub Setup 2.0.0.exe` + `WK-Hub 2.0.0.exe`
+
+---
+
 ## Phase L — Production Audit v10 — Batch Reservation & Stage Flow Hardening (2026-03-27)
 
 ### L1: Backend CRITICAL — WO Creation Fabric Batch Reservation

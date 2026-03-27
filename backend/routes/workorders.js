@@ -884,6 +884,9 @@ router.post('/:id/partial-invoice', requirePermission('work_orders', 'edit'), (r
     if (!wo) return res.status(404).json({ error: 'غير موجود' });
     const { pieces_invoiced, cost_per_piece, invoice_price_per_piece, notes } = req.body;
     if (!pieces_invoiced || pieces_invoiced <= 0) return res.status(400).json({ error: 'عدد القطع المفوترة مطلوب' });
+    if (invoice_price_per_piece !== undefined && invoice_price_per_piece !== null && parseFloat(invoice_price_per_piece) <= 0) {
+      return res.status(400).json({ error: 'سعر الفاتورة يجب أن يكون أكبر من صفر' });
+    }
 
     const alreadyInvoiced = db.prepare('SELECT COALESCE(SUM(pieces_invoiced),0) as v FROM partial_invoices WHERE wo_id=?').get(woId).v;
     const totalPieces = wo.pieces_completed || wo.quantity || 0;
@@ -956,6 +959,25 @@ router.delete('/:id', requirePermission('work_orders', 'delete'), (req, res) => 
                 .run(ad.accessory_code, 'return', returnQty, 'work_order', woId, 'إرجاع إكسسوار - حذف أمر تشغيل ' + wo.wo_number, userId);
             }
           }
+        }
+      }
+      // Reverse V8 fabric consumption
+      const consumptions = db.prepare('SELECT * FROM wo_fabric_consumption WHERE work_order_id=?').all(woId);
+      for (const c of consumptions) {
+        if (c.batch_id && c.actual_meters) {
+          db.prepare('UPDATE fabric_inventory_batches SET used_meters = MAX(0, used_meters - ?) WHERE id=?').run(c.actual_meters, c.batch_id);
+          db.prepare("UPDATE fabric_inventory_batches SET batch_status='available' WHERE id=? AND batch_status='depleted'").run(c.batch_id);
+          const batchData = db.prepare('SELECT fabric_code FROM fabric_inventory_batches WHERE id=?').get(c.batch_id);
+          if (batchData) {
+            db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) + ? WHERE code=?').run(c.actual_meters, batchData.fabric_code);
+          }
+        }
+      }
+      // Reverse V8 accessory consumption
+      const accConsumptions = db.prepare('SELECT * FROM wo_accessory_consumption WHERE work_order_id=?').all(woId);
+      for (const ac of accConsumptions) {
+        if (ac.accessory_code && ac.actual_qty) {
+          db.prepare('UPDATE accessories SET quantity_on_hand = quantity_on_hand + ? WHERE code=?').run(ac.actual_qty, ac.accessory_code);
         }
       }
     })();
@@ -1420,6 +1442,7 @@ router.post('/:id/create-invoice', requirePermission('work_orders', 'edit'), (re
     }
 
     const price = parseFloat(unit_price) || 0;
+    if (price <= 0) return res.status(400).json({ error: 'سعر الوحدة يجب أن يكون أكبر من صفر' });
     const total = qty_to_invoice * price;
 
     const transaction = db.transaction(() => {

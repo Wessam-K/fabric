@@ -294,8 +294,9 @@ router.post('/:id/payments', requirePermission('customers', 'edit'), (req, res) 
     }
 
     if (invoice_id) {
-      const inv = db.prepare('SELECT id, total FROM invoices WHERE id = ? AND customer_id = ?').get(invoice_id, customer.id);
+      const inv = db.prepare('SELECT id, total, status FROM invoices WHERE id = ? AND customer_id = ?').get(invoice_id, customer.id);
       if (!inv) return res.status(400).json({ error: 'الفاتورة غير موجودة أو لا تخص هذا العميل' });
+      if (['cancelled', 'paid'].includes(inv.status)) return res.status(400).json({ error: 'لا يمكن تسجيل دفعة على فاتورة ملغاة أو مدفوعة بالكامل' });
       const alreadyPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM customer_payments WHERE invoice_id=?').get(invoice_id).v;
       const remaining = inv.total - alreadyPaid;
       if (amount > remaining) {

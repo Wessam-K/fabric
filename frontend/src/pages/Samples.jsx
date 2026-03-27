@@ -139,7 +139,7 @@ export default function Samples() {
               <div><label className="block text-sm font-medium mb-1">اسم المنتج *</label><input value={form.product_name} onChange={e => setForm(f => ({ ...f, product_name: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
               <div><label className="block text-sm font-medium mb-1">الوصف</label><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} /></div>
               <div className="grid grid-cols-3 gap-4">
-                <div><label className="block text-sm font-medium mb-1">الكمية</label><input type="number" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
+                <div><label className="block text-sm font-medium mb-1">الكمية</label><input type="number" min="1" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
                 <div><label className="block text-sm font-medium mb-1">نطاق المقاسات</label><input value={form.size_range} onChange={e => setForm(f => ({ ...f, size_range: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="S-XL" /></div>
                 <div><label className="block text-sm font-medium mb-1">السعر المستهدف</label><input type="number" value={form.target_price} onChange={e => setForm(f => ({ ...f, target_price: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
               </div>
