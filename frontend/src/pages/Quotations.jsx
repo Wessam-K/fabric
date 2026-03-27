@@ -36,7 +36,7 @@ export default function Quotations() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [page, statusFilter]);
+  useEffect(() => { load(); }, [page, statusFilter, search]);
   useEffect(() => {
     api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(() => {});
     api.get('/settings').then(r => { const tax = parseFloat(r.data?.tax_rate) || 0; setDefaultTax(tax); }).catch(() => {});

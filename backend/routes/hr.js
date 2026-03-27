@@ -231,7 +231,7 @@ function getDayName(dateStr) {
 }
 
 // POST /api/hr/attendance/clock — clock-in/out by barcode scan
-router.post('/attendance/clock', requirePermission('hr', 'view'), (req, res) => {
+router.post('/attendance/clock', requirePermission('hr', 'edit'), (req, res) => {
   try {
     const { barcode } = req.body;
     if (!barcode) return res.status(400).json({ error: 'الباركود مطلوب' });

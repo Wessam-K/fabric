@@ -302,7 +302,7 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
     if (masnaiya != null && parseFloat(masnaiya) < 0) return res.status(400).json({ error: 'قيمة المصنعية لا يمكن أن تكون سالبة' });
     if (masrouf != null && parseFloat(masrouf) < 0) return res.status(400).json({ error: 'قيمة المصروف لا يمكن أن تكون سالبة' });
     if (margin_pct != null && (parseFloat(margin_pct) < 0 || parseFloat(margin_pct) > 100)) return res.status(400).json({ error: 'نسبة الهامش يجب أن تكون بين 0 و 100' });
-    if (quantity != null && parseInt(quantity) < 0) return res.status(400).json({ error: 'الكمية لا يمكن أن تكون سالبة' });
+    if (quantity != null && parseInt(quantity) <= 0) return res.status(400).json({ error: 'الكمية يجب أن تكون أكبر من صفر' });
 
     // Load defaults from settings when values not provided
     const getSetting = (key, fallback) => {
@@ -369,6 +369,9 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
           const pricePerMeter = batch.price_per_meter;
           const plannedCost = plannedTotal * pricePerMeter;
           ins.run(woId, fb.batch_id, fb.fabric_code, fb.role || 'main', plannedMPP, plannedTotal, wastePct, pricePerMeter, plannedCost, fb.color_note || null, fb.sort_order ?? i);
+          // Reserve fabric on batch and aggregate
+          db.prepare('UPDATE fabric_inventory_batches SET used_meters = used_meters + ? WHERE id=?').run(plannedWithWaste, fb.batch_id);
+          db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) - ? WHERE code=?').run(plannedWithWaste, fb.fabric_code);
         }
       }
 
@@ -478,7 +481,7 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
     if (masnaiya != null && parseFloat(masnaiya) < 0) return res.status(400).json({ error: 'قيمة المصنعية لا يمكن أن تكون سالبة' });
     if (masrouf != null && parseFloat(masrouf) < 0) return res.status(400).json({ error: 'قيمة المصروف لا يمكن أن تكون سالبة' });
     if (margin_pct != null && (parseFloat(margin_pct) < 0 || parseFloat(margin_pct) > 100)) return res.status(400).json({ error: 'نسبة الهامش يجب أن تكون بين 0 و 100' });
-    if (quantity != null && parseInt(quantity) < 0) return res.status(400).json({ error: 'الكمية لا يمكن أن تكون سالبة' });
+    if (quantity != null && parseInt(quantity) <= 0) return res.status(400).json({ error: 'الكمية يجب أن تكون أكبر من صفر' });
 
     const transaction = db.transaction(() => {
       db.prepare(`UPDATE work_orders SET model_id=COALESCE(?,model_id),priority=COALESCE(?,priority),due_date=?,assigned_to=COALESCE(?,assigned_to),masnaiya=COALESCE(?,masnaiya),masrouf=COALESCE(?,masrouf),margin_pct=COALESCE(?,margin_pct),consumer_price=?,wholesale_price=?,notes=COALESCE(?,notes),quantity=COALESCE(?,quantity),is_size_based=COALESCE(?,is_size_based),updated_at=datetime('now') WHERE id=?`)
@@ -500,6 +503,16 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
         sizes.forEach(s => { if (s.color_label) ins.run(woId, s.color_label, s.qty_s||0, s.qty_m||0, s.qty_l||0, s.qty_xl||0, s.qty_2xl||0, s.qty_3xl||0); });
       }
       if (fabric_batches) {
+        // Reverse old batch allocations
+        const oldBatches = db.prepare('SELECT * FROM wo_fabric_batches WHERE wo_id=?').all(woId);
+        for (const old of oldBatches) {
+          const wastePctOld = old.waste_pct ?? 5;
+          const allocatedMeters = (old.planned_total_meters || 0) * (1 + wastePctOld / 100);
+          if (allocatedMeters > 0) {
+            db.prepare('UPDATE fabric_inventory_batches SET used_meters = MAX(0, used_meters - ?) WHERE id=?').run(allocatedMeters, old.batch_id);
+            db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) + ? WHERE code=?').run(allocatedMeters, old.fabric_code);
+          }
+        }
         db.prepare('DELETE FROM wo_fabric_batches WHERE wo_id=?').run(woId);
         let totalPieces = quantity || existing.quantity || 0;
         const szRows = sizes || db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(woId);
@@ -512,8 +525,16 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
           if (!batch) throw new Error(`الدفعة ${fb.batch_id} غير موجودة`);
           const plannedMPP = fb.planned_meters_per_piece || 1;
           const plannedTotal = plannedMPP * (totalPieces || 1);
+          const wastePct = fb.waste_pct ?? 5;
+          const plannedWithWaste = plannedTotal * (1 + wastePct / 100);
+          if (batch.available_meters < plannedWithWaste) {
+            throw new Error(`الأمتار المتاحة في الدفعة ${batch.batch_code} غير كافية (متاح: ${batch.available_meters} م، مطلوب: ${plannedWithWaste.toFixed(1)} م)`);
+          }
           const pricePerMeter = batch.price_per_meter;
-          ins.run(woId, fb.batch_id, fb.fabric_code, fb.role || 'main', plannedMPP, plannedTotal, fb.waste_pct ?? 5, pricePerMeter, plannedTotal * pricePerMeter, fb.color_note || null, fb.sort_order ?? i);
+          ins.run(woId, fb.batch_id, fb.fabric_code, fb.role || 'main', plannedMPP, plannedTotal, wastePct, pricePerMeter, plannedTotal * pricePerMeter, fb.color_note || null, fb.sort_order ?? i);
+          // Reserve on batch and aggregate
+          db.prepare('UPDATE fabric_inventory_batches SET used_meters = used_meters + ? WHERE id=?').run(plannedWithWaste, fb.batch_id);
+          db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) - ? WHERE code=?').run(plannedWithWaste, fb.fabric_code);
         }
       }
       if (accessories_detail) {
@@ -623,6 +644,17 @@ router.patch('/:id/stages/:stageId', requirePermission('work_orders', 'edit'), (
       const sets = [];
       const params = [];
       if (status) {
+        // Validate stage status transition
+        const validStageTransitions = {
+          pending: ['in_progress', 'skipped'],
+          in_progress: ['completed', 'skipped'],
+          completed: [],
+          skipped: []
+        };
+        const allowed = validStageTransitions[stage.status] || [];
+        if (!allowed.includes(status)) {
+          throw new Error(`لا يمكن تغيير حالة المرحلة من "${stage.status}" إلى "${status}"`);
+        }
         sets.push('status=?'); params.push(status);
         if (status === 'in_progress' && !stage.started_at) sets.push("started_at=datetime('now')");
         if (status === 'completed') sets.push("completed_at=datetime('now')");

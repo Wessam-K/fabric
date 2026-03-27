@@ -60,7 +60,7 @@ export default function Expenses() {
   useEffect(() => { loadSummary(); }, []);
 
   const handleSave = async () => {
-    if (!form.description || !form.amount) { toast.error('الوصف والمبلغ مطلوبان'); return; }
+    if (!form.description || !form.amount || parseFloat(form.amount) <= 0) { toast.error('الوصف والمبلغ (أكبر من صفر) مطلوبان'); return; }
     try {
       if (editId) {
         await api.put(`/expenses/${editId}`, form);

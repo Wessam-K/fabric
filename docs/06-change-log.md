@@ -5,6 +5,36 @@
 
 ---
 
+## Phase L — Production Audit v10 — Batch Reservation & Stage Flow Hardening (2026-03-27)
+
+### L1: Backend CRITICAL — WO Creation Fabric Batch Reservation
+- **workorders.js POST**: After inserting `wo_fabric_batches`, now updates `fabric_inventory_batches.used_meters` and decrements `fabrics.available_meters` — prevents double-allocation where multiple WOs could claim the same batch meters
+
+### L2: Backend HIGH — WO PUT Fabric Batch Reversal + Validation
+- **workorders.js PUT**: When `fabric_batches` array is updated, old allocations are now reversed (restoring used_meters and available_meters) before deleting and re-inserting new batches — includes availability validation matching POST logic
+
+### L3: Backend HIGH — WO Quantity Zero Blocked
+- **workorders.js POST + PUT**: Changed validation from `quantity < 0` to `quantity <= 0` — prevents creating WOs with 0 pieces which caused divide-by-zero in costing
+
+### L4: Backend HIGH — Stage Status Transition Validation
+- **workorders.js PATCH stages/:stageId**: Added `validStageTransitions` map enforcing: pending→in_progress/skipped, in_progress→completed/skipped, completed→none, skipped→none — prevents backward transitions and illogical state changes
+
+### L5: Backend LOW — HR Attendance Clock Permission
+- **hr.js**: `POST /api/hr/attendance/clock` changed from `requirePermission('hr', 'view')` to `requirePermission('hr', 'edit')` — POST (create) action shouldn't work with view-only permission
+
+### L6: Frontend HIGH — Quotations Search Broken
+- **Quotations.jsx**: Added `search` to `useEffect` dependency array — search was in API params but changes to it didn't trigger data reload
+
+### L7: Frontend MEDIUM — Expenses Amount Validation
+- **Expenses.jsx**: `handleSave()` now validates `amount > 0` — prevents saving expenses with zero amount
+
+### L8: Build
+- All 58 API tests pass (0 failures)
+- Frontend: Vite production build (2553 modules, 105 KB CSS + 1.7 MB JS)
+- Electron: `WK-Hub Setup 2.0.0.exe` + `WK-Hub 2.0.0.exe`
+
+---
+
 ## Phase K — Production Audit v9 — Inventory Integrity & Validation Hardening (2025-07-24)
 
 ### K1: Backend CRITICAL — WO PUT Allows Editing Completed/Cancelled WOs
