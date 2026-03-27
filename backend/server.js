@@ -69,7 +69,11 @@ app.use(express.json({ limit: '2mb' }));
 
 // ═══ Input sanitization — strip HTML tags from string fields ═══
 function stripTags(str) {
-  return typeof str === 'string' ? str.replace(/<[^>]*>?/g, '') : str;
+  if (typeof str !== 'string') return str;
+  // Multi-pass to handle nested/malformed tags like <<script>
+  let prev;
+  do { prev = str; str = str.replace(/<[^>]*>?/g, ''); } while (str !== prev);
+  return str;
 }
 function sanitizeBody(obj) {
   if (!obj || typeof obj !== 'object') return obj;
@@ -140,7 +144,7 @@ app.get('/api/health', (req, res) => {
   try {
     db.prepare('SELECT 1').get();
   } catch (e) { dbStatus = 'error'; }
-  res.json({ status: 'ok', app: 'WK-Hub', database: dbStatus });
+  res.json({ status: 'ok', app: 'WK-Factory', database: dbStatus });
 });
 
 // ═══ Public routes (no auth) ═══

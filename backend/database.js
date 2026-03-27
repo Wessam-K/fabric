@@ -2470,6 +2470,64 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (34)`);
   }
+
+  // ──── V35 — Add missing indexes on foreign key and frequently-queried columns ────
+  const v35 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 35').get();
+  if (!v35) {
+    const idx = (name, table, cols) => {
+      try { db.exec(`CREATE INDEX IF NOT EXISTS ${name} ON ${table} (${cols})`); } catch {}
+    };
+    // Work orders
+    idx('idx_wo_customer', 'work_orders', 'customer_id');
+    idx('idx_wo_model', 'work_orders', 'model_id');
+    idx('idx_wo_status', 'work_orders', 'status');
+    idx('idx_wo_created', 'work_orders', 'created_at');
+    idx('idx_wo_due', 'work_orders', 'due_date');
+    // WO detail tables
+    idx('idx_wo_fabrics_wo', 'wo_fabrics', 'wo_id');
+    idx('idx_wo_accessories_wo', 'wo_accessories', 'wo_id');
+    idx('idx_wo_sizes_wo', 'wo_sizes', 'wo_id');
+    idx('idx_wo_stages_wo', 'wo_stages', 'wo_id');
+    idx('idx_wo_stages_status', 'wo_stages', 'status');
+    idx('idx_wo_expenses_wo', 'wo_expenses', 'wo_id');
+    idx('idx_wo_fabric_batches_wo', 'wo_fabric_batches', 'wo_id');
+    // Invoices
+    idx('idx_inv_customer', 'invoices', 'customer_id');
+    idx('idx_inv_wo', 'invoices', 'wo_id');
+    idx('idx_inv_status', 'invoices', 'status');
+    idx('idx_inv_items_inv', 'invoice_items', 'invoice_id');
+    // Purchase orders
+    idx('idx_po_supplier', 'purchase_orders', 'supplier_id');
+    idx('idx_po_status', 'purchase_orders', 'status');
+    idx('idx_poi_po', 'purchase_order_items', 'po_id');
+    // HR
+    idx('idx_att_employee', 'attendance', 'employee_id');
+    idx('idx_att_date', 'attendance', 'work_date');
+    idx('idx_payroll_employee', 'payroll', 'employee_id');
+    idx('idx_payroll_period', 'payroll', 'period_month, period_year');
+    idx('idx_leave_employee', 'leave_requests', 'employee_id');
+    // Expenses
+    idx('idx_exp_date', 'expenses', 'expense_date');
+    idx('idx_exp_status', 'expenses', 'status');
+    // Audit
+    idx('idx_audit_user', 'audit_log', 'user_id');
+    idx('idx_audit_entity', 'audit_log', 'entity_type, entity_id');
+    idx('idx_audit_created', 'audit_log', 'created_at');
+    // Notifications
+    idx('idx_notif_user', 'notifications', 'user_id');
+    idx('idx_notif_read', 'notifications', 'is_read');
+    // Stock movements
+    idx('idx_fsm_fabric', 'fabric_stock_movements', 'fabric_code');
+    idx('idx_asm_accessory', 'accessory_stock_movements', 'accessory_code');
+    // Documents
+    idx('idx_doc_entity', 'documents', 'entity_type, entity_id');
+    // Accounting
+    idx('idx_je_date', 'journal_entries', 'entry_date');
+    idx('idx_jel_je', 'journal_entry_lines', 'journal_entry_id');
+    idx('idx_jel_account', 'journal_entry_lines', 'account_id');
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (35)`);
+  }
 }
 
 initializeDatabase();

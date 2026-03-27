@@ -238,20 +238,27 @@ function getFullWO(id) {
 router.get('/', requirePermission('work_orders', 'view'), (req, res) => {
   try {
     const { search, status, priority, model_code, date_from, date_to } = req.query;
-    let q = `SELECT wo.*, m.model_code, m.model_name,
+    let where = 'WHERE 1=1';
+    const p = [];
+    if (status) { where += ' AND wo.status=?'; p.push(status); }
+    if (priority) { where += ' AND wo.priority=?'; p.push(priority); }
+    if (model_code) { where += ' AND m.model_code=?'; p.push(model_code); }
+    if (date_from) { where += ' AND wo.created_at >= ?'; p.push(date_from); }
+    if (date_to) { where += ' AND wo.created_at <= ?'; p.push(date_to); }
+    if (search) { const s = `%${search}%`; where += ' AND (wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ?)'; p.push(s, s, s, s); }
+
+    const total = db.prepare(`SELECT COUNT(*) as c FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id ${where}`).get(...p).c;
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 500);
+    const offset = (page - 1) * limit;
+
+    const q = `SELECT wo.*, m.model_code, m.model_name,
       wo.last_active_stage_name, wo.fabric_variant_label,
       (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id AND status='completed') as stages_done,
       (SELECT COUNT(*) FROM wo_stages WHERE wo_id=wo.id) as stages_total
-      FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE 1=1`;
-    const p = [];
-    if (status) { q += ' AND wo.status=?'; p.push(status); }
-    if (priority) { q += ' AND wo.priority=?'; p.push(priority); }
-    if (model_code) { q += ' AND m.model_code=?'; p.push(model_code); }
-    if (date_from) { q += ' AND wo.created_at >= ?'; p.push(date_from); }
-    if (date_to) { q += ' AND wo.created_at <= ?'; p.push(date_to); }
-    if (search) { const s = `%${search}%`; q += ' AND (wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ?)'; p.push(s, s, s, s); }
-    q += ' ORDER BY wo.created_at DESC';
-    const work_orders = db.prepare(q).all(...p);
+      FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id ${where}
+      ORDER BY wo.created_at DESC LIMIT ? OFFSET ?`;
+    const work_orders = db.prepare(q).all(...p, limit, offset);
 
     const stats = {
       draft: db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='draft'").get().c,
@@ -262,7 +269,7 @@ router.get('/', requirePermission('work_orders', 'view'), (req, res) => {
       urgent: db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE priority='urgent' AND status NOT IN ('completed','cancelled')").get().c,
     };
 
-    res.json({ work_orders, stats });
+    res.json({ work_orders, stats, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
