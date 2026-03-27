@@ -76,6 +76,36 @@ app.use(compression({
   threshold: 1024
 }));
 
+// ═══ D3: Request ID tracing — every request gets a unique ID ═══
+const crypto = require('crypto');
+app.use((req, res, next) => {
+  req.requestId = req.headers['x-request-id'] || crypto.randomUUID();
+  res.setHeader('X-Request-ID', req.requestId);
+  next();
+});
+
+// ═══ D4: Input field length limits — prevent excessively long text fields ═══
+const MAX_FIELD_LENGTH = 10000;
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') {
+    const checkLengths = (obj) => {
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === 'string' && v.length > MAX_FIELD_LENGTH) {
+          return k;
+        }
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+          const bad = checkLengths(v);
+          if (bad) return bad;
+        }
+      }
+      return null;
+    };
+    const badField = checkLengths(req.body);
+    if (badField) return res.status(400).json({ error: `الحقل ${badField} يتجاوز الحد الأقصى المسموح (${MAX_FIELD_LENGTH} حرف)` });
+  }
+  next();
+});
+
 // ═══ Input sanitization — strip HTML tags from string fields ═══
 function stripTags(str) {
   if (typeof str !== 'string') return str;

@@ -2,7 +2,7 @@
 const bcrypt = require('bcryptjs');
 const router = express.Router();
 const db = require('../database');
-const { generateToken, requireAuth, logAudit } = require('../middleware/auth');
+const { generateToken, requireAuth, logAudit, revokeToken } = require('../middleware/auth');
 const jwt = require('jsonwebtoken');
 
 // POST /api/auth/login
@@ -69,6 +69,8 @@ router.post('/refresh', requireAuth, (req, res) => {
 // POST /api/auth/logout
 router.post('/logout', requireAuth, (req, res) => {
   try {
+    // D1: Revoke the token so it can't be reused
+    if (req.token) revokeToken(req.token);
     logAudit(req, 'LOGOUT', 'user', req.user.id, req.user.full_name);
     res.json({ message: 'تم تسجيل الخروج' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

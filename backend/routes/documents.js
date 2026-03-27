@@ -51,6 +51,28 @@ router.get('/', requirePermission('documents', 'view'), (req, res) => {
 router.post('/upload', requirePermission('documents', 'create'), upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'الملف مطلوب' });
+
+    // D2: MIME type validation — check magic bytes
+    const filePath = req.file.path;
+    const buffer = Buffer.alloc(8);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buffer, 0, 8, 0);
+    fs.closeSync(fd);
+    const hex = buffer.toString('hex').toLowerCase();
+    const validMagic = [
+      '25504446',     // PDF
+      '504b0304',     // ZIP/DOCX/XLSX
+      'ffd8ff',       // JPEG
+      '89504e47',     // PNG
+      '52494646',     // WEBP (RIFF)
+      'd0cf11e0',     // DOC/XLS (OLE)
+    ];
+    const isMagicValid = validMagic.some(m => hex.startsWith(m));
+    if (!isMagicValid) {
+      fs.unlinkSync(filePath); // Remove suspicious file
+      return res.status(400).json({ error: 'نوع الملف غير متطابق مع المحتوى' });
+    }
+
     const { title, entity_type, entity_id, category, notes } = req.body;
 
     const result = db.prepare(`INSERT INTO documents 

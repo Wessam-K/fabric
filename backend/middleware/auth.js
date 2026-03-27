@@ -17,6 +17,19 @@ if (!JWT_SECRET || JWT_SECRET === 'wk-hub-secret-2026-change-in-prod') {
 }
 const JWT_EXPIRES = '24h';
 
+// ── D1: Token blacklist (in-memory, survives for session) ──
+const tokenBlacklist = new Set();
+
+function revokeToken(token) {
+  tokenBlacklist.add(token);
+  // Auto-cleanup after 24h to prevent memory leak
+  setTimeout(() => tokenBlacklist.delete(token), 24 * 60 * 60 * 1000);
+}
+
+function isTokenRevoked(token) {
+  return tokenBlacklist.has(token);
+}
+
 function generateToken(user) {
   return jwt.sign(
     { id: user.id, username: user.username, role: user.role, full_name: user.full_name },
@@ -32,8 +45,12 @@ function requireAuth(req, res, next) {
   }
   try {
     const token = header.slice(7);
+    if (isTokenRevoked(token)) {
+      return res.status(401).json({ error: 'تم إبطال الجلسة — يرجى تسجيل الدخول مجدداً' });
+    }
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
+    req.token = token; // Expose token for logout endpoint
     next();
   } catch {
     return res.status(401).json({ error: 'انتهت الجلسة — يرجى تسجيل الدخول مجدداً' });
@@ -89,4 +106,4 @@ function logAudit(req, action, entityType, entityId, entityLabel, oldValues = nu
   } catch(e) { console.error('Audit log error:', e.message); }
 }
 
-module.exports = { generateToken, requireAuth, requireRole, requirePermission, canUser, logAudit };
+module.exports = { generateToken, requireAuth, requireRole, requirePermission, canUser, logAudit, revokeToken };
