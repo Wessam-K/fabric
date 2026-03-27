@@ -88,7 +88,7 @@ router.post('/employees', requirePermission('hr', 'create'), (req, res) => {
     );
 
     logAudit(req, 'CREATE', 'employee', result.lastInsertRowid, d.full_name, null, d);
-    res.json({ id: result.lastInsertRowid, message: 'تم إنشاء الموظف بنجاح' });
+    res.status(201).json({ id: result.lastInsertRowid, message: 'تم إنشاء الموظف بنجاح' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

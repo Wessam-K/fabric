@@ -29,7 +29,7 @@ router.post('/coa', requirePermission('accounting', 'create'), (req, res) => {
     const result = db.prepare('INSERT INTO chart_of_accounts (code, name_ar, type, parent_id) VALUES (?,?,?,?)')
       .run(code, name_ar, type, parent_id || null);
     logAudit(req, 'CREATE', 'chart_of_accounts', result.lastInsertRowid, `${code} — ${name_ar}`);
-    res.json({ id: result.lastInsertRowid });
+    res.status(201).json({ id: result.lastInsertRowid });
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'كود الحساب موجود بالفعل' });
     console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' });
@@ -129,7 +129,7 @@ router.post('/journal', requirePermission('accounting', 'create'), (req, res) =>
     });
     const id = trx();
     logAudit(req, 'CREATE', 'journal_entry', id, `${entry_number}`);
-    res.json({ id });
+    res.status(201).json({ id });
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'رقم القيد موجود بالفعل' });
     console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' });

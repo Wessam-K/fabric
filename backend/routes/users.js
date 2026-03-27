@@ -31,7 +31,7 @@ router.post('/', requireRole('superadmin'), (req, res) => {
     ).run(username, full_name, email || null, role || 'viewer', department || null, hash, employee_id || null, req.user.id);
 
     logAudit(req, 'CREATE', 'user', result.lastInsertRowid, full_name, null, { username, full_name, role, department });
-    res.json({ id: result.lastInsertRowid, message: 'تم إنشاء المستخدم بنجاح' });
+    res.status(201).json({ id: result.lastInsertRowid, message: 'تم إنشاء المستخدم بنجاح' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

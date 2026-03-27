@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const compression = require('compression');
 
 const db = require('./database');
 const { requireAuth, requirePermission, canUser, logAudit } = require('./middleware/auth');
@@ -66,6 +67,14 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '2mb' }));
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  },
+  level: 6,
+  threshold: 1024
+}));
 
 // ═══ Input sanitization — strip HTML tags from string fields ═══
 function stripTags(str) {
@@ -123,20 +132,22 @@ setInterval(() => {
   }
 }, 60000);
 
-app.use('/api/auth/login', (req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress;
-  const now = Date.now();
-  let entry = loginAttempts.get(ip);
-  if (!entry || (now - entry.start > RATE_WINDOW)) {
-    entry = { count: 0, start: now };
-    loginAttempts.set(ip, entry);
-  }
-  entry.count++;
-  if (entry.count > MAX_ATTEMPTS) {
-    return res.status(429).json({ error: 'عدد المحاولات تجاوز الحد المسموح. حاول مرة أخرى بعد 15 دقيقة' });
-  }
-  next();
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.use('/api/auth/login', (req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    const now = Date.now();
+    let entry = loginAttempts.get(ip);
+    if (!entry || (now - entry.start > RATE_WINDOW)) {
+      entry = { count: 0, start: now };
+      loginAttempts.set(ip, entry);
+    }
+    entry.count++;
+    if (entry.count > MAX_ATTEMPTS) {
+      return res.status(429).json({ error: 'عدد المحاولات تجاوز الحد المسموح. حاول مرة أخرى بعد 15 دقيقة' });
+    }
+    next();
+  });
+}
 
 // ═══ Health check (public, no auth) ═══
 app.get('/api/health', (req, res) => {
