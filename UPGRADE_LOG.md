@@ -166,3 +166,37 @@
 - D3: Request ID tracing middleware (X-Request-ID) in `server.js`
 - D4: Input field length limits (10K chars) middleware in `server.js`
 - **Tests:** 80/80 pass ✅
+
+## v3.0 Production Audit Fixes
+
+### Fix 1: SQL Injection in workorders.js (CRITICAL)
+- **File:** `backend/routes/workorders.js` ~line 695
+- **Bug:** `sets.push('quantity_completed=COALESCE(quantity_completed,0)+' + qtyInStage)` — SQL string concatenation
+- **Fix:** Changed to parameterized query: `sets.push('quantity_completed=COALESCE(quantity_completed,0)+?'); params.push(qtyInStage);`
+
+### Fix 2: Invoice PUT Missing Negative Value Validation
+- **File:** `backend/routes/invoices.js`
+- **Bug:** PUT endpoint allowed negative quantities/unit_prices (unlike POST which validated)
+- **Fix:** Added item validation block matching POST endpoint
+
+### Fix 3: Invoice partially_paid Status Stuck
+- **File:** `backend/routes/invoices.js`
+- **Bug:** `partially_paid` had no valid transitions defined in status FSM
+- **Fix:** Added transitions: `partially_paid → ['paid', 'cancelled']`
+
+### Fix 4: Aged Receivables/Payables Future Invoice Bug
+- **File:** `backend/routes/accounting.js`
+- **Bug:** 0-30 bucket included future (not-yet-due) invoices
+- **Fix:** Added `current_due` bucket for future invoices; 0-30 now only includes actually overdue
+
+### Fix 5: Accounting Period Close Not Enforced
+- **File:** `backend/routes/accounting.js`
+- **Bug:** Period close only logged audit entry, didn't prevent new entries in closed periods
+- **Fix:** Stores closed date in settings table; journal creation rejects entries with date <= closed date
+
+### Fix 6: Journal Entry Line Totals Precision
+- **File:** `backend/routes/accounting.js`
+- **Bug:** Balance validation used raw `l.debit || 0` without parseFloat
+- **Fix:** Changed to `parseFloat(l.debit) || 0` for explicit numeric coercion
+
+- **Tests:** 80/80 pass ✅
