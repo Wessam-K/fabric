@@ -6,6 +6,8 @@
 
 const db = require('./database');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const pathMod = require('path');
 
 // ═══════════════════════════════════════════════════
 // HELPERS
@@ -26,6 +28,128 @@ function randDate(from, to) {
 }
 function isWeekday(d) { const day = d.getDay(); return day !== 5 && day !== 6; } // Egypt: Fri+Sat weekend
 function pad(n, len = 4) { return String(n).padStart(len, '0'); }
+
+// ─── MINIMAL PNG GENERATOR (no dependencies) ──
+// Creates a small 64×64 solid-color PNG for seed image testing
+function makePNG(r, g, b) {
+  // Raw pixel data: 64 rows, each row = filter byte (0) + 64 pixels × 3 bytes (RGB)
+  const W = 64, H = 64;
+  const raw = Buffer.alloc(H * (1 + W * 3));
+  for (let y = 0; y < H; y++) {
+    const off = y * (1 + W * 3);
+    raw[off] = 0; // filter byte
+    for (let x = 0; x < W; x++) {
+      const px = off + 1 + x * 3;
+      raw[px] = r; raw[px + 1] = g; raw[px + 2] = b;
+    }
+  }
+  const zlib = require('zlib');
+  const deflated = zlib.deflateSync(raw);
+  // Build PNG file
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  function chunk(type, data) {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const tp = Buffer.from(type, 'ascii');
+    const body = Buffer.concat([tp, data]);
+    const crc32buf = Buffer.alloc(4);
+    let crc = crc32(body);
+    crc32buf.writeInt32BE(crc);
+    return Buffer.concat([len, body, crc32buf]);
+  }
+  // CRC32 table
+  const crcTable = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    crcTable[n] = c;
+  }
+  function crc32(buf) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < buf.length; i++) c = crcTable[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) | 0;
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4);
+  ihdr[8] = 8; ihdr[9] = 2; // 8-bit RGB
+  const iend = Buffer.alloc(0);
+  return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', deflated), chunk('IEND', iend)]);
+}
+
+function ensureDir(dir) { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); }
+
+// Showcase work orders with specific stage breakdowns
+const SHOWCASE_WOS = [
+  {
+    label: 'عباية سوداء - إنتاج كبير',
+    model_code: 'ABY-001', quantity: 200, priority: 'urgent', status: 'in_progress',
+    stages: [
+      { name: 'استلام قماش', status: 'completed', in_stage: 0, completed: 200, rejected: 0 },
+      { name: 'قص',          status: 'completed', in_stage: 0, completed: 200, rejected: 2 },
+      { name: 'خياطة',       status: 'in_progress', in_stage: 100, completed: 98, rejected: 0 },
+      { name: 'تشطيب',      status: 'in_progress', in_stage: 48, completed: 50, rejected: 0 },
+      { name: 'كي',          status: 'in_progress', in_stage: 50, completed: 0, rejected: 0 },
+      { name: 'تغليف',      status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'مراجعة جودة', status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'تسليم',      status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+    ],
+  },
+  {
+    label: 'تيشيرت قطن - شبه مكتمل',
+    model_code: 'TSH-001', quantity: 300, priority: 'high', status: 'in_progress',
+    stages: [
+      { name: 'استلام قماش', status: 'completed', in_stage: 0, completed: 300, rejected: 0 },
+      { name: 'قص',          status: 'completed', in_stage: 0, completed: 300, rejected: 3 },
+      { name: 'خياطة',       status: 'completed', in_stage: 0, completed: 297, rejected: 5 },
+      { name: 'تشطيب',      status: 'completed', in_stage: 0, completed: 292, rejected: 0 },
+      { name: 'كي',          status: 'completed', in_stage: 0, completed: 292, rejected: 0 },
+      { name: 'تغليف',      status: 'completed', in_stage: 0, completed: 292, rejected: 0 },
+      { name: 'مراجعة جودة', status: 'in_progress', in_stage: 142, completed: 150, rejected: 2 },
+      { name: 'تسليم',      status: 'in_progress', in_stage: 0, completed: 100, rejected: 0 },
+    ],
+  },
+  {
+    label: 'فستان سواريه - بداية إنتاج',
+    model_code: 'DRS-003', quantity: 80, priority: 'high', status: 'in_progress',
+    stages: [
+      { name: 'استلام قماش', status: 'completed', in_stage: 0, completed: 80, rejected: 0 },
+      { name: 'قص',          status: 'in_progress', in_stage: 30, completed: 50, rejected: 1 },
+      { name: 'خياطة',       status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'تشطيب',      status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'كي',          status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'تغليف',      status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'مراجعة جودة', status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'تسليم',      status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+    ],
+  },
+  {
+    label: 'جاكيت جينز - معلق (مشكلة مواد)',
+    model_code: 'JKT-002', quantity: 150, priority: 'normal', status: 'in_progress',
+    stages: [
+      { name: 'استلام قماش', status: 'completed', in_stage: 0, completed: 150, rejected: 0 },
+      { name: 'قص',          status: 'completed', in_stage: 0, completed: 148, rejected: 2 },
+      { name: 'خياطة',       status: 'in_progress', in_stage: 60, completed: 88, rejected: 3 },
+      { name: 'تشطيب',      status: 'in_progress', in_stage: 35, completed: 50, rejected: 0 },
+      { name: 'كي',          status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'تغليف',      status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'مراجعة جودة', status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+      { name: 'تسليم',      status: 'pending',   in_stage: 0, completed: 0, rejected: 0 },
+    ],
+  },
+  {
+    label: 'يونيفورم مدرسي - مكتمل بالكامل',
+    model_code: 'UNF-001', quantity: 500, priority: 'normal', status: 'completed',
+    stages: [
+      { name: 'استلام قماش', status: 'completed', in_stage: 0, completed: 500, rejected: 0 },
+      { name: 'قص',          status: 'completed', in_stage: 0, completed: 500, rejected: 5 },
+      { name: 'خياطة',       status: 'completed', in_stage: 0, completed: 495, rejected: 8 },
+      { name: 'تشطيب',      status: 'completed', in_stage: 0, completed: 487, rejected: 0 },
+      { name: 'كي',          status: 'completed', in_stage: 0, completed: 487, rejected: 0 },
+      { name: 'تغليف',      status: 'completed', in_stage: 0, completed: 487, rejected: 0 },
+      { name: 'مراجعة جودة', status: 'completed', in_stage: 0, completed: 485, rejected: 2 },
+      { name: 'تسليم',      status: 'completed', in_stage: 0, completed: 485, rejected: 0 },
+    ],
+  },
+];
 
 // ═══════════════════════════════════════════════════
 // REALISTIC DATA POOLS
@@ -235,6 +359,29 @@ const seedAll = db.transaction(() => {
   const fabricCount = db.prepare('SELECT COUNT(*) as c FROM fabrics').get().c;
   console.log(`    ✓ ${fabricCount} total fabrics`);
 
+  // Generate seed images for fabrics (programmatic, no hardcoded URLs)
+  const fabricUploadDir = pathMod.join(__dirname, 'uploads', 'fabrics');
+  ensureDir(fabricUploadDir);
+  const FABRIC_COLORS = [
+    [200,50,50],[50,50,200],[50,150,50],[180,140,60],[100,50,150],[50,150,180],
+    [220,120,50],[140,80,60],[30,30,30],[200,200,200],[180,50,120],[50,120,80],
+    [160,160,50],[80,130,200],[200,100,100],[100,60,40],[70,100,70],[200,180,150],
+  ];
+  const allFabricsForImg = db.prepare("SELECT code FROM fabrics WHERE status='active' AND (image_path IS NULL OR image_path = '')").all();
+  let imgCount = 0;
+  for (const fab of allFabricsForImg) {
+    const c = FABRIC_COLORS[imgCount % FABRIC_COLORS.length];
+    const safeCode = fab.code.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 30);
+    const fname = `fab-seed-${safeCode}.png`;
+    const fpath = pathMod.join(fabricUploadDir, fname);
+    if (!fs.existsSync(fpath)) {
+      fs.writeFileSync(fpath, makePNG(c[0], c[1], c[2]));
+    }
+    db.prepare("UPDATE fabrics SET image_path=? WHERE code=?").run(`/uploads/fabrics/${fname}`, fab.code);
+    imgCount++;
+  }
+  console.log(`    ✓ ${imgCount} fabric images generated`);
+
   // ─── 3. EXTRA ACCESSORIES ─────────────────────
   console.log('  → Seeding extra accessories...');
   const insAcc = db.prepare(`INSERT OR IGNORE INTO accessories (code, acc_type, name, unit_price, unit, supplier_id, supplier, status, quantity_on_hand, low_stock_threshold, reorder_qty, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
@@ -307,6 +454,23 @@ const seedAll = db.transaction(() => {
   db.prepare("UPDATE models SET category='جاكيتات', gender='male' WHERE model_code='JKT-001' AND (category IS NULL OR category='')").run();
   const modelCount = db.prepare('SELECT COUNT(*) as c FROM models').get().c;
   console.log(`    ✓ ${modelCount} total models`);
+
+  // Generate seed images for models
+  const modelUploadDir = pathMod.join(process.env.WK_DB_DIR || __dirname, 'uploads', 'models');
+  ensureDir(modelUploadDir);
+  const allModelsForImg = db.prepare("SELECT model_code FROM models WHERE status='active' AND (model_image IS NULL OR model_image = '')").all();
+  let mdlImgCount = 0;
+  for (const mdl of allModelsForImg) {
+    const c = FABRIC_COLORS[(mdlImgCount + 5) % FABRIC_COLORS.length];
+    const fname = `mdl-seed-${mdl.model_code.toLowerCase().replace(/[^a-z0-9]/g, '-')}.png`;
+    const fpath = pathMod.join(modelUploadDir, fname);
+    if (!fs.existsSync(fpath)) {
+      fs.writeFileSync(fpath, makePNG(c[0], c[1], c[2]));
+    }
+    db.prepare("UPDATE models SET model_image=? WHERE model_code=?").run(`/uploads/models/${fname}`, mdl.model_code);
+    mdlImgCount++;
+  }
+  console.log(`    ✓ ${mdlImgCount} model images generated`);
 
   // ─── 8. MACHINES ──────────────────────────────
   console.log('  → Seeding machines...');
@@ -588,9 +752,10 @@ const seedAll = db.transaction(() => {
     if (model.tmpl_id) {
       const bomFabs = db.prepare('SELECT fabric_code, role, meters_per_piece, waste_pct, sort_order FROM bom_template_fabrics WHERE template_id=?').all(model.tmpl_id);
       for (const bf of bomFabs) {
-        const matchBatch = fabricBatches.find(b => b.fabricCode === bf.fabric_code && (b.receivedMeters - b.usedMeters - b.wastedMeters) > 10);
+        const matchBatch = fabricBatches.find(b => b.fabricCode === bf.fabric_code && (b.receivedMeters - b.usedMeters - b.wastedMeters) > 5);
         if (!matchBatch) continue;
 
+        const batchAvail = matchBatch.receivedMeters - matchBatch.usedMeters - matchBatch.wastedMeters;
         const plannedTotal = +(bf.meters_per_piece * quantity).toFixed(2);
         const wastePct = bf.waste_pct || 5;
         const price = matchBatch.pricePerMeter;
@@ -602,7 +767,13 @@ const seedAll = db.transaction(() => {
           const factor = status === 'completed' ? 1.0 : randFloat(0.3, 0.8, 2);
           actualPerPiece = +(bf.meters_per_piece * randFloat(0.95, 1.08, 3)).toFixed(3);
           actualTotal = +(actualPerPiece * quantity * factor).toFixed(2);
+          // Cap consumption to available batch meters
+          if (actualTotal > batchAvail * 0.95) actualTotal = +(batchAvail * 0.9).toFixed(2);
+          if (actualTotal < 1) { continue; }
+          actualPerPiece = +(actualTotal / (quantity * factor)).toFixed(3);
           wasteMeters = +(actualTotal * wastePct / 100 * randFloat(0.5, 1.5, 2)).toFixed(2);
+          if (wasteMeters > batchAvail - actualTotal) wasteMeters = +((batchAvail - actualTotal) * 0.5).toFixed(2);
+          if (wasteMeters < 0) wasteMeters = 0;
           actualCost = +(actualTotal * price).toFixed(2);
           wasteCostLine = +(wasteMeters * price).toFixed(2);
 
@@ -683,8 +854,121 @@ const seedAll = db.transaction(() => {
 
     woNum++;
   }
+
+  // ─── 11a. SHOWCASE WORK ORDERS (specific stage breakdowns) ──
+  console.log('  → Seeding showcase work orders...');
+  for (const sw of SHOWCASE_WOS) {
+    const model = modelList.find(m => m.model_code === sw.model_code) || pick(modelList);
+    const startDate = addDays(START, randInt(10, 45));
+    const dueDate = addDays(startDate, randInt(14, 35));
+    let completedDate = null;
+    if (sw.status === 'completed') {
+      completedDate = addDays(startDate, randInt(10, 28));
+      if (completedDate > END) completedDate = addDays(END, -2);
+    }
+    const masnaiya = model.masnaiya || 70;
+    const masrouf = model.masrouf || 40;
+    const marginPct = model.margin_pct || 25;
+    const cp = +(masnaiya + masrouf + randFloat(50, 200)).toFixed(2);
+    const wp = +(cp * 0.78).toFixed(2);
+    const customer = pick(customerList);
+
+    const woNumber = `WO-${dd(startDate).replace(/-/g, '').slice(2)}-${pad(woNum)}`;
+    const createdAt = dt(startDate);
+
+    insWO.run(woNumber, model.id, model.tmpl_id, sw.status, sw.priority, sw.quantity,
+              dd(startDate), dd(dueDate), completedDate ? dd(completedDate) : null,
+              masnaiya, masrouf, marginPct, cp, wp, customer.id,
+              sw.label, createdAt, createdAt);
+    const woId = db.prepare('SELECT last_insert_rowid() as id').get().id;
+    woIds.push({ id: woId, status: sw.status, quantity: sw.quantity, startDate, completedDate, modelId: model.id });
+
+    // Sizes
+    const qs = Math.ceil(sw.quantity * 0.06);
+    const qm = Math.ceil(sw.quantity * 0.18);
+    const ql = Math.ceil(sw.quantity * 0.24);
+    const qxl = Math.ceil(sw.quantity * 0.22);
+    const q2xl = Math.ceil(sw.quantity * 0.15);
+    const q3xl = Math.ceil(sw.quantity * 0.08);
+    insWOSize.run(woId, 'أساسي', qs, qm, ql, qxl, q2xl, q3xl);
+
+    // Insert exact stages per showcase definition
+    for (let si = 0; si < sw.stages.length; si++) {
+      const stg = sw.stages[si];
+      const startedAt = stg.status !== 'pending' ? dt(addDays(startDate, si + 1)) : null;
+      const completedAt = stg.status === 'completed' ? dt(addDays(startDate, si + 2)) : null;
+      const machineId = machineIds.length > 0 ? pick(machineIds) : null;
+      insWOStage.run(woId, stg.name, si + 1, stg.status, stg.in_stage, stg.completed, stg.rejected,
+                     startedAt, completedAt, machineId, null);
+    }
+
+    // Fabric consumption for showcase WOs
+    let scMainCost = 0, scLiningCost = 0, scAccCost = 0, scWasteCost = 0, scTotalMeters = 0;
+    if (model.tmpl_id) {
+      const bomFabs = db.prepare('SELECT fabric_code, role, meters_per_piece, waste_pct, sort_order FROM bom_template_fabrics WHERE template_id=?').all(model.tmpl_id);
+      for (const bf of bomFabs) {
+        const matchBatch = fabricBatches.find(b => b.fabricCode === bf.fabric_code && (b.receivedMeters - b.usedMeters - b.wastedMeters) > 5);
+        if (!matchBatch) continue;
+        const batchAvail = matchBatch.receivedMeters - matchBatch.usedMeters - matchBatch.wastedMeters;
+        const plannedTotal = +(bf.meters_per_piece * sw.quantity).toFixed(2);
+        const wastePct = bf.waste_pct || 5;
+        const price = matchBatch.pricePerMeter;
+        const plannedCost = +(plannedTotal * price).toFixed(2);
+        const factor = sw.status === 'completed' ? 1.0 : 0.6;
+        let actualTotal = +(bf.meters_per_piece * 1.02 * sw.quantity * factor).toFixed(2);
+        if (actualTotal > batchAvail * 0.9) actualTotal = +(batchAvail * 0.85).toFixed(2);
+        if (actualTotal < 1) continue;
+        const actualPerPiece = +(actualTotal / (sw.quantity * factor)).toFixed(3);
+        let wasteMeters = +(actualTotal * wastePct / 100).toFixed(2);
+        if (wasteMeters > batchAvail - actualTotal) wasteMeters = +((batchAvail - actualTotal) * 0.3).toFixed(2);
+        if (wasteMeters < 0) wasteMeters = 0;
+        const actualCost = +(actualTotal * price).toFixed(2);
+        const wasteCostLine = +(wasteMeters * price).toFixed(2);
+        matchBatch.usedMeters += actualTotal;
+        matchBatch.wastedMeters += wasteMeters;
+        insWOFabBatch.run(woId, matchBatch.id, bf.fabric_code, bf.role, bf.meters_per_piece, plannedTotal, wastePct,
+            actualTotal, actualPerPiece, wasteMeters, wasteCostLine, price, plannedCost, actualCost, bf.sort_order, createdAt);
+        if (bf.role === 'main') { scMainCost += actualCost; scTotalMeters += actualTotal; }
+        else { scLiningCost += actualCost; }
+        scWasteCost += wasteCostLine;
+        const fabricRow = db.prepare('SELECT id FROM fabrics WHERE code=?').get(bf.fabric_code);
+        if (fabricRow) {
+          insFabConsumption.run(woId, fabricRow.id, bf.fabric_code, matchBatch.id, matchBatch.poId, plannedTotal, actualTotal, price, actualCost, pick(userIds), createdAt, createdAt);
+        }
+        if (wasteMeters > 0.5) {
+          insWOWaste.run(woId, wasteMeters, price, wasteCostLine, `هالك ${bf.role === 'main' ? 'قماش' : 'بطانة'} - ${bf.fabric_code}`, pick(userIds), createdAt);
+        }
+      }
+      const bomAccs = db.prepare('SELECT accessory_code, accessory_name, quantity, unit_price FROM bom_template_accessories WHERE template_id=?').all(model.tmpl_id);
+      for (const ba of bomAccs) {
+        const plannedQty = +(ba.quantity * sw.quantity).toFixed(1);
+        const factor = sw.status === 'completed' ? 1.0 : 0.6;
+        const actualQty = +(ba.quantity * sw.quantity * factor * 1.02).toFixed(1);
+        const actualCostAcc = +(actualQty * ba.unit_price).toFixed(2);
+        const matchAccBatch = accBatches.find(b => b.accCode === ba.accessory_code && (b.receivedQty - b.usedQty) > 0);
+        if (matchAccBatch) matchAccBatch.usedQty += actualQty;
+        db.prepare('UPDATE accessories SET quantity_on_hand = MAX(0, quantity_on_hand - ?) WHERE code = ?').run(actualQty, ba.accessory_code);
+        scAccCost += actualCostAcc;
+        insWOAccDetail.run(woId, ba.accessory_code, ba.accessory_name, ba.quantity, ba.unit_price, +(plannedQty * ba.unit_price).toFixed(2), actualQty, actualCostAcc, null);
+        const accRow = db.prepare('SELECT id FROM accessories WHERE code=?').get(ba.accessory_code);
+        if (accRow) insAccConsumption.run(woId, accRow.id, ba.accessory_code, plannedQty, actualQty, ba.unit_price, actualCostAcc, createdAt);
+      }
+    }
+    if (sw.status === 'completed') {
+      const masnaiyaTotal = +(masnaiya * sw.quantity).toFixed(2);
+      const masroufTotal = +(masrouf * sw.quantity).toFixed(2);
+      const totalCost = +(scMainCost + scLiningCost + scAccCost + masnaiyaTotal + masroufTotal + scWasteCost).toFixed(2);
+      const costPP = totalCost > 0 ? +(totalCost / sw.quantity).toFixed(2) : 0;
+      insCostSnap.run(woId, model.id, sw.quantity, +scTotalMeters.toFixed(2), +scMainCost.toFixed(2), +scLiningCost.toFixed(2), +scAccCost.toFixed(2), masnaiya, masrouf, +scWasteCost.toFixed(2), totalCost, costPP, completedDate ? dd(completedDate) : dd(END));
+      db.prepare('UPDATE work_orders SET total_production_cost=?, cost_per_piece=?, waste_cost_total=?, actual_cost_per_piece=? WHERE id=?')
+        .run(totalCost, costPP, +scWasteCost.toFixed(2), costPP, woId);
+    }
+    woNum++;
+  }
+  console.log(`    ✓ ${SHOWCASE_WOS.length} showcase work orders added`);
+
   const woCount = db.prepare('SELECT COUNT(*) as c FROM work_orders').get().c;
-  console.log(`    ✓ ${woCount} work orders`);
+  console.log(`    ✓ ${woCount} work orders total`);
 
   // ─── 11b. FINALIZE INVENTORY ──────────────────
   // Update fabric_inventory_batches with accumulated used/wasted meters
