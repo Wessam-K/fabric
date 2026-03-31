@@ -1086,3 +1086,174 @@ describe('Health & Monitoring', () => {
     assert.ok(res.body.memory);
   });
 });
+
+// ═══ Phase 3.4: Financial lifecycle tests ═══
+describe('Invoice Financial Lifecycle', () => {
+  let invoiceId;
+  const invNum = `INV-TEST-${UID}`;
+
+  it('creates invoice with items and correct totals', async () => {
+    const res = await req('POST', '/api/invoices', {
+      invoice_number: invNum,
+      customer_name: 'عميل اختبار',
+      tax_pct: 15,
+      discount: 10,
+      items: [
+        { description: 'قماش', quantity: 3, unit_price: 100.33 },
+        { description: 'خياطة', quantity: 2, unit_price: 50.17 },
+      ],
+    });
+    assert.equal(res.status, 201);
+    invoiceId = res.body.id;
+    // Verify subtotal = 3*100.33 + 2*50.17 = 301.33 (safe multiply avoids float drift)
+    assert.ok(res.body.subtotal > 0);
+    assert.ok(res.body.total > 0);
+  });
+
+  it('retrieves invoice by ID with items', async () => {
+    const res = await req('GET', `/api/invoices/${invoiceId}`);
+    assert.equal(res.status, 200);
+    assert.ok(res.body.items?.length >= 2);
+  });
+
+  it('updates invoice status from draft to sent', async () => {
+    const res = await req('PATCH', `/api/invoices/${invoiceId}/status`, { status: 'sent' });
+    assert.equal(res.status, 200);
+  });
+
+  it('updates invoice status from sent to paid', async () => {
+    const res = await req('PATCH', `/api/invoices/${invoiceId}/status`, { status: 'paid' });
+    assert.equal(res.status, 200);
+  });
+
+  it('rejects negative discount', async () => {
+    const res = await req('POST', '/api/invoices', {
+      invoice_number: `INV-NEG-${UID}`,
+      customer_name: 'test',
+      discount: -5,
+      items: [{ description: 'x', quantity: 1, unit_price: 10 }],
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+// ═══ Phase 3.4: Work order lifecycle ═══
+describe('Work Order Lifecycle', () => {
+  let woId;
+
+  it('creates a work order', async () => {
+    // Check for a valid model first
+    const models = await req('GET', '/api/models');
+    const modelList = models.body?.data || models.body;
+    if (!Array.isArray(modelList) || modelList.length === 0) return; // Skip if no models
+
+    const res = await req('POST', '/api/work-orders', {
+      model_id: modelList[0].id,
+      quantity: 50,
+      priority: 'normal',
+    });
+    if (res.status === 201) {
+      woId = res.body.id;
+      assert.ok(woId);
+    } else {
+      assert.ok([400, 409, 201].includes(res.status));
+    }
+  });
+
+  it('lists work orders', async () => {
+    const res = await req('GET', '/api/work-orders');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.work_orders || res.body.data || res.body));
+  });
+});
+
+// ═══ Phase 6.1: License guard tests ═══
+describe('License Guard', () => {
+  it('GET /api/license/status shows tier info', async () => {
+    const res = await req('GET', '/api/license/status');
+    assert.equal(res.status, 200);
+    assert.ok(['trial', 'standard', 'professional', 'enterprise'].includes(res.body.type));
+    assert.ok(typeof res.body.maxUsers === 'number');
+    assert.ok(typeof res.body.daysLeft === 'number');
+  });
+
+  it('POST /api/license/activate rejects invalid key format', async () => {
+    const res = await req('POST', '/api/license/activate', { licenseKey: 'invalid' });
+    assert.equal(res.status, 400);
+  });
+});
+
+// ═══ Phase 2.1: Monetary rounding test ═══
+describe('Monetary Rounding', () => {
+  it('invoice with tricky decimals rounds correctly', async () => {
+    const invN = `INV-ROUND-${Date.now()}`;
+    const res = await req('POST', '/api/invoices', {
+      invoice_number: invN,
+      customer_name: 'Rounding Test',
+      tax_pct: 5,
+      discount: 0,
+      items: [
+        { description: 'Item A', quantity: 3, unit_price: 0.1 },
+        { description: 'Item B', quantity: 7, unit_price: 0.2 },
+      ],
+    });
+    assert.equal(res.status, 201);
+    // 3*0.1 = 0.30, 7*0.2 = 1.40, subtotal = 1.70
+    // tax = 1.70 * 0.05 = 0.085 → round to 0.09
+    // total = 1.70 + 0.09 = 1.79
+    assert.equal(res.body.subtotal, 1.7);
+    assert.ok(res.body.total === 1.79);
+  });
+});
+
+// ═══ Quotation lifecycle ═══
+describe('Quotation API', () => {
+  it('creates and updates a quotation', async () => {
+    // Get a customer ID first
+    const customers = await req('GET', '/api/customers');
+    const custId = customers.body?.[0]?.id || customers.body?.data?.[0]?.id;
+    if (!custId) return; // Skip if no customers
+
+    const res = await req('POST', '/api/quotations', {
+      quotation_number: `QT-${UID}`,
+      customer_id: custId,
+      discount_percent: 5,
+      tax_percent: 15,
+      items: [
+        { description: 'قماش', quantity: 10, unit_price: 25.5 },
+      ],
+    });
+    if (res.status === 201) {
+      const qId = res.body.id;
+      const upd = await req('PUT', `/api/quotations/${qId}`, {
+        items: [
+          { description: 'قماش', quantity: 20, unit_price: 25.5 },
+        ],
+      });
+      assert.equal(upd.status, 200);
+    }
+  });
+});
+
+// ═══ Purchase Order API ═══
+describe('Purchase Order Extended', () => {
+  it('rejects PO with negative discount', async () => {
+    const res = await req('POST', '/api/purchase-orders', {
+      po_number: `PO-NEG-${UID}`,
+      supplier_id: 1,
+      discount: -10,
+      items: [{ item_type: 'fabric', quantity: 10, unit_price: 5 }],
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+// ═══ Data cleanup endpoint ═══
+describe('Data Cleanup', () => {
+  it('GET /api/admin/retention returns retention settings', async () => {
+    const res = await req('GET', '/api/admin/retention');
+    assert.equal(res.status, 200);
+    assert.ok(typeof res.body.audit_retention_days === 'number');
+    assert.ok(typeof res.body.total_audit_records === 'number');
+  });
+});

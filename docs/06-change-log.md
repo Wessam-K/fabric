@@ -5,6 +5,30 @@
 
 ---
 
+## Phase Q — Enterprise Hardening v3.5 (2026-04-01)
+
+### License Tier Enforcement
+- **middleware/licenseGuard.js** (NEW): `requireFeature(name)`, `requireTier(minTier)`, `requireUserLimit()` — returns 403 with `license_error: true` and upgrade information for frontend
+- **routes/users.js**: `POST /` now calls `requireUserLimit()` to enforce seat count
+- **server.js**: `POST /api/webhooks` gated by `requireFeature('webhooks')`
+
+### Data Retention Cleanup
+- **utils/cleanup.js** (NEW): Automated cleanup functions — `cleanOldAuditLogs()`, `cleanOldNotifications()`, `cleanOldRevokedTokens()`, `cleanExpiredResetTokens()`, `runAllCleanups()`
+- **server.js**: Midnight-scheduled cleanup job (daily interval, skipped in test mode); reads `audit_retention_days` (default 365) and `notification_retention_days` (default 90) from settings
+
+### Monetary Rounding Audit
+- **utils/money.js**: Fixed critical `safeAdd()` bug — reduce accumulator was double-converted to piasters via `toPiasters(a)` causing e.g. subtotal 1.70 → 31.40
+- **routes/invoices.js**: Imported `money.js`; replaced all raw `s + qty * price` loops, `Math.round(x*100)/100`, and subtotal/tax/total arithmetic with `safeAdd`, `safeMultiply`, `safeSubtract`, `round2`
+- **routes/quotations.js**: Same monetary safety refactor for POST and PUT
+- **routes/purchaseorders.js**: Same monetary safety refactor for POST and PUT
+- **routes/exports.js**: Removed local `round2` function; imported from `money.js`; net profit uses `safeSubtract`
+
+### Test Expansion
+- 13 new test cases: Invoice Financial Lifecycle (4), Work Order Lifecycle (2), License Guard (2), Monetary Rounding (1), Quotation API (1), Purchase Order Extended (1), Data Cleanup (1)
+- **Total: 125 tests, 125 pass, 0 fail**
+
+---
+
 ## Phase P — Enterprise Hardening v3.4 (2026-03-31)
 
 ### Security — CSRF Protection

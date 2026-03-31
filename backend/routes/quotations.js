@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
+const { round2, safeMultiply, safeAdd, safeSubtract } = require('../utils/money');
 
 // ═══════════════════════════════════════════════
 // QUOTATIONS
@@ -54,11 +55,11 @@ router.post('/', requirePermission('quotations', 'create'), (req, res) => {
     if (tax_percent != null && (parseFloat(tax_percent) < 0 || parseFloat(tax_percent) > 100)) return res.status(400).json({ error: 'نسبة الضريبة يجب أن تكون بين 0 و 100' });
 
     let subtotal = 0;
-    for (const it of items) { subtotal += (it.quantity || 0) * (it.unit_price || 0); }
-    const discountAmt = subtotal * (parseFloat(discount_percent) || 0) / 100;
-    const afterDiscount = subtotal - discountAmt;
-    const taxAmt = afterDiscount * (parseFloat(tax_percent) || 0) / 100;
-    const total = afterDiscount + taxAmt;
+    for (const it of items) { subtotal = safeAdd(subtotal, safeMultiply(it.quantity || 0, it.unit_price || 0)); }
+    const discountAmt = round2(subtotal * (parseFloat(discount_percent) || 0) / 100);
+    const afterDiscount = safeSubtract(subtotal, discountAmt);
+    const taxAmt = round2(afterDiscount * (parseFloat(tax_percent) || 0) / 100);
+    const total = safeAdd(afterDiscount, taxAmt);
 
     const qId = db.transaction(() => {
       const result = db.prepare(`INSERT INTO quotations 
@@ -69,7 +70,7 @@ router.post('/', requirePermission('quotations', 'create'), (req, res) => {
       const id = result.lastInsertRowid;
       const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit, unit_price, total_price, notes) VALUES (?,?,?,?,?,?,?)');
       for (const it of items) {
-        ins.run(id, it.description, it.quantity, it.unit || 'pc', it.unit_price, (it.quantity || 0) * (it.unit_price || 0), it.notes || null);
+        ins.run(id, it.description, it.quantity, it.unit || 'pc', it.unit_price, safeMultiply(it.quantity || 0, it.unit_price || 0), it.notes || null);
       }
       return id;
     })();
@@ -95,13 +96,13 @@ router.put('/:id', requirePermission('quotations', 'edit'), (req, res) => {
       let subtotal = old.subtotal;
       if (items?.length) {
         subtotal = 0;
-        for (const it of items) { subtotal += (it.quantity || 0) * (it.unit_price || 0); }
+        for (const it of items) { subtotal = safeAdd(subtotal, safeMultiply(it.quantity || 0, it.unit_price || 0)); }
       }
       const dp = discount_percent ?? old.discount_percent;
       const tp = tax_percent ?? old.tax_percent;
-      const discountAmt = subtotal * dp / 100;
-      const taxAmt = (subtotal - discountAmt) * tp / 100;
-      const total = subtotal - discountAmt + taxAmt;
+      const discountAmt = round2(subtotal * dp / 100);
+      const taxAmt = round2(safeSubtract(subtotal, discountAmt) * tp / 100);
+      const total = safeAdd(safeSubtract(subtotal, discountAmt), taxAmt);
 
       db.prepare(`UPDATE quotations SET customer_id=COALESCE(?,customer_id), valid_until=COALESCE(?,valid_until),
         notes=COALESCE(?,notes), subtotal=?, discount_percent=?, discount_amount=?, tax_percent=?, tax_amount=?, total=?,
@@ -112,7 +113,7 @@ router.put('/:id', requirePermission('quotations', 'edit'), (req, res) => {
         db.prepare('DELETE FROM quotation_items WHERE quotation_id=?').run(id);
         const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit, unit_price, total_price, notes) VALUES (?,?,?,?,?,?,?)');
         for (const it of items) {
-          ins.run(id, it.description, it.quantity, it.unit || 'pc', it.unit_price, (it.quantity || 0) * (it.unit_price || 0), it.notes || null);
+          ins.run(id, it.description, it.quantity, it.unit || 'pc', it.unit_price, safeMultiply(it.quantity || 0, it.unit_price || 0), it.notes || null);
         }
       }
     })();

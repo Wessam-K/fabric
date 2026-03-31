@@ -9,6 +9,7 @@ const db = require('../database');
 // 1.1: Replaced xlsx (2 HIGH CVEs) with exceljs — safe, actively maintained
 const ExcelJS = require('exceljs');
 const { requirePermission } = require('../middleware/auth');
+const { round2, safeSubtract } = require('../utils/money');
 
 // ─── HELPERS ────────────────────────────────────
 const BOM = '\uFEFF';
@@ -64,8 +65,6 @@ function dateFilter(req) {
   const to = req.query.to || '2099-12-31';
   return { from, to };
 }
-
-const round2 = v => Math.round((v || 0) * 100) / 100;
 
 // ═══════════════════════════════════════════════
 // 1. SUPPLIERS REPORT (by supplier: POs, spending, fabric types)
@@ -446,7 +445,7 @@ router.get('/financial-summary', requirePermission('reports', 'view'), async (re
       total_purchases: round2(r.total_purchases || 0),
       total_paid_suppliers: round2(r.total_paid_suppliers || 0),
       total_expenses: round2(r.total_expenses || 0),
-      net_profit: round2((r.paid_revenue || 0) - (r.total_paid_suppliers || 0) - (r.total_expenses || 0)),
+      net_profit: round2(safeSubtract(r.paid_revenue || 0, (r.total_paid_suppliers || 0) + (r.total_expenses || 0))),
     }));
 
     const cols = ['month','paid_revenue','total_invoiced','invoice_count','total_purchases','total_paid_suppliers','total_expenses','net_profit'];

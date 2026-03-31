@@ -4,6 +4,7 @@ const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
 const { fireWebhook } = require('../utils/webhooks');
+const { round2, safeMultiply, safeAdd, safeSubtract } = require('../utils/money');
 
 // GET /api/purchase-orders — list
 router.get('/', requirePermission('purchase_orders', 'view'), (req, res) => {
@@ -108,14 +109,14 @@ router.post('/', requirePermission('purchase_orders', 'create'), (req, res) => {
 
     if (tax_pct != null && (parseFloat(tax_pct) < 0 || parseFloat(tax_pct) > 100)) return res.status(400).json({ error: 'نسبة الضريبة يجب أن تكون بين 0 و 100' });
     if (discount != null && parseFloat(discount) < 0) return res.status(400).json({ error: 'الخصم لا يمكن أن يكون سالباً' });
-    const preSubtotal = (items || []).reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
+    const preSubtotal = (items || []).reduce((s, i) => safeAdd(s, safeMultiply(i.quantity || 0, i.unit_price || 0)), 0);
     if ((parseFloat(discount) || 0) > preSubtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
 
     const transaction = db.transaction(() => {
       const subtotal = preSubtotal;
       const disc = parseFloat(discount) || 0;
-      const taxAmt = (subtotal - disc) * ((parseFloat(tax_pct) || 0) / 100);
-      const totalAmount = subtotal - disc + taxAmt;
+      const taxAmt = round2(safeSubtract(subtotal, disc) * ((parseFloat(tax_pct) || 0) / 100));
+      const totalAmount = round2(safeAdd(safeSubtract(subtotal, disc), taxAmt));
       const r = db.prepare(`INSERT INTO purchase_orders (po_number,supplier_id,po_type,expected_date,total_amount,tax_pct,discount,notes) VALUES (?,?,?,?,?,?,?,?)`)
         .run(po_number, supplier_id, po_type || 'fabric', expected_date || null, totalAmount, parseFloat(tax_pct) || 0, parseFloat(discount) || 0, notes || null);
       const poId = r.lastInsertRowid;
@@ -156,15 +157,16 @@ router.put('/:id', requirePermission('purchase_orders', 'edit'), (req, res) => {
     const transaction = db.transaction(() => {
       let subtotal;
       if (items) {
-        subtotal = items.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
+        subtotal = items.reduce((s, i) => safeAdd(s, safeMultiply(i.quantity || 0, i.unit_price || 0)), 0);
       } else {
         // Recalculate from existing items when tax/discount changes
         const existingItems = db.prepare('SELECT quantity, unit_price FROM purchase_order_items WHERE po_id=?').all(poId);
-        subtotal = existingItems.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
+        subtotal = existingItems.reduce((s, i) => safeAdd(s, safeMultiply(i.quantity || 0, i.unit_price || 0)), 0);
       }
       const taxPct = tax_pct !== undefined ? parseFloat(tax_pct) || 0 : existing.tax_pct || 0;
       const disc = discount !== undefined ? parseFloat(discount) || 0 : existing.discount || 0;
-      const totalAmount = (subtotal - disc) + (subtotal - disc) * (taxPct / 100);
+      const afterDisc = safeSubtract(subtotal, disc);
+      const totalAmount = round2(safeAdd(afterDisc, round2(afterDisc * (taxPct / 100))));
       db.prepare(`UPDATE purchase_orders SET supplier_id=COALESCE(?,supplier_id),po_type=COALESCE(?,po_type),expected_date=?,total_amount=?,tax_pct=?,discount=?,notes=COALESCE(?,notes) WHERE id=?`)
         .run(supplier_id ?? null, po_type || null, expected_date || null, totalAmount, taxPct, disc, notes || null, poId);
 

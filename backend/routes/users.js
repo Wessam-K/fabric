@@ -5,6 +5,7 @@ const router = express.Router();
 const db = require('../database');
 const { requireRole, logAudit } = require('../middleware/auth');
 const { validatePassword } = require('../utils/validators');
+const { requireUserLimit } = require('../middleware/licenseGuard');
 
 // ═══ Phase 2.1: User Invitations (MUST be before /:id routes) ═══
 
@@ -71,8 +72,8 @@ router.get('/', requireRole('superadmin'), (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
-// POST /api/users — create user (superadmin only)
-router.post('/', requireRole('superadmin'), (req, res) => {
+// POST /api/users — create user (superadmin only, license user limit enforced)
+router.post('/', requireRole('superadmin'), requireUserLimit(), (req, res) => {
   try {
     const { username, full_name, email, role, department, password, employee_id } = req.body;
     if (!username || !full_name || !password) return res.status(400).json({ error: 'الحقول الأساسية مطلوبة' });

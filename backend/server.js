@@ -386,13 +386,16 @@ app.post('/api/setup/create-admin', (req, res) => {
 });
 
 // ═══ Protected routes ═══
-// Phase 3.6: Webhook management endpoints (superadmin only)
+// Phase 6.1: License tier enforcement
+const { requireFeature, requireTier } = require('./middleware/licenseGuard');
+
+// Phase 3.6: Webhook management endpoints (superadmin only, requires professional+)
 const { createWebhook, listWebhooks, deleteWebhook, getWebhookLogs } = require('./utils/webhooks');
 app.get('/api/webhooks', requireAuth, (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
   res.json(listWebhooks());
 });
-app.post('/api/webhooks', requireAuth, (req, res) => {
+app.post('/api/webhooks', requireAuth, requireFeature('webhooks'), (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
   const { name, url, events, secret } = req.body;
   if (!name || !url || !events?.length) return res.status(400).json({ error: 'الاسم والرابط والأحداث مطلوبة' });
@@ -943,6 +946,21 @@ const server = app.listen(PORT, () => {
     try { backupFn(); logger.info('Auto-backup completed'); }
     catch (e) { logger.error('Auto-backup failed', { error: e.message }); }
   }, backupIntervalHours * 60 * 60 * 1000);
+
+  // Phase 2.5: Data retention cleanup — run daily at midnight
+  const { runAllCleanups } = require('./utils/cleanup');
+  if (process.env.NODE_ENV !== 'test') {
+    const msUntilMidnight = () => {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      return midnight - now;
+    };
+    setTimeout(() => {
+      runAllCleanups();
+      setInterval(runAllCleanups, 24 * 60 * 60 * 1000);
+    }, msUntilMidnight());
+  }
 });
 
 // ═══ Graceful shutdown ═══

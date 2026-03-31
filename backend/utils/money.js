@@ -35,7 +35,7 @@ function fromPiasters(piasters) {
  * @returns {number}
  */
 function safeAdd(...amounts) {
-  const total = amounts.reduce((a, b) => toPiasters(a) + toPiasters(b), 0);
+  const total = amounts.reduce((a, b) => a + toPiasters(b), 0);
   return fromPiasters(total);
 }
 

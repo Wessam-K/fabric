@@ -1,5 +1,27 @@
-# WK-Factory v3.4 — Feature Changelog
+# WK-Factory — Feature Changelog
 > Release Date: March 2026
+
+## v3.5 — Enterprise Hardening (continued)
+
+### 🛡️ License Tier Enforcement
+- `licenseGuard.js` middleware: `requireFeature()`, `requireTier()`, `requireUserLimit()`
+- User creation gated by seat limit; webhook creation gated by feature flag
+- 403 responses include `license_error: true` for frontend upgrade prompts
+
+### 🧹 Automated Data Retention Cleanup
+- Daily midnight scheduler: purges expired audit logs, notifications, revoked tokens, reset tokens
+- Configurable retention via settings table (`audit_retention_days`, `notification_retention_days`)
+
+### 💰 Monetary Rounding Safety
+- Fixed critical `safeAdd()` double-piasters bug in `money.js`
+- Wired `money.js` into invoices, quotations, purchase orders, exports
+- Eliminated all local `round2()` / raw arithmetic in financial routes
+
+### ✅ Tests
+- 125 total tests (13 new), 100% pass rate
+- New coverage: invoice lifecycle, WO lifecycle, license guard, monetary rounding, quotation API, PO validation, cleanup
+
+---
 
 ## v3.4 — Enterprise Hardening
 

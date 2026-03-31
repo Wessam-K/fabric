@@ -4,6 +4,7 @@ const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
 const { fireWebhook } = require('../utils/webhooks');
+const { round2, safeMultiply, safeAdd, safeSubtract } = require('../utils/money');
 
 // GET /api/invoices — list with search, status filter, date range
 router.get('/', requirePermission('invoices', 'view'), (req, res) => {
@@ -94,11 +95,11 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
     const exists = db.prepare('SELECT id FROM invoices WHERE invoice_number = ?').get(invoice_number);
     if (exists) return res.status(409).json({ error: 'رقم الفاتورة موجود بالفعل' });
 
-    const subtotal = (items || []).reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
+    const subtotal = (items || []).reduce((s, item) => safeAdd(s, safeMultiply(parseFloat(item.quantity) || 0, parseFloat(item.unit_price) || 0)), 0);
     const discountAmt = parseFloat(discount) || 0;
     if (discountAmt > subtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
-    const taxAmt = Math.round((subtotal - discountAmt) * ((parseFloat(tax_pct) || 0) / 100) * 100) / 100;
-    const total = Math.round((subtotal - discountAmt + taxAmt) * 100) / 100;
+    const taxAmt = round2(safeSubtract(subtotal, discountAmt) * ((parseFloat(tax_pct) || 0) / 100));
+    const total = round2(safeAdd(safeSubtract(subtotal, discountAmt), taxAmt));
 
     const invoiceId = db.transaction(() => {
       const result = db.prepare(`INSERT INTO invoices (invoice_number, customer_name, customer_phone, customer_email, customer_id, notes, subtotal, tax_pct, discount, total, status, due_date)
@@ -113,7 +114,7 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
         items.forEach((item, i) => {
           const qty = parseFloat(item.quantity) || 0;
           const price = parseFloat(item.unit_price) || 0;
-          insItem.run(id, item.model_code || null, item.description, item.variant || null, qty, price, qty * price, i);
+          insItem.run(id, item.model_code || null, item.description, item.variant || null, qty, price, safeMultiply(qty, price), i);
         });
       }
 
@@ -154,17 +155,17 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
     let subtotal = invoice.subtotal;
     let total = invoice.total;
     if (items) {
-      subtotal = items.reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
+      subtotal = items.reduce((s, item) => safeAdd(s, safeMultiply(parseFloat(item.quantity) || 0, parseFloat(item.unit_price) || 0)), 0);
       const disc = parseFloat(discount) || invoice.discount || 0;
       if (disc > subtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
-      const taxAmt = Math.round((subtotal - disc) * ((parseFloat(tax_pct) || invoice.tax_pct || 0) / 100) * 100) / 100;
-      total = Math.round((subtotal - disc + taxAmt) * 100) / 100;
+      const taxAmt = round2(safeSubtract(subtotal, disc) * ((parseFloat(tax_pct) || invoice.tax_pct || 0) / 100));
+      total = round2(safeAdd(safeSubtract(subtotal, disc), taxAmt));
     } else if (tax_pct !== undefined || discount !== undefined) {
       subtotal = invoice.subtotal;
       const disc = (parseFloat(discount) ?? invoice.discount) || 0;
       if (disc > subtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
-      const taxAmt = Math.round((subtotal - disc) * (((parseFloat(tax_pct) ?? invoice.tax_pct) || 0) / 100) * 100) / 100;
-      total = Math.round((subtotal - disc + taxAmt) * 100) / 100;
+      const taxAmt = round2(safeSubtract(subtotal, disc) * (((parseFloat(tax_pct) ?? invoice.tax_pct) || 0) / 100));
+      total = round2(safeAdd(safeSubtract(subtotal, disc), taxAmt));
     }
 
     db.transaction(() => {
@@ -182,7 +183,7 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
         items.forEach((item, i) => {
           const qty = parseFloat(item.quantity) || 0;
           const price = parseFloat(item.unit_price) || 0;
-          insItem.run(invoice.id, item.model_code || null, item.description, item.variant || null, qty, price, qty * price, i);
+          insItem.run(invoice.id, item.model_code || null, item.description, item.variant || null, qty, price, safeMultiply(qty, price), i);
         });
       }
     })();
