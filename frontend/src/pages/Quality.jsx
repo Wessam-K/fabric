@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
+import HelpButton from '../components/HelpButton';
 
 const TABS = [
   { key: 'inspections', label: 'الفحوصات', icon: ClipboardCheck },
@@ -23,7 +24,7 @@ export default function Quality() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto">
-      <PageHeader title="مراقبة الجودة" icon={Shield} />
+      <PageHeader title="مراقبة الجودة" icon={Shield} action={<HelpButton pageKey="quality" />} />
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">

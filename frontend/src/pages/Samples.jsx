@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
+import HelpButton from '../components/HelpButton';
 
 const STATUS_COLORS = { requested: 'bg-gray-100 text-gray-700', in_progress: 'bg-yellow-100 text-yellow-700', completed: 'bg-blue-100 text-blue-700', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700', in_production: 'bg-purple-100 text-purple-700', cancelled: 'bg-red-100 text-red-700' };
 const STATUS_LABELS = { requested: 'مطلوبة', in_progress: 'قيد التنفيذ', completed: 'مكتملة', approved: 'معتمدة', rejected: 'مرفوضة', in_production: 'في الإنتاج', cancelled: 'ملغاة' };
@@ -76,7 +77,7 @@ export default function Samples() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto">
-      <PageHeader title="إدارة العينات" icon={Beaker} count={total} />
+      <PageHeader title="إدارة العينات" icon={Beaker} count={total} action={<HelpButton pageKey="samples" />} />
 
       <div className="flex flex-wrap gap-3 mb-6 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-sm">

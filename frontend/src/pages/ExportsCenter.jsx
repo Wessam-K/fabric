@@ -3,6 +3,7 @@ import { Download, FileSpreadsheet, FileText, Search, Calendar, Loader2, CheckCi
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import HelpButton from '../components/HelpButton';
 
 const ICON_MAP = {
   Users, Scissors, Package, DollarSign, TrendingUp, Warehouse, AlertTriangle,
@@ -103,7 +104,7 @@ export default function ExportsCenter() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="مركز التصدير" subtitle={`${catalog.length} تقرير متاح للتصدير`} />
+      <PageHeader title="مركز التصدير" subtitle={`${catalog.length} تقرير متاح للتصدير`} action={<HelpButton pageKey="exportscenter" />} />
 
       {/* Filters */}
       <div className="bg-white rounded-2xl shadow-sm p-4">

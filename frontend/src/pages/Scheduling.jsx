@@ -5,6 +5,7 @@ import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
+import HelpButton from '../components/HelpButton';
 
 const STATUS_COLORS = { scheduled: '#3b82f6', in_progress: '#f59e0b', completed: '#22c55e', cancelled: '#ef4444', delayed: '#ef4444' };
 const STATUS_LABELS = { scheduled: 'مجدول', in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغي', delayed: 'متأخر' };
@@ -81,7 +82,7 @@ export default function Scheduling() {
 
   return (
     <div className="p-4 lg:p-6 max-w-[1400px] mx-auto">
-      <PageHeader title="جدولة الإنتاج" icon={Calendar} />
+      <PageHeader title="جدولة الإنتاج" icon={Calendar} action={<HelpButton pageKey="scheduling" />} />
 
       <div className="flex flex-wrap gap-3 mb-6 items-center">
         <div className="flex items-center gap-2 bg-white border rounded-lg px-3 py-1.5">

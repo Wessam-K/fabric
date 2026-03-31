@@ -2,6 +2,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const router = express.Router();
+const inviteRouter = express.Router();
 const db = require('../database');
 const { requireRole, logAudit } = require('../middleware/auth');
 const { validatePassword } = require('../utils/validators');
@@ -58,6 +59,90 @@ router.delete('/invitations/:id', requireRole('superadmin'), (req, res) => {
   try {
     db.prepare('DELETE FROM user_invitations WHERE id = ? AND accepted_at IS NULL').run(req.params.id);
     res.json({ message: 'تم إلغاء الدعوة' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/users/invite/validate/:token — validate invitation token (public)
+router.get('/invite/validate/:token', (req, res) => {
+  try {
+    const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex');
+    const invite = db.prepare(
+      "SELECT id, email, role, department FROM user_invitations WHERE token_hash = ? AND accepted_at IS NULL AND expires_at > datetime('now','localtime')"
+    ).get(tokenHash);
+    if (!invite) return res.status(404).json({ error: 'رابط الدعوة غير صالح أو منتهي الصلاحية' });
+    res.json({ email: invite.email, role: invite.role, department: invite.department });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// Public invite router (mounted without auth in server.js)
+inviteRouter.get('/validate/:token', (req, res) => {
+  try {
+    const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex');
+    const invite = db.prepare(
+      "SELECT id, email, role, department FROM user_invitations WHERE token_hash = ? AND accepted_at IS NULL AND expires_at > datetime('now','localtime')"
+    ).get(tokenHash);
+    if (!invite) return res.status(404).json({ error: 'رابط الدعوة غير صالح أو منتهي الصلاحية' });
+    res.json({ email: invite.email, role: invite.role, department: invite.department });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/users/invite/accept — accept invitation and create user (public)
+router.post('/invite/accept', (req, res) => {
+  try {
+    const { token, username, full_name, password } = req.body;
+    if (!token || !username || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
+    if (username.length < 3) return res.status(400).json({ error: 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل' });
+
+    const passCheck = validatePassword(password);
+    if (!passCheck.valid) return res.status(400).json({ error: passCheck.message });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const invite = db.prepare(
+      "SELECT id, email, role, department FROM user_invitations WHERE token_hash = ? AND accepted_at IS NULL AND expires_at > datetime('now','localtime')"
+    ).get(tokenHash);
+    if (!invite) return res.status(400).json({ error: 'رابط الدعوة غير صالح أو منتهي الصلاحية' });
+
+    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+    if (existing) return res.status(400).json({ error: 'اسم المستخدم مستخدم بالفعل' });
+
+    const hash = bcrypt.hashSync(password, 10);
+    const result = db.prepare(
+      'INSERT INTO users (username, full_name, email, password_hash, role, department, status) VALUES (?,?,?,?,?,?,?)'
+    ).run(username, full_name || username, invite.email, hash, invite.role, invite.department, 'active');
+
+    db.prepare("UPDATE user_invitations SET accepted_at = datetime('now','localtime') WHERE id = ?").run(invite.id);
+
+    res.status(201).json({ message: 'تم إنشاء الحساب بنجاح', user_id: result.lastInsertRowid });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// Public invite accept (mounted without auth)
+inviteRouter.post('/accept', (req, res) => {
+  try {
+    const { token, username, full_name, password } = req.body;
+    if (!token || !username || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
+    if (username.length < 3) return res.status(400).json({ error: 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل' });
+
+    const passCheck = validatePassword(password);
+    if (!passCheck.valid) return res.status(400).json({ error: passCheck.message });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const invite = db.prepare(
+      "SELECT id, email, role, department FROM user_invitations WHERE token_hash = ? AND accepted_at IS NULL AND expires_at > datetime('now','localtime')"
+    ).get(tokenHash);
+    if (!invite) return res.status(400).json({ error: 'رابط الدعوة غير صالح أو منتهي الصلاحية' });
+
+    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+    if (existing) return res.status(400).json({ error: 'اسم المستخدم مستخدم بالفعل' });
+
+    const hash = bcrypt.hashSync(password, 10);
+    const result = db.prepare(
+      'INSERT INTO users (username, full_name, email, password_hash, role, department, status) VALUES (?,?,?,?,?,?,?)'
+    ).run(username, full_name || username, invite.email, hash, invite.role, invite.department, 'active');
+
+    db.prepare("UPDATE user_invitations SET accepted_at = datetime('now','localtime') WHERE id = ?").run(invite.id);
+
+    res.status(201).json({ message: 'تم إنشاء الحساب بنجاح', user_id: result.lastInsertRowid });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -166,3 +251,4 @@ router.delete('/:id', requireRole('superadmin'), (req, res) => {
 });
 
 module.exports = router;
+module.exports.inviteRouter = inviteRouter;

@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { HelpCircle, X, ChevronDown, ChevronLeft, Search, BookOpen, Lightbulb, AlertTriangle, ArrowLeft, Zap, Link2, Keyboard, CheckCircle, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import helpContentFull from '../utils/helpContentFull';
+import { useTranslation } from 'react-i18next';
+import helpContentAr from '../utils/helpContentFull';
+import helpContentEn from '../utils/helpContentFull_en';
 
 const TABS = [
   { id: 'overview', label: 'نظرة عامة', icon: Info },
@@ -19,7 +21,9 @@ export default function HelpButton({ pageKey }) {
   const [searchQuery, setSearchQuery] = useState('');
   const panelRef = useRef(null);
   const navigate = useNavigate();
+  const { i18n } = useTranslation();
 
+  const helpContentFull = i18n.language === 'en' ? helpContentEn : helpContentAr;
   const content = helpContentFull[pageKey];
 
   // Close on Escape

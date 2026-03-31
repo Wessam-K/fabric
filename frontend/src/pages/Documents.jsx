@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmDialog';
+import HelpButton from '../components/HelpButton';
 
 const CATEGORY_LABELS = { general: 'عام', contract: 'عقد', invoice: 'فاتورة', report: 'تقرير', certificate: 'شهادة', specification: 'مواصفات', drawing: 'رسم', photo: 'صورة', other: 'أخرى' };
 
@@ -81,7 +82,7 @@ export default function Documents() {
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto">
       <ConfirmDialog />
-      <PageHeader title="المستندات" icon={FileText} />
+      <PageHeader title="المستندات" icon={FileText} action={<HelpButton pageKey="documents" />} />
 
       <div className="flex flex-wrap gap-3 items-center mb-6">
         <div className="relative flex-1 min-w-[200px]">

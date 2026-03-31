@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
+import HelpButton from '../components/HelpButton';
 
 const STATUS_COLORS = { pending: 'bg-yellow-100 text-yellow-700', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' };
 const STATUS_LABELS = { pending: 'قيد الانتظار', approved: 'معتمد', rejected: 'مرفوض' };
@@ -17,7 +18,7 @@ export default function Returns() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto">
-      <PageHeader title="المرتجعات" icon={RotateCcw} />
+      <PageHeader title="المرتجعات" icon={RotateCcw} action={<HelpButton pageKey="returns" />} />
 
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
         <button onClick={() => setTab('sales')} className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'sales' ? 'bg-white shadow text-[#1a1a2e]' : 'text-gray-500'}`}>مرتجعات المبيعات</button>

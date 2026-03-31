@@ -1,6 +1,41 @@
 # WK-Factory — Feature Changelog
 > Release Date: March 2026
 
+## v3.6 — Enterprise Hardening Phase 6
+
+### 🌐 Bilingual Help System
+- Full English translations for all 45 help content entries (`helpContentFull_en.js`)
+- HelpButton auto-switches AR/EN based on i18n language setting
+- HelpButton added to 9 additional pages: ExportsCenter, SalesOrders, MRP, Scheduling, Quality, Returns, Samples, Documents, Backups
+
+### 📨 User Invitation Flow
+- `AcceptInvite.jsx` — self-registration page with token validation
+- Public endpoints: `GET /api/users/invite/validate/:token`, `POST /api/users/invite/accept`
+- Password strength validation, username uniqueness check
+
+### 📝 Form Validation Hook
+- `useFormValidation.js` — reusable schema-based validation hook
+- Supports required, min/max length, pattern, custom validators
+
+### 🔄 Bulk Import Tracking
+- Migration 007: `import_jobs` + `user_preferences` tables (DB version 40)
+- `GET /api/import/jobs/:id` — import job progress endpoint
+- `GET/PUT /api/users/preferences/:key` — server-side user preferences
+
+### ⬆️ License Upgrade UX
+- `UpgradePrompt.jsx` — tier comparison modal with key activation
+
+### 📖 Documentation
+- `docs/DOCKER.md` — Docker deployment guide
+- `docs/USER_MANUAL.md` — Bilingual user manual
+- `docs/DEVELOPER.md` — Developer onboarding guide
+
+### ✅ Tests
+- 131 tests passing (up from 125)
+- New tests: user preferences CRUD, import jobs 404, invite validation/rejection
+
+---
+
 ## v3.5 — Enterprise Hardening (continued)
 
 ### 🛡️ License Tier Enforcement

@@ -64,6 +64,7 @@ const Returns = lazy(() => import('./pages/Returns'));
 const Documents = lazy(() => import('./pages/Documents'));
 const Backups = lazy(() => import('./pages/Backups'));
 const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
+const AcceptInvite = lazy(() => import('./pages/AcceptInvite'));
 import QuickActions from './components/QuickActions';
 import HelpButton from './components/HelpButton';
 import OnboardingTour from './components/OnboardingTour'; // Phase 4.8
@@ -518,6 +519,7 @@ function AuthRouter() {
       {needsSetup && <Route path="*" element={<Setup />} />}
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/setup" element={needsSetup ? <Setup /> : <Navigate to="/login" replace />} />
+      <Route path="/accept-invite" element={<AcceptInvite />} />
       <Route path="/models/:code/print" element={user ? <PrintView /> : <Navigate to="/login" replace />} />
       <Route path="/models/:code/invoice" element={user ? <InvoicePrint /> : <Navigate to="/login" replace />} />
       <Route path="/invoices/:id/view" element={user ? <InvoiceView /> : <Navigate to="/login" replace />} />

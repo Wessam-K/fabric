@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
+import HelpButton from '../components/HelpButton';
 
 const STATUS_COLORS = { confirmed: 'bg-blue-100 text-blue-700', in_production: 'bg-yellow-100 text-yellow-700', shipped: 'bg-purple-100 text-purple-700', delivered: 'bg-green-100 text-green-700', cancelled: 'bg-red-100 text-red-700' };
 const STATUS_LABELS = { confirmed: 'مؤكد', in_production: 'قيد الإنتاج', shipped: 'تم الشحن', delivered: 'تم التسليم', cancelled: 'ملغي' };
@@ -58,7 +59,7 @@ export default function SalesOrders() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto">
-      <PageHeader title="أوامر البيع" icon={ShoppingCart} count={total} />
+      <PageHeader title="أوامر البيع" icon={ShoppingCart} count={total} action={<HelpButton pageKey="salesorders" />} />
 
       <div className="flex flex-wrap gap-3 mb-6 items-center">
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="border rounded-lg px-3 py-2 text-sm">

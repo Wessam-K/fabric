@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
+import HelpButton from '../components/HelpButton';
 
 const STATUS_COLORS = { draft: 'bg-gray-100 text-gray-700', running: 'bg-blue-100 text-blue-700', confirmed: 'bg-green-100 text-green-700', cancelled: 'bg-red-100 text-red-700' };
 const STATUS_LABELS = { draft: 'مسودة', running: 'قيد التنفيذ', confirmed: 'مؤكد', cancelled: 'ملغي' };
@@ -69,7 +70,7 @@ export default function MRP() {
 
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto">
-      <PageHeader title="تخطيط الاحتياجات — MRP" icon={Package} count={runs.length} />
+      <PageHeader title="تخطيط الاحتياجات — MRP" icon={Package} count={runs.length} action={<HelpButton pageKey="mrp" />} />
 
       <div className="flex flex-wrap gap-3 mb-6">
         <PermissionGuard module="mrp" action="create">

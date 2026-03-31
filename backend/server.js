@@ -356,6 +356,35 @@ app.post('/api/admin/retention/purge', requireAuth, (req, res) => {
   } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// ═══ Phase 3.1: Import job progress tracking ═══
+app.get('/api/import/jobs/:id', requireAuth, (req, res) => {
+  try {
+    const job = db.prepare('SELECT * FROM import_jobs WHERE id = ?').get(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    res.json({ ...job, errors: job.errors ? JSON.parse(job.errors) : [] });
+  } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// ═══ Phase 4.4: User preferences (server-side persistence) ═══
+app.get('/api/users/preferences/:key', requireAuth, (req, res) => {
+  try {
+    const row = db.prepare('SELECT preference_value FROM user_preferences WHERE user_id = ? AND preference_key = ?')
+      .get(req.user.id, req.params.key);
+    res.json({ value: row ? JSON.parse(row.preference_value) : null });
+  } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+app.put('/api/users/preferences/:key', requireAuth, (req, res) => {
+  try {
+    const { value } = req.body;
+    db.prepare(`INSERT INTO user_preferences (user_id, preference_key, preference_value, updated_at)
+      VALUES (?, ?, ?, datetime('now','localtime'))
+      ON CONFLICT(user_id, preference_key) DO UPDATE SET preference_value = excluded.preference_value, updated_at = excluded.updated_at`)
+      .run(req.user.id, req.params.key, JSON.stringify(value));
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 // Setup status (public)
 app.get('/api/setup/status', (req, res) => {
   try {
@@ -447,6 +476,10 @@ apiRouter.use('/documents', documentsRouter);
 apiRouter.use('/backups', backupsRouter);
 apiRouter.use('/auto-journal', autojournalRouter);
 apiRouter.use('/exports', exportsRouter);
+
+// Public invite endpoints (no auth required — must be before requireAuth router)
+app.use('/api/users/invite', require('./routes/users').inviteRouter || express.Router());
+
 app.use('/api', requireAuth, apiRouter);
 app.use('/api/v1', requireAuth, apiRouter);
 

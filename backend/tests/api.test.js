@@ -1257,3 +1257,47 @@ describe('Data Cleanup', () => {
     assert.ok(typeof res.body.total_audit_records === 'number');
   });
 });
+
+// ═══ User Preferences API ═══
+describe('User Preferences', () => {
+  it('PUT /api/users/preferences/:key upserts a preference', async () => {
+    const res = await req('PUT', '/api/users/preferences/theme', { value: 'dark' });
+    assert.equal(res.status, 200);
+    assert.ok(res.body.ok);
+  });
+
+  it('GET /api/users/preferences/:key reads preference back', async () => {
+    const res = await req('GET', '/api/users/preferences/theme');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.value, 'dark');
+  });
+
+  it('GET /api/users/preferences/:key returns null for missing key', async () => {
+    const res = await req('GET', '/api/users/preferences/nonexistent_key_xyz');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.value, null);
+  });
+});
+
+// ═══ Import Jobs API ═══
+describe('Import Jobs', () => {
+  it('GET /api/import/jobs/:id returns 404 for missing job', async () => {
+    const res = await req('GET', '/api/import/jobs/999999');
+    assert.equal(res.status, 404);
+  });
+});
+
+// ═══ Invite validation ═══
+describe('Invite Endpoints', () => {
+  it('GET /api/users/invite/validate/:token rejects invalid token', async () => {
+    const res = await request('GET', '/api/users/invite/validate/invalidtoken123');
+    assert.equal(res.status, 404);
+  });
+
+  it('POST /api/users/invite/accept rejects missing fields', async () => {
+    const res = await request('POST', '/api/users/invite/accept', {
+      token: 'invalidtoken123',
+    });
+    assert.equal(res.status, 400);
+  });
+});

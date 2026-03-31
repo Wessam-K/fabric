@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/ConfirmDialog';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
+import HelpButton from '../components/HelpButton';
 
 export default function Backups() {
   const toast = useToast();
@@ -65,7 +66,7 @@ export default function Backups() {
   return (
     <div className="p-4 lg:p-6 max-w-5xl mx-auto">
       <ConfirmDialog />
-      <PageHeader title="النسخ الاحتياطية" icon={Database} />
+      <PageHeader title="النسخ الاحتياطية" icon={Database} action={<HelpButton pageKey="backups" />} />
 
       {/* Info card */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-start gap-3">

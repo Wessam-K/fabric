@@ -1,6 +1,6 @@
 {
   "name": "wk-factory",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "description": "WK-Factory — نظام إدارة المصنع",
   "main": "electron.js",
   "scripts": {
