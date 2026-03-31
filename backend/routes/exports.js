@@ -6,7 +6,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const XLSX = require('xlsx');
+// 1.1: Replaced xlsx (2 HIGH CVEs) with exceljs — safe, actively maintained
+const ExcelJS = require('exceljs');
 const { requirePermission } = require('../middleware/auth');
 
 // ─── HELPERS ────────────────────────────────────
@@ -31,25 +32,27 @@ function sendCSV(res, filename, rows, columns, headerLabels) {
   res.send(BOM + toCSVString(rows, columns, headerLabels));
 }
 
-function sendExcel(res, filename, sheets) {
-  const wb = XLSX.utils.book_new();
+// 1.1: Rewritten sendExcel using exceljs (replacing vulnerable xlsx library)
+async function sendExcel(res, filename, sheets) {
+  const workbook = new ExcelJS.Workbook();
   for (const { name, data, columns, headerLabels } of sheets) {
-    const mapped = data.map(row => {
-      const obj = {};
-      columns.forEach((col, i) => {
-        obj[(headerLabels || columns)[i]] = row[col] ?? '';
-      });
-      return obj;
-    });
-    const ws = XLSX.utils.json_to_sheet(mapped);
-    // Set RTL for Arabic
-    ws['!dir'] = 'rtl';
-    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+    const ws = workbook.addWorksheet(name.slice(0, 31), { views: [{ rightToLeft: true }] });
+    const labels = headerLabels || columns;
+    // Add header row
+    ws.addRow(labels);
+    // Style header row bold
+    ws.getRow(1).font = { bold: true };
+    // Set column widths
+    ws.columns = labels.map((label, i) => ({ width: Math.max(label.length + 4, 12) }));
+    // Add data rows
+    for (const row of data) {
+      ws.addRow(columns.map(col => row[col] ?? ''));
+    }
   }
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buf = await workbook.xlsx.writeBuffer();
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.send(buf);
+  res.send(Buffer.from(buf));
 }
 
 function getFormat(req) {
@@ -67,7 +70,7 @@ const round2 = v => Math.round((v || 0) * 100) / 100;
 // ═══════════════════════════════════════════════
 // 1. SUPPLIERS REPORT (by supplier: POs, spending, fabric types)
 // ═══════════════════════════════════════════════
-router.get('/suppliers', requirePermission('reports', 'view'), (req, res) => {
+router.get('/suppliers', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -91,7 +94,7 @@ router.get('/suppliers', requirePermission('reports', 'view'), (req, res) => {
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'suppliers-report.xlsx', [{ name: 'تقرير الموردين', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'suppliers-report.xlsx', [{ name: 'تقرير الموردين', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'suppliers-report.csv', rows, cols, labels);
     }
@@ -101,7 +104,7 @@ router.get('/suppliers', requirePermission('reports', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // 2. FABRIC USAGE REPORT (by fabric: consumption, batches, WOs)
 // ═══════════════════════════════════════════════
-router.get('/fabric-usage', requirePermission('reports', 'view'), (req, res) => {
+router.get('/fabric-usage', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -144,7 +147,7 @@ router.get('/fabric-usage', requirePermission('reports', 'view'), (req, res) => 
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'fabric-usage-report.xlsx', [{ name: 'استهلاك الأقمشة', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'fabric-usage-report.xlsx', [{ name: 'استهلاك الأقمشة', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'fabric-usage-report.csv', rows, cols, labels);
     }
@@ -154,7 +157,7 @@ router.get('/fabric-usage', requirePermission('reports', 'view'), (req, res) => 
 // ═══════════════════════════════════════════════
 // 3. ACCESSORY USAGE REPORT
 // ═══════════════════════════════════════════════
-router.get('/accessory-usage', requirePermission('reports', 'view'), (req, res) => {
+router.get('/accessory-usage', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -195,7 +198,7 @@ router.get('/accessory-usage', requirePermission('reports', 'view'), (req, res) 
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'accessory-usage-report.xlsx', [{ name: 'استهلاك الإكسسوارات', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'accessory-usage-report.xlsx', [{ name: 'استهلاك الإكسسوارات', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'accessory-usage-report.csv', rows, cols, labels);
     }
@@ -205,7 +208,7 @@ router.get('/accessory-usage', requirePermission('reports', 'view'), (req, res) 
 // ═══════════════════════════════════════════════
 // 4. WORK ORDER COST BREAKDOWN (by WO with full cost math)
 // ═══════════════════════════════════════════════
-router.get('/wo-cost-breakdown', requirePermission('reports', 'view'), (req, res) => {
+router.get('/wo-cost-breakdown', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -233,7 +236,7 @@ router.get('/wo-cost-breakdown', requirePermission('reports', 'view'), (req, res
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'wo-cost-breakdown.xlsx', [{ name: 'تكاليف أوامر الإنتاج', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'wo-cost-breakdown.xlsx', [{ name: 'تكاليف أوامر الإنتاج', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'wo-cost-breakdown.csv', rows, cols, labels);
     }
@@ -243,7 +246,7 @@ router.get('/wo-cost-breakdown', requirePermission('reports', 'view'), (req, res
 // ═══════════════════════════════════════════════
 // 5. MODEL PROFITABILITY REPORT
 // ═══════════════════════════════════════════════
-router.get('/model-profitability', requirePermission('reports', 'view'), (req, res) => {
+router.get('/model-profitability', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -274,7 +277,7 @@ router.get('/model-profitability', requirePermission('reports', 'view'), (req, r
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'model-profitability.xlsx', [{ name: 'ربحية الموديلات', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'model-profitability.xlsx', [{ name: 'ربحية الموديلات', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'model-profitability.csv', rows, cols, labels);
     }
@@ -284,7 +287,7 @@ router.get('/model-profitability', requirePermission('reports', 'view'), (req, r
 // ═══════════════════════════════════════════════
 // 6. PURCHASE ORDER DETAIL BY SUPPLIER (costs, items)
 // ═══════════════════════════════════════════════
-router.get('/po-by-supplier', requirePermission('reports', 'view'), (req, res) => {
+router.get('/po-by-supplier', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -307,7 +310,7 @@ router.get('/po-by-supplier', requirePermission('reports', 'view'), (req, res) =
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'po-by-supplier.xlsx', [{ name: 'أوامر شراء بالمورد', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'po-by-supplier.xlsx', [{ name: 'أوامر شراء بالمورد', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'po-by-supplier.csv', rows, cols, labels);
     }
@@ -317,7 +320,7 @@ router.get('/po-by-supplier', requirePermission('reports', 'view'), (req, res) =
 // ═══════════════════════════════════════════════
 // 7. INVENTORY VALUATION (fabric + accessories)
 // ═══════════════════════════════════════════════
-router.get('/inventory-valuation', requirePermission('reports', 'view'), (req, res) => {
+router.get('/inventory-valuation', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const fabrics = db.prepare(`
       SELECT f.code, f.name, 'fabric' as item_type, f.fabric_type as sub_type,
@@ -347,7 +350,7 @@ router.get('/inventory-valuation', requirePermission('reports', 'view'), (req, r
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'inventory-valuation.xlsx', [
+      await sendExcel(res, 'inventory-valuation.xlsx', [
         { name: 'أقمشة', data: fabrics, columns: cols, headerLabels: labels },
         { name: 'إكسسوارات', data: accessories, columns: cols, headerLabels: labels },
         { name: 'الكل', data: all, columns: cols, headerLabels: labels },
@@ -361,7 +364,7 @@ router.get('/inventory-valuation', requirePermission('reports', 'view'), (req, r
 // ═══════════════════════════════════════════════
 // 8. WASTE ANALYSIS REPORT
 // ═══════════════════════════════════════════════
-router.get('/waste-analysis', requirePermission('reports', 'view'), (req, res) => {
+router.get('/waste-analysis', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -385,7 +388,7 @@ router.get('/waste-analysis', requirePermission('reports', 'view'), (req, res) =
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'waste-analysis.xlsx', [{ name: 'تحليل الهالك', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'waste-analysis.xlsx', [{ name: 'تحليل الهالك', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'waste-analysis.csv', rows, cols, labels);
     }
@@ -395,7 +398,7 @@ router.get('/waste-analysis', requirePermission('reports', 'view'), (req, res) =
 // ═══════════════════════════════════════════════
 // 9. FINANCIAL SUMMARY (revenue, costs, profit by month)
 // ═══════════════════════════════════════════════
-router.get('/financial-summary', requirePermission('reports', 'view'), (req, res) => {
+router.get('/financial-summary', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
 
@@ -451,7 +454,7 @@ router.get('/financial-summary', requirePermission('reports', 'view'), (req, res
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'financial-summary.xlsx', [{ name: 'ملخص مالي', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'financial-summary.xlsx', [{ name: 'ملخص مالي', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'financial-summary.csv', rows, cols, labels);
     }
@@ -461,7 +464,7 @@ router.get('/financial-summary', requirePermission('reports', 'view'), (req, res
 // ═══════════════════════════════════════════════
 // 10. CUSTOMER REPORT (sales, payments, balances)
 // ═══════════════════════════════════════════════
-router.get('/customers', requirePermission('reports', 'view'), (req, res) => {
+router.get('/customers', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -490,7 +493,7 @@ router.get('/customers', requirePermission('reports', 'view'), (req, res) => {
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'customer-report.xlsx', [{ name: 'تقرير العملاء', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'customer-report.xlsx', [{ name: 'تقرير العملاء', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'customer-report.csv', rows, cols, labels);
     }
@@ -500,7 +503,7 @@ router.get('/customers', requirePermission('reports', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // 11. PRODUCTION QUALITY REPORT (QC inspections)
 // ═══════════════════════════════════════════════
-router.get('/quality-report', requirePermission('reports', 'view'), (req, res) => {
+router.get('/quality-report', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -520,7 +523,7 @@ router.get('/quality-report', requirePermission('reports', 'view'), (req, res) =
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, 'quality-report.xlsx', [{ name: 'تقرير الجودة', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'quality-report.xlsx', [{ name: 'تقرير الجودة', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'quality-report.csv', rows, cols, labels);
     }
@@ -530,7 +533,7 @@ router.get('/quality-report', requirePermission('reports', 'view'), (req, res) =
 // ═══════════════════════════════════════════════
 // 12. HR/PAYROLL REPORT
 // ═══════════════════════════════════════════════
-router.get('/payroll', requirePermission('reports', 'view'), (req, res) => {
+router.get('/payroll', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const period = req.query.period; // e.g. "2026-01"
     let rows;
@@ -566,7 +569,7 @@ router.get('/payroll', requirePermission('reports', 'view'), (req, res) => {
 
     const fmt = getFormat(req);
     if (fmt === 'xlsx') {
-      sendExcel(res, `payroll${period ? '-' + period : ''}.xlsx`, [{ name: 'كشف الرواتب', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, `payroll${period ? '-' + period : ''}.xlsx`, [{ name: 'كشف الرواتب', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, `payroll${period ? '-' + period : ''}.csv`, rows, cols, labels);
     }
@@ -576,7 +579,7 @@ router.get('/payroll', requirePermission('reports', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // 13. COMPREHENSIVE MULTI-SHEET EXCEL EXPORT
 // ═══════════════════════════════════════════════
-router.get('/full-export', requirePermission('reports', 'view'), (req, res) => {
+router.get('/full-export', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
 
@@ -588,7 +591,7 @@ router.get('/full-export', requirePermission('reports', 'view'), (req, res) => {
     const wos = db.prepare(`SELECT wo.wo_number, m.model_code, m.model_name, wo.quantity, wo.status, wo.priority, wo.start_date, wo.due_date, wo.total_production_cost, wo.cost_per_piece FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id WHERE wo.created_at BETWEEN ? AND ? ORDER BY wo.created_at DESC`).all(from, to);
     const invoices = db.prepare(`SELECT inv.invoice_number, inv.customer_name, inv.status, inv.subtotal, inv.discount, inv.tax_pct, inv.total, inv.due_date, inv.created_at FROM invoices inv WHERE inv.created_at BETWEEN ? AND ? ORDER BY inv.created_at DESC`).all(from, to);
 
-    sendExcel(res, 'wk-hub-full-export.xlsx', [
+    await sendExcel(res, 'wk-hub-full-export.xlsx', [
       { name: 'أقمشة', data: fabrics, columns: ['code','name','fabric_type','color','price_per_m','supplier_name','available_meters','status'], headerLabels: ['كود','الاسم','النوع','اللون','سعر المتر','المورد','المتاح','الحالة'] },
       { name: 'إكسسوارات', data: accessories, columns: ['code','acc_type','name','unit_price','unit','supplier_name','quantity_on_hand','status'], headerLabels: ['كود','النوع','الاسم','سعر الوحدة','الوحدة','المورد','المتاح','الحالة'] },
       { name: 'موردين', data: suppliers, columns: ['code','name','supplier_type','phone','email','contact_name','rating','status'], headerLabels: ['كود','الاسم','النوع','الهاتف','البريد','جهة الاتصال','التقييم','الحالة'] },
@@ -603,7 +606,7 @@ router.get('/full-export', requirePermission('reports', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // 14. EMPLOYEES EXPORT
 // ═══════════════════════════════════════════════
-router.get('/employees', requirePermission('hr', 'view'), (req, res) => {
+router.get('/employees', requirePermission('hr', 'view'), async (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT e.emp_code, e.full_name, e.department, e.job_title, e.employment_type,
@@ -615,7 +618,7 @@ router.get('/employees', requirePermission('hr', 'view'), (req, res) => {
     const cols = ['emp_code','full_name','department','job_title','employment_type','salary_type','base_salary','housing_allowance','transport_allowance','hire_date','phone','status'];
     const labels = ['الكود','الاسم','القسم','المسمى الوظيفي','نوع التعاقد','نوع الراتب','الراتب الأساسي','بدل سكن','بدل مواصلات','تاريخ التعيين','الهاتف','الحالة'];
     if (getFormat(req) === 'xlsx') {
-      sendExcel(res, 'employees.xlsx', [{ name: 'الموظفون', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'employees.xlsx', [{ name: 'الموظفون', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'employees.csv', rows, cols, labels);
     }
@@ -625,7 +628,7 @@ router.get('/employees', requirePermission('hr', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // 15. MACHINES EXPORT
 // ═══════════════════════════════════════════════
-router.get('/machines', requirePermission('reports', 'view'), (req, res) => {
+router.get('/machines', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT mc.code, mc.name, mc.machine_type, mc.brand, mc.model_number,
@@ -638,7 +641,7 @@ router.get('/machines', requirePermission('reports', 'view'), (req, res) => {
     const cols = ['code','name','machine_type','brand','model_number','purchase_date','purchase_price','status','last_maintenance_date','next_maintenance_date','maintenance_count','total_maintenance_cost'];
     const labels = ['الكود','الاسم','النوع','الماركة','الموديل','تاريخ الشراء','سعر الشراء','الحالة','آخر صيانة','الصيانة القادمة','عدد الصيانات','إجمالي تكاليف الصيانة'];
     if (getFormat(req) === 'xlsx') {
-      sendExcel(res, 'machines.xlsx', [{ name: 'الماكينات', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'machines.xlsx', [{ name: 'الماكينات', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'machines.csv', rows, cols, labels);
     }
@@ -648,7 +651,7 @@ router.get('/machines', requirePermission('reports', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 // 16. STAGE PROGRESS EXPORT
 // ═══════════════════════════════════════════════
-router.get('/stage-progress', requirePermission('reports', 'view'), (req, res) => {
+router.get('/stage-progress', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT ws.id, wo.wo_number, m.model_code, ws.stage_name, ws.sort_order,
@@ -665,7 +668,7 @@ router.get('/stage-progress', requirePermission('reports', 'view'), (req, res) =
     const cols = ['wo_number','model_code','stage_name','sort_order','quantity_in_stage','stage_status','assigned_name','started_at','completed_at','wo_total_qty','wo_status'];
     const labels = ['رقم أمر الإنتاج','كود الموديل','المرحلة','الترتيب','الكمية بالمرحلة','حالة المرحلة','المسؤول','تاريخ البدء','تاريخ الانتهاء','إجمالي الكمية','حالة الأمر'];
     if (getFormat(req) === 'xlsx') {
-      sendExcel(res, 'stage-progress.xlsx', [{ name: 'تقدم المراحل', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'stage-progress.xlsx', [{ name: 'تقدم المراحل', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'stage-progress.csv', rows, cols, labels);
     }
@@ -675,7 +678,7 @@ router.get('/stage-progress', requirePermission('reports', 'view'), (req, res) =
 // ═══════════════════════════════════════════════
 // 17. PRODUCTION TIMELINE EXPORT
 // ═══════════════════════════════════════════════
-router.get('/production-timeline', requirePermission('reports', 'view'), (req, res) => {
+router.get('/production-timeline', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -695,7 +698,7 @@ router.get('/production-timeline', requirePermission('reports', 'view'), (req, r
     const cols = ['wo_number','model_code','model_name','quantity','status','priority','customer_name','start_date','due_date','completed_date','days_elapsed','schedule_status','total_production_cost','cost_per_piece'];
     const labels = ['رقم الأمر','كود الموديل','الاسم','الكمية','الحالة','الأولوية','العميل','تاريخ البدء','الاستحقاق','الإنجاز','الأيام','مواعيد التسليم','التكلفة الإجمالية','تكلفة القطعة'];
     if (getFormat(req) === 'xlsx') {
-      sendExcel(res, 'production-timeline.xlsx', [{ name: 'الخط الزمني', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'production-timeline.xlsx', [{ name: 'الخط الزمني', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'production-timeline.csv', rows, cols, labels);
     }
@@ -705,7 +708,7 @@ router.get('/production-timeline', requirePermission('reports', 'view'), (req, r
 // ═══════════════════════════════════════════════
 // 18. PURCHASE SUMMARY BY TYPE
 // ═══════════════════════════════════════════════
-router.get('/purchase-summary', requirePermission('reports', 'view'), (req, res) => {
+router.get('/purchase-summary', requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -725,7 +728,7 @@ router.get('/purchase-summary', requirePermission('reports', 'view'), (req, res)
     const cols = ['po_type','total_orders','received_count','pending_count','total_amount','total_paid','outstanding','supplier_count'];
     const labels = ['النوع','عدد الأوامر','المستلمة','المعلقة','الإجمالي','المدفوع','المتبقي','عدد الموردين'];
     if (getFormat(req) === 'xlsx') {
-      sendExcel(res, 'purchase-summary.xlsx', [{ name: 'ملخص المشتريات', data: rows, columns: cols, headerLabels: labels }]);
+      await sendExcel(res, 'purchase-summary.xlsx', [{ name: 'ملخص المشتريات', data: rows, columns: cols, headerLabels: labels }]);
     } else {
       sendCSV(res, 'purchase-summary.csv', rows, cols, labels);
     }

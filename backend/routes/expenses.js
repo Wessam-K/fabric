@@ -223,6 +223,24 @@ router.post('/:id/receipt', requirePermission('expenses', 'edit'), receiptUpload
     if (!expense) return res.status(404).json({ error: 'المصروف غير موجود' });
     if (!req.file) return res.status(400).json({ error: 'يجب رفع ملف' });
 
+    // Magic byte validation — verify file content matches claimed type
+    const filePath = req.file.path;
+    const buf = Buffer.alloc(8);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buf, 0, 8, 0);
+    fs.closeSync(fd);
+    const hex = buf.toString('hex').toLowerCase();
+    const validMagic = [
+      'ffd8ff',       // JPEG
+      '89504e47',     // PNG
+      '52494646',     // WEBP (RIFF)
+      '25504446',     // PDF
+    ];
+    if (!validMagic.some(m => hex.startsWith(m))) {
+      fs.unlinkSync(filePath);
+      return res.status(400).json({ error: 'محتوى الملف لا يتطابق مع نوعه' });
+    }
+
     const receiptUrl = `/uploads/receipts/${req.file.filename}`;
     db.prepare('UPDATE expenses SET receipt_url=? WHERE id=?').run(receiptUrl, id);
     logAudit(req, 'update', 'expenses', id, 'رفع إيصال', { receipt_url: expense.receipt_url }, { receipt_url: receiptUrl });

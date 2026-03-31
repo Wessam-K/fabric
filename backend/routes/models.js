@@ -2,6 +2,9 @@
 const router = express.Router();
 const multer = require('multer');
 const { logAudit, requirePermission } = require('../middleware/auth');
+// Phase 1.4: Magic byte validation for uploaded images
+const { validateOrRemove } = require('../utils/fileValidation');
+const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 const path = require('path');
 const db = require('../database');
 
@@ -113,9 +116,12 @@ router.delete('/:code', requirePermission('models', 'delete'), (req, res) => {
 });
 
 // POST /api/models/:code/image — upload model image
-router.post('/:code/image', requirePermission('models', 'edit'), upload.single('image'), (req, res) => {
+router.post('/:code/image', requirePermission('models', 'edit'), upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'لا توجد صورة' });
+    // Phase 1.4: Validate image magic bytes
+    const check = await validateOrRemove(req.file.path, ALLOWED_IMAGE_MIMES);
+    if (!check.valid) return res.status(400).json({ error: 'محتوى الملف لا يتطابق مع نوعه' });
     const image_path = `/uploads/models/${req.file.filename}`;
     db.prepare("UPDATE models SET model_image=?,updated_at=datetime('now') WHERE model_code=?").run(image_path, req.params.code);
     res.json({ image_path });

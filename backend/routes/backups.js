@@ -5,7 +5,7 @@ const fs = require('fs');
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 
-const backupDir = path.join(__dirname, '..', 'backups');
+const backupDir = path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), 'backups');
 if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 
 // GET /api/backups

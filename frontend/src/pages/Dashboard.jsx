@@ -210,7 +210,7 @@ function WidgetRenderer({ widgetKey, dProps, widgets, data, hrData, kpis, net, p
 
       case 'charts':
         return (
-          <ErrorBoundary>
+          <ErrorBoundary compact>
             <Suspense fallback={<Skeleton className="h-64" />}>
               <LazyCharts data={data} />
             </Suspense>
@@ -455,9 +455,11 @@ function WidgetRenderer({ widgetKey, dProps, widgets, data, hrData, kpis, net, p
   if (!content) return null;
 
   return (
-    <DraggableWidget {...dProps}>
-      {content}
-    </DraggableWidget>
+    <ErrorBoundary compact>
+      <DraggableWidget {...dProps}>
+        {content}
+      </DraggableWidget>
+    </ErrorBoundary>
   );
 }
 
@@ -586,8 +588,10 @@ function DashboardInner() {
 /* ── Export with provider wrapper ───────────────────────── */
 export default function Dashboard() {
   return (
-    <DashboardConfigProvider>
-      <DashboardInner />
-    </DashboardConfigProvider>
+    <ErrorBoundary compact>
+      <DashboardConfigProvider>
+        <DashboardInner />
+      </DashboardConfigProvider>
+    </ErrorBoundary>
   );
 }

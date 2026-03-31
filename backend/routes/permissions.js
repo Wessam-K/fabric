@@ -1,7 +1,7 @@
 ﻿const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { requireRole, logAudit } = require('../middleware/auth');
+const { requireRole, logAudit, invalidatePermCache } = require('../middleware/auth');
 
 // GET /api/permissions/definitions — all permission definitions grouped by module
 router.get('/definitions', (req, res) => {
@@ -66,6 +66,8 @@ router.put('/roles/:role', requireRole('superadmin'), (req, res) => {
     });
     trx();
 
+    // Phase 2.3: Invalidate permission cache for all users with this role
+    invalidatePermCache();
     logAudit(req, 'UPDATE', 'role_permissions', role, `تعديل صلاحيات دور: ${role}`, null, permissions);
     res.json({ message: 'تم تحديث صلاحيات الدور بنجاح' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -108,6 +110,8 @@ router.put('/user/:userId', requireRole('superadmin'), (req, res) => {
     });
     trx();
 
+    // Phase 2.3: Invalidate permission cache for this user
+    invalidatePermCache(userId);
     logAudit(req, 'UPDATE', 'user_permissions', userId, `تعديل صلاحيات: ${user.full_name}`, null, permissions);
     res.json({ message: 'تم تحديث صلاحيات المستخدم بنجاح' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

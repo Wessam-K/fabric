@@ -1,50 +1,34 @@
 # WK-Factory Security Audit Report
-> Date: March 27, 2026 | Auditor: Claude Opus 4.6 | Schema: V35
+> Date: March 27, 2026 | Updated: Enterprise Hardening v3.1 | Auditor: Claude Opus 4.6 | Schema: V38
 
 ## Executive Summary
-**Overall Security Grade: A- (90/100)**
+**Overall Security Grade: A (95/100)**
 
-The application demonstrates strong security fundamentals. All SQL queries are parameterized. All routes have authentication middleware. Permission checks are comprehensive. Electron hardening is excellent. The remaining issues are quality-of-life improvements and defense-in-depth measures.
+Enterprise hardening phases 1-5 have been applied. All previously identified High findings have been resolved. JWT tokens are now stored in httpOnly cookies with persistent blacklist. The xlsx library has been replaced with exceljs. Password policy strengthened. Timing attacks mitigated. Debug detection now blocks rather than just logging. API key support and webhook system added for external integrations.
 
 ## Critical Findings (0)
-No critical security vulnerabilities were found.
+No critical security vulnerabilities.
 
-## High Findings (5)
+## High Findings — ALL RESOLVED
 
-### H1. Token Not Revoked on Logout
-- **File:** backend/routes/auth.js:56-60
-- **Issue:** `POST /api/auth/logout` logs the event but does NOT invalidate the JWT. A stolen token remains valid until its 24h expiry.
-- **Mitigation:** In-memory cache already exists (`lib/cache.js`). Recommend storing revoked JTIs in cache with TTL matching JWT expiry.
-- **Risk:** If a token is stolen (e.g., via XSS on another site using same browser), it cannot be invalidated.
-- **Status:** ⚠️ Documented — implementing full token blacklist requires adding `jti` to JWT payload and checking on every request. Acceptable for internal ERP with no external exposure.
+### H1. Token Not Revoked on Logout — ✅ FIXED (Phase 1.3)
+- **Fix:** Persistent token blacklist using `revoked_tokens` SQLite table with SHA-256 hashes
+- **Details:** Tokens are revoked on logout, checked on every request. Hourly cleanup of expired entries.
 
-### H2. localStorage Token Storage (XSS Risk)
-- **File:** frontend/src/context/AuthContext.jsx
-- **Issue:** JWT stored in `localStorage` under key `wk_token`. Any XSS payload could read it.
-- **Mitigation:** Input sanitization (multi-pass stripTags) + strict CSP (`script-src 'self'`) + no `dangerouslySetInnerHTML` in the entire codebase.
-- **Risk:** Low in practice because CSP blocks inline scripts and all user input is sanitized.
-- **Status:** ⚠️ Documented — httpOnly cookies would require proxy architecture changes.
+### H2. localStorage Token Storage (XSS Risk) — ✅ FIXED (Phase 1.2)
+- **Fix:** JWT stored in httpOnly, SameSite=lax cookie (`wk_token`)
+- **Details:** Frontend uses `withCredentials: true`, no token in localStorage. Auto-refresh via middleware.
 
-### H3. xlsx Package Vulnerabilities (Prototype Pollution + ReDoS)
-- **File:** backend/package.json, frontend/package.json
-- **Issue:** `xlsx` (SheetJS) has 2 HIGH severity advisories: GHSA-4r6h-8v6p-xvw6 (Prototype Pollution) and GHSA-5pgg-2g8v-p4x9 (ReDoS).
-- **Mitigation:** xlsx is used only for export (not import of untrusted data in most cases). HR Excel import is the exception.
-- **Risk:** Medium — ReDoS could slow server on crafted HR import files.
-- **Status:** ⚠️ No fix available from upstream. Consider migrating to `exceljs` for backend.
+### H3. xlsx Package Vulnerabilities — ✅ FIXED (Phase 1.1)
+- **Fix:** Migrated all 4 files from `xlsx` to `exceljs`
+- **Details:** Backend exports.js + frontend ExportsCenter.jsx, Reports.jsx, HR pages all use exceljs.
 
-### H4. Setup Endpoint Remains Accessible (Mitigated)
-- **File:** backend/server.js:159-173
-- **Issue:** `POST /api/setup/create-admin` is public. However, it checks `COUNT(*) FROM users` inside a transaction and returns 403 if users exist.
-- **Mitigation:** Transaction-safe TOCTOU prevention. Cannot create second admin.
-- **Risk:** Low — endpoint is hardened with transaction. Attacker cannot exploit if any user exists.
-- **Status:** ✅ Acceptably mitigated.
+### H4. Setup Endpoint Remains Accessible — ✅ Already Mitigated
+- **Status:** Transaction-safe check prevents exploitation.
 
-### H5. Timing Attack on Login (Theoretical)
-- **File:** backend/routes/auth.js:27
-- **Issue:** `bcrypt.compareSync()` has constant-time comparison, but early return when user not found (line 14) reveals user existence via response time.
-- **Mitigation:** Error messages are identical ("username or password incorrect").
-- **Risk:** Very low — attacker could enumerate usernames via timing, but this is an internal factory ERP.
-- **Status:** ⚠️ Documented.
+### H5. Timing Attack on Login — ✅ FIXED (Phase 1.7)
+- **Fix:** Always perform `bcrypt.compareSync()` against a dummy hash when user not found
+- **Details:** Response time is constant regardless of whether username exists.
 
 ## Medium Findings (8)
 
@@ -63,30 +47,27 @@ No critical security vulnerabilities were found.
 - **Impact:** Rate limit counters lost on server restart.
 - **Status:** ⚠️ Acceptable for single-process SQLite architecture.
 
-### M4. Document Upload: Extension-Only Validation
-- **File:** backend/routes/documents.js:20-27
-- **Impact:** MIME type not validated, only extension. A `.jpg` could be a `.exe` renamed.
-- **Status:** ⚠️ Documented — Multer stores files with randomized names, not served as-is.
+### M4. Document Upload: Extension-Only Validation — ✅ FIXED (Phase 1.4)
+- **Fix:** Magic byte MIME validation using `file-type` library
+- **Details:** `fileValidation.js` utility validates file content, not just extension. Applied to accessories, fabrics, models uploads.
 
 ### M5. CORS Includes `app://.` Origin
-- **File:** backend/server.js:57
+- **File:** backend/server.js
 - **Impact:** Any Electron app could make requests to the API.
 - **Status:** ⚠️ Acceptable — API is localhost-only.
 
 ### M6. `contentSecurityPolicy: false` in Helmet
-- **File:** backend/server.js:51
-- **Impact:** Backend API responses don't have CSP headers (frontend served from same origin handles its own CSP via Electron).
+- **File:** backend/server.js
+- **Impact:** Backend API responses don't have CSP headers.
 - **Status:** ⚠️ Acceptable — CSP is enforced by Electron's session headers.
 
-### M7. Debug Detection Only Logs, Doesn't Block
-- **File:** lib/security.js:100-124
-- **Impact:** Attacker with `--inspect` flag can debug the Electron process.
-- **Status:** ⚠️ Documented — blocking would require `app.exit()`.
+### M7. Debug Detection Only Logs, Doesn't Block — ✅ FIXED (Phase 1.8)
+- **Fix:** `app.quit()` called on debug detection in production
+- **Details:** Also blocks `process.debugPort`, `ELECTRON_RUN_AS_NODE`, `--inspect-brk`, `--js-flags`
 
-### M8. Password Policy Missing Special Characters
-- **File:** backend/routes/auth.js:91-93, backend/server.js:163
-- **Impact:** Passwords only require 8+ chars, 1 uppercase, 1 digit. No special character requirement.
-- **Status:** ⚠️ Acceptable for internal ERP.
+### M8. Password Policy Missing Special Characters — ✅ FIXED (Phase 1.5)
+- **Fix:** Min 10 chars, requires uppercase + lowercase + digit + special character
+- **Details:** Centralized `validatePassword()` in `validators.js`, used in auth.js, users.js, server.js
 
 ## Low Findings (5)
 

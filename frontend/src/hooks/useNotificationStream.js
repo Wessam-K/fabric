@@ -11,23 +11,14 @@ export default function useNotificationStream(onNotification) {
   const reconnectTimer = useRef(null);
 
   const connect = useCallback(() => {
-    const token = localStorage.getItem('wk_token');
-    if (!token) return;
-
-    // EventSource doesn't support custom headers natively.
-    // We pass the token as a query param. The server recognAuth middleware
-    // already reads from the Authorization header (set by the requireAuth
-    // middleware on the route). For SSE we need a workaround: use a
-    // polyfill or let the existing middleware read from query.
-    // Since our backend uses requireAuth which checks Bearer token in header,
-    // we'll use a simple fetch-based SSE approach.
+    // Phase 1.2: Use credentials (httpOnly cookie) instead of localStorage token
     const baseUrl = window.location.origin;
     const url = `${baseUrl}/api/notifications/stream`;
 
     const controller = new AbortController();
     
     fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      credentials: 'include',
       signal: controller.signal,
     }).then(response => {
       const reader = response.body.getReader();

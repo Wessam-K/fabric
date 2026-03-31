@@ -44,6 +44,30 @@ export default function Login() {
       }
     } catch (err) {
       const status = err.response?.status;
+      if (!err.response && !status) {
+        // Network error — backend might not be ready, retry once after delay
+        try {
+          await new Promise(r => setTimeout(r, 2000));
+          const data = await login(username, password);
+          if (data.user?.must_change_password) {
+            navigate('/change-password');
+          } else {
+            navigate('/dashboard');
+          }
+          return;
+        } catch (retryErr) {
+          const retryStatus = retryErr.response?.status;
+          const retryMsg = retryErr.response?.data?.error || 'الخادم غير جاهز — يرجى الانتظار ثوان والمحاولة مرة أخرى';
+          setError(retryMsg);
+          if (retryStatus === 423) {
+            const minsMatch = retryMsg.match(/(\d+)\s*دقيقة/);
+            if (minsMatch) setLockoutSeconds(parseInt(minsMatch[1]) * 60);
+            else setLockoutSeconds(15 * 60);
+          }
+          setLoading(false);
+          return;
+        }
+      }
       const msg = err.response?.data?.error || 'حدث خطأ في الاتصال';
       setError(msg);
       if (status === 423) {
@@ -66,7 +90,7 @@ export default function Login() {
     <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center p-4" dir="rtl">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</h1>
+          <h1 className="text-3xl font-bold text-[#c9a84c]">WK-Factory</h1>
           <p className="text-gray-400 mt-2">نظام إدارة المصنع</p>
         </div>
 
@@ -96,7 +120,7 @@ export default function Login() {
             <label className="block text-sm text-gray-300 mb-2">كلمة المرور</label>
             <div className="relative">
               <input type={showPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required
-                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#c9a84c] transition-colors"
+                className="w-full px-4 pl-10 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#c9a84c] transition-colors"
                 placeholder="••••••••" dir="ltr" />
               <button type="button" onClick={() => setShowPass(!showPass)}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
@@ -112,7 +136,7 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center text-gray-600 text-xs mt-6">WK-Hub v{__APP_VERSION__} — نظام إدارة المصنع</p>
+        <p className="text-center text-gray-600 text-xs mt-6">WK-Factory v{__APP_VERSION__} — نظام إدارة المصنع</p>
       </div>
     </div>
   );

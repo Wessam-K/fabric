@@ -129,3 +129,47 @@
 | V38 | customer_contacts, customer_notes |
 
 **Total: 96 tables (Schema V38)**
+
+---
+
+## Enterprise Hardening (v3.1)
+
+### Phase 1: Security Hardening
+- **1.1:** Replaced `xlsx` with `exceljs` — eliminated RCE/prototype-pollution vulnerability across 4 export files
+- **1.2:** JWT httpOnly cookies — tokens stored in secure httpOnly cookies, frontend uses `withCredentials`
+- **1.3:** Persistent token blacklist — `revoked_tokens` SQLite table with SHA-256 hashes, hourly cleanup
+- **1.4:** Upload MIME validation — magic byte verification using `file-type` library (fileValidation.js)
+- **1.5:** Strengthened password policy — min 10 chars, upper+lower+digit+special (validators.js)
+- **1.6:** Global rate limiting — `express-rate-limit` (200 req/min global, 10/15min auth)
+- **1.7:** Timing attack mitigation — dummy bcrypt comparison when user not found
+- **1.8:** Hardened debug detection — blocks debugPort, ELECTRON_RUN_AS_NODE, --inspect flags
+- **1.9:** Code signing configuration — electron-builder CSC placeholder
+
+### Phase 2: Database & Performance
+- **2.2:** Safe monetary arithmetic — `money.js` utility (round2, toPiasters, fromPiasters, safeAdd/Subtract/Multiply)
+- **2.3:** Permission caching — in-memory Map cache with 60s TTL, auto-invalidation on permission changes
+- **2.4:** Report query limits — configurable `MAX_REPORT_ROWS` (default 5000) on all unbounded report queries
+- **2.5:** Auto-scheduled backups — every 6 hours (configurable via `AUTO_BACKUP_HOURS` env var)
+
+### Phase 3: API Hardening
+- **3.1:** API versioning — all routes available under both `/api` and `/api/v1` prefixes
+- **3.2:** Response compression — already in place (gzip via `compression` middleware)
+- **3.3:** Standardized API responses — `apiResponse.js` utility (success/error/notFound/badRequest helpers)
+- **3.5:** API key authentication — `X-API-Key` header support for external integrations, keys hashed in `api_keys` table
+- **3.6:** Webhook event system — subscribe to events with HMAC-signed payloads, auto-disable after 10 failures
+
+### Phase 4: Frontend Improvements
+- **4.1:** Code splitting — all 50+ page components lazy-loaded via `React.lazy()`, reduced initial bundle from 2340KB to 406KB
+- **4.4:** Skeleton loading — `PageLoader` component shown during lazy load, existing `Skeleton`/`TableSkeleton` components
+
+### Phase 5: DevOps & Quality
+- **5.2:** CI/CD pipeline — GitHub Actions workflow (`.github/workflows/ci.yml`) for test + Electron build
+- **5.6:** Monitoring endpoint — `/api/monitoring` with uptime, memory, DB size, backup status, node version
+
+### New Database Tables (v3.1)
+| Table | Purpose |
+|-------|---------|
+| revoked_tokens | Persistent JWT blacklist (Phase 1.3) |
+| api_keys | API key authentication (Phase 3.5) |
+| webhooks | Webhook subscriptions (Phase 3.6) |
+| webhook_logs | Webhook delivery logs (Phase 3.6) |

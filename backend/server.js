@@ -9,6 +9,7 @@ const compression = require('compression');
 
 const db = require('./database');
 const { requireAuth, requirePermission, canUser, logAudit } = require('./middleware/auth');
+const { apiKeyAuth } = require('./middleware/apiKey'); // Phase 3.5
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
 const hrRouter = require('./routes/hr');
@@ -48,7 +49,18 @@ const app = express();
 const PORT = process.env.PORT || 9002;
 
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    }
+  },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   hsts: { maxAge: 31536000, includeSubDomains: true },
 }));
@@ -58,7 +70,7 @@ const corsOrigins = process.env.CORS_ORIGIN
   : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:9173', 'http://localhost:9174', `http://localhost:${PORT}`, 'app://.'];
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || corsOrigins.includes(origin) || corsOrigins.includes('*')) {
+    if (!origin || corsOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -67,6 +79,8 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '2mb' }));
+// Phase 1.2: Parse cookies for httpOnly JWT auth
+app.use(require('cookie-parser')());
 app.use(compression({
   filter: (req, res) => {
     if (req.headers['x-no-compression']) return false;
@@ -151,33 +165,36 @@ app.use((req, res, next) => {
   next();
 });
 
-// ═══ Simple rate limiter for auth endpoints ═══
-const loginAttempts = new Map();
-const RATE_WINDOW = 15 * 60 * 1000; // 15 min
-const MAX_ATTEMPTS = 20;
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, data] of loginAttempts) {
-    if (now - data.start > RATE_WINDOW) loginAttempts.delete(ip);
-  }
-}, 60000);
+// ═══ Phase 1.6: Global + targeted rate limiting (express-rate-limit) ═══
+const rateLimit = require('express-rate-limit');
 
-if (process.env.NODE_ENV !== 'test') {
-  app.use('/api/auth/login', (req, res, next) => {
-    const ip = req.ip || req.connection.remoteAddress;
-    const now = Date.now();
-    let entry = loginAttempts.get(ip);
-    if (!entry || (now - entry.start > RATE_WINDOW)) {
-      entry = { count: 0, start: now };
-      loginAttempts.set(ip, entry);
-    }
-    entry.count++;
-    if (entry.count > MAX_ATTEMPTS) {
-      return res.status(429).json({ error: 'عدد المحاولات تجاوز الحد المسموح. حاول مرة أخرى بعد 15 دقيقة' });
-    }
-    next();
-  });
-}
+// Global API rate limit: 200 requests per minute per IP
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'عدد الطلبات تجاوز الحد المسموح. حاول مرة أخرى بعد قليل' },
+  skip: (req) => process.env.NODE_ENV === 'test',
+});
+app.use('/api', globalLimiter);
+
+// Strict auth rate limit: 10 attempts per 15 minutes per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'عدد المحاولات تجاوز الحد المسموح. حاول مرة أخرى بعد 15 دقيقة' },
+  skip: (req) => process.env.NODE_ENV === 'test',
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/change-password', authLimiter);
+app.use('/api/setup/create-admin', authLimiter);
+
+// Phase 3.5: API key auth — runs before requireAuth, sets req.user if valid key
+app.use('/api', apiKeyAuth);
+app.use('/api/v1', apiKeyAuth);
 
 // ═══ Health check (public, no auth) ═══
 app.get('/api/health', (req, res) => {
@@ -186,6 +203,41 @@ app.get('/api/health', (req, res) => {
     db.prepare('SELECT 1').get();
   } catch (e) { dbStatus = 'error'; }
   res.json({ status: 'ok', app: 'WK-Factory', database: dbStatus });
+});
+
+// Phase 5.6: Detailed monitoring endpoint (requires auth)
+app.get('/api/monitoring', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  try {
+    const uptime = process.uptime();
+    const mem = process.memoryUsage();
+    const dbSize = db.prepare("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()").get();
+    const userCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE status='active'").get().c;
+    const woCount = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status IN ('pending','in_progress')").get().c;
+    const backupCount = db.prepare("SELECT COUNT(*) as c FROM backups WHERE status='completed'").get().c;
+    const lastBackup = db.prepare("SELECT created_at FROM backups WHERE status='completed' ORDER BY created_at DESC LIMIT 1").get();
+
+    res.json({
+      status: 'ok',
+      uptime_seconds: Math.round(uptime),
+      uptime_human: `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`,
+      memory: {
+        rss_mb: Math.round(mem.rss / 1048576),
+        heap_used_mb: Math.round(mem.heapUsed / 1048576),
+        heap_total_mb: Math.round(mem.heapTotal / 1048576),
+      },
+      database: {
+        size_mb: dbSize ? Math.round(dbSize.size / 1048576 * 100) / 100 : null,
+        active_users: userCount,
+        active_work_orders: woCount,
+      },
+      backups: {
+        total: backupCount,
+        last_backup: lastBackup?.created_at || null,
+      },
+      node_version: process.version,
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'خطأ في المراقبة' }); }
 });
 
 // ═══ Public routes (no auth) ═══
@@ -203,7 +255,10 @@ app.post('/api/setup/create-admin', (req, res) => {
   try {
     const { username, full_name, password } = req.body;
     if (!username || !full_name || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
-    if (password.length < 8 || !/[A-Z]/.test(password) || !/\d/.test(password)) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل مع حرف كبير ورقم' });
+    // Phase 1.5: Use centralized strong password validation
+    const { validatePassword } = require('./utils/validators');
+    const pwErr = validatePassword(password);
+    if (pwErr) return res.status(400).json({ error: pwErr });
     const hash = bcrypt.hashSync(password, 12);
     const createAdmin = db.transaction(() => {
       const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
@@ -218,39 +273,43 @@ app.post('/api/setup/create-admin', (req, res) => {
 });
 
 // ═══ Protected routes ═══
-app.use('/api/users', requireAuth, usersRouter);
-app.use('/api/hr', requireAuth, hrRouter);
-app.use('/api/audit-log', requireAuth, auditRouter);
-app.use('/api/fabrics', requireAuth, fabricsRouter);
-app.use('/api/accessories', requireAuth, accessoriesRouter);
-app.use('/api/models', requireAuth, modelsRouter);
-app.use('/api/reports', requireAuth, reportsRouter);
-app.use('/api/settings', requireAuth, settingsRouter);
-app.use('/api/invoices', requireAuth, invoicesRouter);
-app.use('/api/work-orders', requireAuth, workordersRouter);
-app.use('/api/suppliers', requireAuth, suppliersRouter);
-app.use('/api/purchase-orders', requireAuth, purchaseordersRouter);
-app.use('/api/stage-templates', requireAuth, stageTemplatesRouter);
-app.use('/api/inventory', requireAuth, inventoryRouter);
-app.use('/api/permissions', requireAuth, permissionsRouter);
-app.use('/api/customers', requireAuth, customersRouter);
-app.use('/api/notifications', requireAuth, notificationsRouter);
-app.use('/api/machines', requireAuth, machinesRouter);
-app.use('/api/accounting', requireAuth, accountingRouter);
-app.use('/api/expenses', requireAuth, expensesRouter);
-app.use('/api/maintenance', requireAuth, maintenanceRouter);
-app.use('/api/barcode', requireAuth, barcodeRouter);
-app.use('/api/mrp', requireAuth, mrpRouter);
-app.use('/api/shipping', requireAuth, shippingRouter);
-app.use('/api/scheduling', requireAuth, schedulingRouter);
-app.use('/api/quality', requireAuth, qualityRouter);
-app.use('/api/quotations', requireAuth, quotationsRouter);
-app.use('/api/samples', requireAuth, samplesRouter);
-app.use('/api/returns', requireAuth, returnsRouter);
-app.use('/api/documents', requireAuth, documentsRouter);
-app.use('/api/backups', requireAuth, backupsRouter);
-app.use('/api/auto-journal', requireAuth, autojournalRouter);
-app.use('/api/exports', requireAuth, exportsRouter);
+// Phase 3.1: API versioning — mount under both /api and /api/v1 for forward compatibility
+const apiRouter = express.Router();
+apiRouter.use('/users', usersRouter);
+apiRouter.use('/hr', hrRouter);
+apiRouter.use('/audit-log', auditRouter);
+apiRouter.use('/fabrics', fabricsRouter);
+apiRouter.use('/accessories', accessoriesRouter);
+apiRouter.use('/models', modelsRouter);
+apiRouter.use('/reports', reportsRouter);
+apiRouter.use('/settings', settingsRouter);
+apiRouter.use('/invoices', invoicesRouter);
+apiRouter.use('/work-orders', workordersRouter);
+apiRouter.use('/suppliers', suppliersRouter);
+apiRouter.use('/purchase-orders', purchaseordersRouter);
+apiRouter.use('/stage-templates', stageTemplatesRouter);
+apiRouter.use('/inventory', inventoryRouter);
+apiRouter.use('/permissions', permissionsRouter);
+apiRouter.use('/customers', customersRouter);
+apiRouter.use('/notifications', notificationsRouter);
+apiRouter.use('/machines', machinesRouter);
+apiRouter.use('/accounting', accountingRouter);
+apiRouter.use('/expenses', expensesRouter);
+apiRouter.use('/maintenance', maintenanceRouter);
+apiRouter.use('/barcode', barcodeRouter);
+apiRouter.use('/mrp', mrpRouter);
+apiRouter.use('/shipping', shippingRouter);
+apiRouter.use('/scheduling', schedulingRouter);
+apiRouter.use('/quality', qualityRouter);
+apiRouter.use('/quotations', quotationsRouter);
+apiRouter.use('/samples', samplesRouter);
+apiRouter.use('/returns', returnsRouter);
+apiRouter.use('/documents', documentsRouter);
+apiRouter.use('/backups', backupsRouter);
+apiRouter.use('/auto-journal', autojournalRouter);
+apiRouter.use('/exports', exportsRouter);
+app.use('/api', requireAuth, apiRouter);
+app.use('/api/v1', requireAuth, apiRouter);
 
 // Dashboard
 app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
@@ -733,6 +792,14 @@ const server = app.listen(PORT, () => {
   // Run notification generation on startup and every 5 minutes
   try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
   setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);
+
+  // Phase 2.5: Auto-scheduled backup every 6 hours (configurable via AUTO_BACKUP_HOURS env)
+  const backupIntervalHours = parseInt(process.env.AUTO_BACKUP_HOURS) || 6;
+  const backupFn = require('./backup');
+  setInterval(() => {
+    try { backupFn(); console.log('Auto-backup completed'); }
+    catch (e) { console.error('Auto-backup failed:', e.message); }
+  }, backupIntervalHours * 60 * 60 * 1000);
 });
 
 // ═══ Graceful shutdown ═══

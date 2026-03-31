@@ -70,4 +70,17 @@ function check(...fns) {
   return null;
 }
 
-module.exports = { required, isNumber, isPositive, isDate, isEnum, maxLength, check };
+// Phase 1.5: Centralized strong password validation
+const MIN_PASSWORD_LENGTH = 10;
+function validatePassword(password) {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    return `كلمة المرور يجب أن تكون ${MIN_PASSWORD_LENGTH} أحرف على الأقل`;
+  }
+  if (!/[A-Z]/.test(password)) return 'كلمة المرور يجب أن تحتوي على حرف كبير';
+  if (!/[a-z]/.test(password)) return 'كلمة المرور يجب أن تحتوي على حرف صغير';
+  if (!/[0-9]/.test(password)) return 'كلمة المرور يجب أن تحتوي على رقم';
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) return 'كلمة المرور يجب أن تحتوي على رمز خاص (!@#$%...)';
+  return null;
+}
+
+module.exports = { required, isNumber, isPositive, isDate, isEnum, maxLength, check, validatePassword };

@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Clock, Upload, Download, Barcode } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
 import api from '../../utils/api';
-import * as XLSX from 'xlsx';
+// 1.1: Replaced xlsx (2 HIGH CVEs) with exceljs
+import ExcelJS from 'exceljs';
 import HelpButton from '../../components/HelpButton';
 import { useToast } from '../../components/Toast';
 
@@ -111,13 +112,27 @@ export default function Attendance() {
     }
   }
 
-  function handleExport() {
+  async function handleExport() {
     // Build full attendance grid export (employee rows × day columns + totals)
-    const headers = ['الكود', 'الاسم', 'القسم'];
-    for (let d = 1; d <= daysInMonth; d++) headers.push(String(d));
-    headers.push('أيام', 'ساعات', 'إضافي', 'غياب');
+    // 1.1: Rewritten to use exceljs instead of vulnerable xlsx library
+    const workbook = new ExcelJS.Workbook();
+    const ws = workbook.addWorksheet(`حضور ${month}`, { views: [{ rightToLeft: true }] });
 
-    const rows = summary.map(emp => {
+    const headerLabels = ['الكود', 'الاسم', 'القسم'];
+    for (let d = 1; d <= daysInMonth; d++) headerLabels.push(String(d));
+    headerLabels.push('أيام', 'ساعات', 'إضافي', 'غياب');
+
+    ws.addRow(headerLabels);
+    ws.getRow(1).font = { bold: true };
+
+    // Set column widths
+    ws.columns = [
+      { width: 10 }, { width: 25 }, { width: 15 },
+      ...Array(daysInMonth).fill({ width: 5 }),
+      { width: 6 }, { width: 8 }, { width: 8 }, { width: 6 },
+    ];
+
+    summary.forEach(emp => {
       const empAtt = attByEmp[emp.employee_id] || {};
       const row = [emp.emp_code, emp.full_name, emp.department || ''];
       for (let d = 1; d <= daysInMonth; d++) {
@@ -128,18 +143,17 @@ export default function Attendance() {
         else { row.push(a.actual_hours != null ? Number(Number(a.actual_hours).toFixed(2)) : 8); }
       }
       row.push(emp.days_worked || 0, Number(Number(emp.total_hours || 0).toFixed(1)), emp.overtime_hours || 0, emp.absent_days || 0);
-      return row;
+      ws.addRow(row);
     });
 
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    ws['!cols'] = [
-      { wch: 10 }, { wch: 25 }, { wch: 15 },
-      ...Array(daysInMonth).fill({ wch: 5 }),
-      { wch: 6 }, { wch: 8 }, { wch: 8 }, { wch: 6 },
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `حضور ${month}`);
-    XLSX.writeFile(wb, `حضور-${month}.xlsx`);
+    const buf = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `حضور-${month}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // Build grid data — employees as rows, days as columns

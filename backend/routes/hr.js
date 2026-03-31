@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const multer = require('multer');
-const XLSX = require('xlsx');
+// 1.1: Replaced xlsx (2 HIGH CVEs) with exceljs — safe, actively maintained
+const ExcelJS = require('exceljs');
 const path = require('path');
 const fs = require('fs');
 const router = express.Router();
@@ -9,13 +10,21 @@ const { requirePermission, logAudit } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
 
 const upload = multer({
-  dest: path.join(__dirname, '..', 'uploads', 'attendance'),
+  dest: path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), 'uploads', 'attendance'),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ['.xlsx', '.xls', '.csv'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) return cb(null, true);
-    cb(new Error('نوع الملف غير مدعوم. الأنواع المسموحة: xlsx, xls, csv'));
+    if (!allowed.includes(ext)) return cb(new Error('نوع الملف غير مدعوم. الأنواع المسموحة: xlsx, xls, csv'));
+    const allowedMimes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
+      'application/vnd.ms-excel',  // xls
+      'text/csv',
+      'application/csv',
+      'application/octet-stream',  // some browsers send this for xlsx/xls
+    ];
+    if (!allowedMimes.includes(file.mimetype)) return cb(new Error('نوع MIME غير مدعوم'));
+    cb(null, true);
   }
 });
 
@@ -298,15 +307,60 @@ WHERE emp_code = ? AND status = 'active'
 });
 
 // POST /api/hr/attendance/import — Excel import
-router.post('/attendance/import', requirePermission('hr', 'edit'), upload.single('file'), (req, res) => {
+// 1.1: Rewritten to use exceljs instead of vulnerable xlsx library
+router.post('/attendance/import', requirePermission('hr', 'edit'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'يرجى رفع ملف Excel' });
     const { period_month } = req.body;
     if (!period_month) return res.status(400).json({ error: 'الشهر مطلوب (YYYY-MM)' });
 
-    const workbook = XLSX.readFile(req.file.path, { type: 'file', codepage: 65001 });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    // Magic byte validation for spreadsheet files
+    const fileBuf = Buffer.alloc(8);
+    const fd = fs.openSync(req.file.path, 'r');
+    fs.readSync(fd, fileBuf, 0, 8, 0);
+    fs.closeSync(fd);
+    const hex = fileBuf.toString('hex').toLowerCase();
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const validSpreadsheetMagic = [
+      '504b0304',     // XLSX (ZIP-based)
+      'd0cf11e0',     // XLS (OLE compound)
+    ];
+    // CSV files are plain text — no fixed magic bytes, skip check for .csv
+    if (ext !== '.csv' && !validSpreadsheetMagic.some(m => hex.startsWith(m))) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'محتوى الملف لا يتطابق مع نوعه' });
+    }
+
+    // Read workbook using exceljs (1.1: replaces vulnerable xlsx library)
+    const workbook = new ExcelJS.Workbook();
+    if (ext === '.csv') {
+      await workbook.csv.readFile(req.file.path);
+    } else {
+      await workbook.xlsx.readFile(req.file.path);
+    }
+    const sheet = workbook.worksheets[0];
+    if (!sheet || sheet.rowCount < 2) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'الملف فارغ أو غير صالح' });
+    }
+
+    // Convert sheet to array-of-arrays for compatibility with existing logic
+    const data = [];
+    sheet.eachRow((row, rowNum) => {
+      const rowArr = [];
+      row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+        while (rowArr.length < colNum) rowArr.push('');
+        let val = cell.value;
+        // exceljs returns Date objects for date cells
+        if (val instanceof Date) {
+          val = val.toISOString().slice(0, 10);
+        } else if (val && typeof val === 'object' && val.result !== undefined) {
+          val = val.result; // formula cells
+        }
+        rowArr[colNum - 1] = val ?? '';
+      });
+      data.push(rowArr);
+    });
 
     if (!data || data.length < 2) {
       fs.unlinkSync(req.file.path);
@@ -364,10 +418,9 @@ router.post('/attendance/import', requirePermission('hr', 'edit'), upload.single
 
         let dateVal = dateIdx >= 0 ? row[dateIdx] : null;
         if (!dateVal) continue;
-        // Handle Excel serial dates
-        if (typeof dateVal === 'number') {
-          const d = XLSX.SSF.parse_date_code(dateVal);
-          dateVal = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+        // exceljs returns Date objects for date cells, strings for text
+        if (dateVal instanceof Date) {
+          dateVal = dateVal.toISOString().slice(0, 10);
         } else {
           dateVal = String(dateVal).trim();
         }
@@ -389,17 +442,15 @@ router.post('/attendance/import', requirePermission('hr', 'edit'), upload.single
       for (let c = 1; c < headers.length; c++) {
         let h = headers[c];
         if (!h) continue;
-        // Could be "1/3", "2/3" or "2026-03-01" or Excel serial
+        // Could be "1/3", "2/3" or "2026-03-01" or Date object (exceljs)
         let dateStr;
-        if (typeof h === 'number') {
-          const d = XLSX.SSF.parse_date_code(h);
-          dateStr = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+        if (h instanceof Date) {
+          dateStr = h.toISOString().slice(0, 10);
         } else {
           const hStr = String(h).trim();
           const parts = hStr.split('/');
           if (parts.length === 2) {
             const day = parts[0].padStart(2, '0');
-            const mon = parts[1].padStart(2, '0');
             dateStr = `${period_month}-${day}`;
           } else {
             dateStr = hStr;

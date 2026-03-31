@@ -1,71 +1,85 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench, Calculator, Send, CalendarClock, CheckSquare, FileSpreadsheet, ShoppingBag, Beaker, RotateCcw, FolderOpen, Database, Download, Sun, Moon } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import Dashboard from './pages/Dashboard';
-import Fabrics from './pages/Fabrics';
-import Accessories from './pages/Accessories';
-import ModelForm from './pages/ModelForm';
-import ModelsList from './pages/ModelsList';
-import BomTemplates from './pages/BomTemplates';
-import SettingsPage from './pages/Settings';
-import PrintView from './pages/PrintView';
-import InvoicePrint from './pages/InvoicePrint';
-import Reports from './pages/Reports';
-import ExportsCenter from './pages/ExportsCenter';
-import Invoices from './pages/Invoices';
-import InvoiceView from './pages/InvoiceView';
-import ChartOfAccounts from './pages/ChartOfAccounts';
-import JournalEntries from './pages/JournalEntries';
-import TrialBalance from './pages/TrialBalance';
-import WorkOrdersList from './pages/WorkOrdersList';
-import WorkOrderForm from './pages/WorkOrderForm';
-import WorkOrderDetail from './pages/WorkOrderDetail';
-import Suppliers from './pages/Suppliers';
-import Customers from './pages/Customers';
-import Machines from './pages/Machines';
-import PurchaseOrders from './pages/PurchaseOrders';
-import FabricInventory from './pages/FabricInventory';
-import AccessoryInventory from './pages/AccessoryInventory';
-import Login from './pages/Login';
-import Setup from './pages/Setup';
-import UsersPage from './pages/Users';
-import AuditLog from './pages/AuditLog';
-import Employees from './pages/HR/Employees';
-import Attendance from './pages/HR/Attendance';
-import Payroll from './pages/HR/Payroll';
-import PaySlip from './pages/HR/PaySlip';
-import Leaves from './pages/HR/Leaves';
-import Profile from './pages/Profile';
-import ChangePassword from './pages/ChangePassword';
-import StageTemplates from './pages/StageTemplates';
-import CustomerDetail from './pages/CustomerDetail';
-import SupplierDetail from './pages/SupplierDetail';
-import MachineDetail from './pages/MachineDetail';
-import Expenses from './pages/Expenses';
-import MaintenancePage from './pages/Maintenance';
-import NotFound from './pages/NotFound';
+// Phase 4.1: Code splitting — lazy load all page components
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Fabrics = lazy(() => import('./pages/Fabrics'));
+const Accessories = lazy(() => import('./pages/Accessories'));
+const ModelForm = lazy(() => import('./pages/ModelForm'));
+const ModelsList = lazy(() => import('./pages/ModelsList'));
+const BomTemplates = lazy(() => import('./pages/BomTemplates'));
+const SettingsPage = lazy(() => import('./pages/Settings'));
+const PrintView = lazy(() => import('./pages/PrintView'));
+const InvoicePrint = lazy(() => import('./pages/InvoicePrint'));
+const Reports = lazy(() => import('./pages/Reports'));
+const ExportsCenter = lazy(() => import('./pages/ExportsCenter'));
+const Invoices = lazy(() => import('./pages/Invoices'));
+const InvoiceView = lazy(() => import('./pages/InvoiceView'));
+const ChartOfAccounts = lazy(() => import('./pages/ChartOfAccounts'));
+const JournalEntries = lazy(() => import('./pages/JournalEntries'));
+const TrialBalance = lazy(() => import('./pages/TrialBalance'));
+const WorkOrdersList = lazy(() => import('./pages/WorkOrdersList'));
+const WorkOrderForm = lazy(() => import('./pages/WorkOrderForm'));
+const WorkOrderDetail = lazy(() => import('./pages/WorkOrderDetail'));
+const Suppliers = lazy(() => import('./pages/Suppliers'));
+const Customers = lazy(() => import('./pages/Customers'));
+const Machines = lazy(() => import('./pages/Machines'));
+const PurchaseOrders = lazy(() => import('./pages/PurchaseOrders'));
+const FabricInventory = lazy(() => import('./pages/FabricInventory'));
+const AccessoryInventory = lazy(() => import('./pages/AccessoryInventory'));
+const Login = lazy(() => import('./pages/Login'));
+const Setup = lazy(() => import('./pages/Setup'));
+const UsersPage = lazy(() => import('./pages/Users'));
+const AuditLog = lazy(() => import('./pages/AuditLog'));
+const Employees = lazy(() => import('./pages/HR/Employees'));
+const Attendance = lazy(() => import('./pages/HR/Attendance'));
+const Payroll = lazy(() => import('./pages/HR/Payroll'));
+const PaySlip = lazy(() => import('./pages/HR/PaySlip'));
+const Leaves = lazy(() => import('./pages/HR/Leaves'));
+const Profile = lazy(() => import('./pages/Profile'));
+const ChangePassword = lazy(() => import('./pages/ChangePassword'));
+const StageTemplates = lazy(() => import('./pages/StageTemplates'));
+const CustomerDetail = lazy(() => import('./pages/CustomerDetail'));
+const SupplierDetail = lazy(() => import('./pages/SupplierDetail'));
+const MachineDetail = lazy(() => import('./pages/MachineDetail'));
+const Expenses = lazy(() => import('./pages/Expenses'));
+const MaintenancePage = lazy(() => import('./pages/Maintenance'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 import GlobalSearch from './components/GlobalSearch';
 import Breadcrumbs from './components/Breadcrumbs';
 import NotificationBell from './components/NotificationBell';
-import NotificationsPage from './pages/Notifications';
-import Permissions from './pages/Permissions';
-import MRP from './pages/MRP';
-import Shipping from './pages/Shipping';
-import Scheduling from './pages/Scheduling';
-import Quality from './pages/Quality';
-import Quotations from './pages/Quotations';
-import SalesOrders from './pages/SalesOrders';
-import Samples from './pages/Samples';
-import Returns from './pages/Returns';
-import Documents from './pages/Documents';
-import Backups from './pages/Backups';
-import KnowledgeBase from './pages/KnowledgeBase';
+const NotificationsPage = lazy(() => import('./pages/Notifications'));
+const Permissions = lazy(() => import('./pages/Permissions'));
+const MRP = lazy(() => import('./pages/MRP'));
+const Shipping = lazy(() => import('./pages/Shipping'));
+const Scheduling = lazy(() => import('./pages/Scheduling'));
+const Quality = lazy(() => import('./pages/Quality'));
+const Quotations = lazy(() => import('./pages/Quotations'));
+const SalesOrders = lazy(() => import('./pages/SalesOrders'));
+const Samples = lazy(() => import('./pages/Samples'));
+const Returns = lazy(() => import('./pages/Returns'));
+const Documents = lazy(() => import('./pages/Documents'));
+const Backups = lazy(() => import('./pages/Backups'));
+const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 import QuickActions from './components/QuickActions';
 import HelpButton from './components/HelpButton';
 import { ToastProvider } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
+
+// Phase 4.4: Page loading fallback with skeleton
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="animate-pulse space-y-4 w-full max-w-2xl px-8">
+        <div className="h-8 bg-gray-200 dark:bg-white/10 rounded w-1/3" />
+        <div className="h-4 bg-gray-200 dark:bg-white/10 rounded w-2/3" />
+        <div className="h-64 bg-gray-200 dark:bg-white/10 rounded" />
+      </div>
+    </div>
+  );
+}
 
 function ProtectedRoute({ children, perm }) {
   const { user, loading, can } = useAuth();
@@ -405,6 +419,7 @@ function AppLayout() {
         <div className="p-4 lg:p-0">
           <Breadcrumbs />
         </div>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
@@ -465,6 +480,7 @@ function AppLayout() {
           <Route path="/purchaseorders" element={<Navigate to="/purchase-orders" replace />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
       </main>
       <QuickActions />
     </div>
@@ -492,15 +508,17 @@ function AuthRouter() {
   if (loading) return <div className="flex items-center justify-center min-h-screen bg-[#1a1a2e] text-[#c9a84c]">جاري التحميل...</div>;
 
   return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-[#1a1a2e] text-[#c9a84c]">جاري التحميل...</div>}>
     <Routes>
       {needsSetup && <Route path="*" element={<Setup />} />}
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
-      <Route path="/setup" element={<Setup />} />
+      <Route path="/setup" element={needsSetup ? <Setup /> : <Navigate to="/login" replace />} />
       <Route path="/models/:code/print" element={user ? <PrintView /> : <Navigate to="/login" replace />} />
       <Route path="/models/:code/invoice" element={user ? <InvoicePrint /> : <Navigate to="/login" replace />} />
       <Route path="/invoices/:id/view" element={user ? <InvoiceView /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={user ? <AppLayout /> : <Navigate to="/login" replace />} />
     </Routes>
+    </Suspense>
   );
 }
 

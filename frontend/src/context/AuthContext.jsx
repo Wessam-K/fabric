@@ -31,19 +31,29 @@ export function AuthProvider({ children }) {
     checkAuth();
   }, []);
 
-  async function checkAuth() {
+  async function checkAuth(retries = 3) {
     try {
-      // Check if setup needed
-      const setupRes = await api.get('/setup/status');
+      // Check if setup needed (retry if backend not ready yet)
+      let setupRes;
+      for (let i = 0; i < retries; i++) {
+        try {
+          setupRes = await api.get('/setup/status');
+          break;
+        } catch (e) {
+          if (i < retries - 1) {
+            await new Promise(r => setTimeout(r, 1500));
+          } else {
+            throw e;
+          }
+        }
+      }
       if (setupRes.data.needs_setup) {
         setNeedsSetup(true);
         setLoading(false);
         return;
       }
 
-      const token = localStorage.getItem('wk_token');
-      if (!token) { setLoading(false); return; }
-
+      // Phase 1.2: Token is in httpOnly cookie — just call /auth/me directly
       const res = await api.get('/auth/me');
       setUser(res.data);
       localStorage.setItem('wk_user', JSON.stringify(res.data));
@@ -54,7 +64,6 @@ export function AuthProvider({ children }) {
         setPermissions(permRes.data);
       } catch { /* permissions will be empty, role-based fallback */ }
     } catch {
-      localStorage.removeItem('wk_token');
       localStorage.removeItem('wk_user');
     } finally {
       setLoading(false);
@@ -63,7 +72,7 @@ export function AuthProvider({ children }) {
 
   async function login(username, password) {
     const res = await api.post('/auth/login', { username, password });
-    localStorage.setItem('wk_token', res.data.token);
+    // Phase 1.2: Token is now in httpOnly cookie — only store user info locally
     localStorage.setItem('wk_user', JSON.stringify(res.data.user));
     setUser(res.data.user);
     // Load permissions after login
@@ -76,7 +85,7 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     try { await api.post('/auth/logout'); } catch {}
-    localStorage.removeItem('wk_token');
+    // Phase 1.2: Cookie cleared server-side — only remove user info
     localStorage.removeItem('wk_user');
     setUser(null);
     setPermissions({});

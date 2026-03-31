@@ -3,6 +3,9 @@ const router = express.Router();
 const db = require('../database');
 const { requirePermission } = require('../middleware/auth');
 
+// Phase 2.4: Configurable max rows for report queries to prevent memory issues
+const MAX_REPORT_ROWS = parseInt(process.env.MAX_REPORT_ROWS) || 5000;
+
 // GET /api/reports/summary — KPI overview
 router.get('/summary', requirePermission('reports', 'view'), (req, res) => {
   try {
@@ -56,7 +59,7 @@ router.get('/work-orders', requirePermission('reports', 'view'), (req, res) => {
     if (date_from) { q += ' AND wo.created_at >= ?'; p.push(date_from); }
     if (date_to) { q += ' AND wo.created_at <= ?'; p.push(date_to + 'T23:59:59'); }
     if (search) { const s = `%${search}%`; q += ' AND (wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ?)'; p.push(s, s, s); }
-    q += ' ORDER BY wo.created_at DESC';
+    q += ' ORDER BY wo.created_at DESC LIMIT ' + MAX_REPORT_ROWS;
     res.json(db.prepare(q).all(...p));
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -83,6 +86,7 @@ router.get('/by-fabric', requirePermission('reports', 'view'), (req, res) => {
       WHERE ${where}
       GROUP BY f.code
       ORDER BY total_cost DESC
+      LIMIT ${MAX_REPORT_ROWS}
     `).all(...p);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -109,6 +113,7 @@ router.get('/by-accessory', requirePermission('reports', 'view'), (req, res) => 
       WHERE ${where}
       GROUP BY a.code
       ORDER BY total_cost DESC
+      LIMIT ${MAX_REPORT_ROWS}
     `).all(...p);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -128,6 +133,7 @@ router.get('/suppliers', requirePermission('reports', 'view'), (req, res) => {
       WHERE s.status='active'
       GROUP BY s.id
       ORDER BY total_ordered DESC
+      LIMIT ${MAX_REPORT_ROWS}
     `).all();
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -263,7 +269,7 @@ router.get('/costs', requirePermission('reports', 'view'), (req, res) => {
       LEFT JOIN work_orders wo ON wo.id=cs.wo_id
       LEFT JOIN models m ON m.id=cs.model_id
       WHERE cs.wo_id IS NOT NULL
-      ORDER BY cs.snapshot_date DESC`).all();
+      ORDER BY cs.snapshot_date DESC LIMIT ${MAX_REPORT_ROWS}`).all();
     res.json({ totals, snapshots });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -292,6 +298,7 @@ router.get('/fabric-consumption', requirePermission('reports', 'view'), (req, re
       WHERE ${where}
       GROUP BY f.code
       ORDER BY actual_cost DESC
+      LIMIT ${MAX_REPORT_ROWS}
     `).all(...p);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -315,6 +322,7 @@ router.get('/supplier-fabric', requirePermission('reports', 'view'), (req, res) 
       WHERE fib.batch_status!='cancelled'
       GROUP BY s.id, f.code
       ORDER BY s.name, total_value DESC
+      LIMIT ${MAX_REPORT_ROWS}
     `).all();
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -343,6 +351,7 @@ router.get('/waste-analysis', requirePermission('reports', 'view'), (req, res) =
       GROUP BY wfb.wo_id
       HAVING waste_meters>0
       ORDER BY waste_cost DESC
+      LIMIT ${MAX_REPORT_ROWS}
     `).all(...p);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -375,6 +384,7 @@ router.get('/cost-variance', requirePermission('reports', 'view'), (req, res) =>
       WHERE ${where}
       GROUP BY wo.id
       ORDER BY wo.created_at DESC
+      LIMIT ${MAX_REPORT_ROWS}
     `).all(...p);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -400,7 +410,7 @@ router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
           FROM cost_snapshots WHERE wo_id IS NOT NULL
         ) cs ON cs.wo_id=wo.id AND cs.rn=1
         WHERE wo.status != 'cancelled'
-        ORDER BY wo.created_at DESC
+        ORDER BY wo.created_at DESC LIMIT ${MAX_REPORT_ROWS}
       `).all();
     } else if (source === 'financial') {
       rows = db.prepare(`
@@ -411,7 +421,7 @@ router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
         FROM purchase_orders po
         LEFT JOIN suppliers s ON s.id=po.supplier_id
         WHERE po.status != 'cancelled'
-        ORDER BY po.order_date DESC
+        ORDER BY po.order_date DESC LIMIT ${MAX_REPORT_ROWS}
       `).all();
     } else if (source === 'hr') {
       rows = db.prepare(`
@@ -423,7 +433,7 @@ router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
           (SELECT pr.net_pay FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pr.employee_id=e.id ORDER BY pp.period_month DESC LIMIT 1) as last_net_salary
         FROM employees e
         WHERE e.status != 'terminated'
-        ORDER BY e.emp_code
+        ORDER BY e.emp_code LIMIT ${MAX_REPORT_ROWS}
       `).all();
     } else if (source === 'inventory') {
       rows = db.prepare(`
@@ -438,7 +448,7 @@ router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
           CASE WHEN a.quantity_on_hand < a.low_stock_threshold THEN 'low' ELSE 'ok' END as stock_status,
           (a.quantity_on_hand * a.unit_price) as stock_value
         FROM accessories a WHERE a.status='active'
-        ORDER BY name
+        ORDER BY name LIMIT ${MAX_REPORT_ROWS}
       `).all();
     } else {
       return res.status(400).json({ error: 'مصدر غير صالح. استخدم: production, financial, hr, inventory' });

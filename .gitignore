@@ -15,9 +15,9 @@ node-runtime/
 # Frontend build output
 frontend/dist/
 
-# Uploads (do not commit uploaded files)
-/backend/uploads/**
-!/backend/uploads/.gitkeep
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
 
 # Environment
 backend/.env
@@ -60,7 +60,9 @@ sweep-*.txt
 screenshots/
 
 # Images and binary assets (keep repo lean)
-/assets/**
+assets/*.png
+assets/*.jpg
+assets/*.ico
 *.png
 *.jpg
 *.jpeg
@@ -68,21 +70,7 @@ screenshots/
 *.webp
 *.bmp
 *.ico
-!/frontend/public/favicon.ico
-
-# Build outputs and large binaries
-/dist-electron/**
-/frontend/dist/**
-/node-runtime/**
-
-# Database files (ensure not tracked)
-/backend/*.db
-/backend/*.db-*
-/backend/wk-hub.db
-
-# Screenshots, test results
-/screenshots/**
-/test-results/**
+!frontend/public/favicon.ico
 
 # Large binary files
 *.exe

@@ -2,11 +2,14 @@
 const router = express.Router();
 const multer = require('multer');
 const { logAudit, requirePermission } = require('../middleware/auth');
+// Phase 1.4: Magic byte validation for uploaded images
+const { validateOrRemove } = require('../utils/fileValidation');
+const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 const path = require('path');
 const fs = require('fs');
 const db = require('../database');
 
-const uploadDir = path.join(__dirname, '..', 'uploads', 'fabrics');
+const uploadDir = path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), 'uploads', 'fabrics');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -47,11 +50,16 @@ router.get('/', requirePermission('fabrics', 'view'), (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
-router.post('/', upload.single('image'), requirePermission('fabrics', 'create'), (req, res) => {
+router.post('/', upload.single('image'), requirePermission('fabrics', 'create'), async (req, res) => {
   try {
     const { code, name, fabric_type, price_per_m, supplier, supplier_id, color, notes } = req.body;
     if (!code || !name || !price_per_m) return res.status(400).json({ error: 'الكود والاسم وسعر المتر مطلوبين' });
     if (parseFloat(price_per_m) < 0) return res.status(400).json({ error: 'سعر المتر لا يمكن أن يكون سالباً' });
+    // Phase 1.4: Validate image magic bytes
+    if (req.file) {
+      const check = await validateOrRemove(req.file.path, ALLOWED_IMAGE_MIMES);
+      if (!check.valid) return res.status(400).json({ error: 'محتوى الملف لا يتطابق مع نوعه' });
+    }
     const image_path = req.file ? `/uploads/fabrics/${req.file.filename}` : null;
     const r = db.prepare(`INSERT INTO fabrics (code,name,fabric_type,price_per_m,supplier,supplier_id,color,image_path,notes) VALUES (?,?,?,?,?,?,?,?,?)`)
       .run(code, name, fabric_type || 'main', parseFloat(price_per_m), supplier || null, supplier_id || null, color || null, image_path, notes || null);
@@ -100,11 +108,16 @@ router.post('/import', requirePermission('fabrics', 'create'), (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
-router.put('/:code', upload.single('image'), requirePermission('fabrics', 'edit'), (req, res) => {
+router.put('/:code', upload.single('image'), requirePermission('fabrics', 'edit'), async (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM fabrics WHERE code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
     const { name, fabric_type, price_per_m, supplier, supplier_id, color, status, notes } = req.body;
+    // Phase 1.4: Validate image magic bytes
+    if (req.file) {
+      const check = await validateOrRemove(req.file.path, ALLOWED_IMAGE_MIMES);
+      if (!check.valid) return res.status(400).json({ error: 'محتوى الملف لا يتطابق مع نوعه' });
+    }
     const image_path = req.file ? `/uploads/fabrics/${req.file.filename}` : existing.image_path;
     db.prepare(`UPDATE fabrics SET name=COALESCE(?,name),fabric_type=COALESCE(?,fabric_type),price_per_m=COALESCE(?,price_per_m),supplier=COALESCE(?,supplier),supplier_id=COALESCE(?,supplier_id),color=COALESCE(?,color),image_path=COALESCE(?,image_path),status=COALESCE(?,status),notes=COALESCE(?,notes) WHERE code=?`)
       .run(name||null, fabric_type||null, price_per_m?parseFloat(price_per_m):null, supplier||null, supplier_id||null, color||null, image_path, status||null, notes||null, req.params.code);
@@ -114,9 +127,12 @@ router.put('/:code', upload.single('image'), requirePermission('fabrics', 'edit'
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
-router.post('/:code/image', requirePermission('fabrics', 'edit'), upload.single('image'), (req, res) => {
+router.post('/:code/image', requirePermission('fabrics', 'edit'), upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'لا توجد صورة' });
+    // Phase 1.4: Validate image magic bytes
+    const check = await validateOrRemove(req.file.path, ALLOWED_IMAGE_MIMES);
+    if (!check.valid) return res.status(400).json({ error: 'محتوى الملف لا يتطابق مع نوعه' });
     const image_path = `/uploads/fabrics/${req.file.filename}`;
     db.prepare('UPDATE fabrics SET image_path=? WHERE code=?').run(image_path, req.params.code);
     res.json({ image_path });

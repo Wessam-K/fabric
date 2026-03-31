@@ -2,8 +2,9 @@
 const bcrypt = require('bcryptjs');
 const router = express.Router();
 const db = require('../database');
-const { generateToken, requireAuth, logAudit, revokeToken } = require('../middleware/auth');
+const { generateToken, requireAuth, logAudit, revokeToken, setAuthCookie, clearAuthCookie } = require('../middleware/auth');
 const jwt = require('jsonwebtoken');
+const { validatePassword } = require('../utils/validators');
 
 // POST /api/auth/login
 router.post('/login', (req, res) => {
@@ -12,28 +13,28 @@ router.post('/login', (req, res) => {
     if (!username || !password) return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
 
     const user = db.prepare('SELECT * FROM users WHERE username = ? AND status = ?').get(username, 'active');
-    if (!user) return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيح' });
-
     // Account lockout check
-    if (user.locked_until) {
+    if (user?.locked_until) {
       const lockExpiry = new Date(user.locked_until);
       if (lockExpiry > new Date()) {
         const mins = Math.ceil((lockExpiry - new Date()) / 60000);
         return res.status(423).json({ error: `الحساب مقفل. حاول بعد ${mins} دقيقة` });
       }
-      // Lock expired, reset
       db.prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
     }
-
-    const valid = bcrypt.compareSync(password, user.password_hash);
-    if (!valid) {
-      const attempts = (user.failed_login_attempts || 0) + 1;
-      if (attempts >= 5) {
-        const lockUntil = new Date(Date.now() + 15 * 60000).toISOString();
-        db.prepare('UPDATE users SET failed_login_attempts = ?, locked_until = ? WHERE id = ?').run(attempts, lockUntil, user.id);
-        return res.status(423).json({ error: 'تم قفل الحساب لمدة 15 دقيقة بسبب محاولات كثيرة' });
+    // Phase 1.7: Constant-time comparison — always run bcrypt even if user not found
+    const DUMMY_HASH = '$2b$12$LJ3m4ys3Sz8RkO9kBZqiRuXzHpLmnKFVPGQa2tj8WknN0Fh.2vOu2';
+    const valid = bcrypt.compareSync(password, user ? user.password_hash : DUMMY_HASH);
+    if (!user || !valid) {
+      if (user) {
+        const attempts = (user.failed_login_attempts || 0) + 1;
+        if (attempts >= 5) {
+          const lockUntil = new Date(Date.now() + 15 * 60000).toISOString();
+          db.prepare('UPDATE users SET failed_login_attempts = ?, locked_until = ? WHERE id = ?').run(attempts, lockUntil, user.id);
+          return res.status(423).json({ error: 'تم قفل الحساب لمدة 15 دقيقة بسبب محاولات كثيرة' });
+        }
+        db.prepare('UPDATE users SET failed_login_attempts = ? WHERE id = ?').run(attempts, user.id);
       }
-      db.prepare('UPDATE users SET failed_login_attempts = ? WHERE id = ?').run(attempts, user.id);
       return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيح' });
     }
 
@@ -41,8 +42,8 @@ router.post('/login', (req, res) => {
     db.prepare('UPDATE users SET last_login = datetime(?), failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(new Date().toISOString(), user.id);
 
     const token = generateToken(user);
-    
-    // Log login
+    // Phase 1.2: Set httpOnly cookie
+    setAuthCookie(res, token);
     try {
       db.prepare(`INSERT INTO audit_log (user_id, username, action, entity_type, entity_id, entity_label) VALUES (?,?,?,?,?,?)`)
         .run(user.id, user.username, 'LOGIN', 'user', String(user.id), user.full_name);
@@ -62,6 +63,8 @@ router.post('/refresh', requireAuth, (req, res) => {
     const user = db.prepare('SELECT id, username, full_name, role, status FROM users WHERE id = ? AND status = ?').get(req.user.id, 'active');
     if (!user) return res.status(401).json({ error: 'المستخدم غير نشط' });
     const token = generateToken(user);
+    // Phase 1.2: Set httpOnly cookie
+    setAuthCookie(res, token);
     res.json({ token });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -71,6 +74,8 @@ router.post('/logout', requireAuth, (req, res) => {
   try {
     // D1: Revoke the token so it can't be reused
     if (req.token) revokeToken(req.token);
+    // Phase 1.2: Clear httpOnly cookie
+    clearAuthCookie(res);
     logAudit(req, 'LOGOUT', 'user', req.user.id, req.user.full_name);
     res.json({ message: 'تم تسجيل الخروج' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -90,10 +95,9 @@ router.put('/change-password', requireAuth, (req, res) => {
   try {
     const { current_password, new_password } = req.body;
     if (!current_password || !new_password) return res.status(400).json({ error: 'كلمة المرور الحالية والجديدة مطلوبتان' });
-    if (new_password.length < 8) return res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل' });
-    if (!/[A-Z]/.test(new_password) || !/[0-9]/.test(new_password)) {
-      return res.status(400).json({ error: 'كلمة المرور يجب أن تحتوي على حرف كبير ورقم على الأقل' });
-    }
+    // Phase 1.5: Use centralized strong password validation
+    const pwErr = validatePassword(new_password);
+    if (pwErr) return res.status(400).json({ error: pwErr });
 
     const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
     if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });

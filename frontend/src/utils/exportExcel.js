@@ -1,20 +1,32 @@
-import * as XLSX from 'xlsx';
+// 1.1: Replaced xlsx (2 HIGH CVEs) with exceljs — safe, actively maintained
+import ExcelJS from 'exceljs';
 
-export function exportToExcel(data, columns, filename, sheetName = 'بيانات') {
-  const headers = columns.map(c => c.header);
-  const rows = data.map(row => columns.map(c => row[c.key] ?? ''));
+export async function exportToExcel(data, columns, filename, sheetName = 'بيانات') {
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet(sheetName, { views: [{ rightToLeft: true }] });
 
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  ws['!cols'] = columns.map(c => ({ wch: c.width || 15 }));
+  // Set columns with headers and widths
+  ws.columns = columns.map(c => ({ header: c.header, key: c.key, width: c.width || 15 }));
+  // Bold header row
+  ws.getRow(1).font = { bold: true };
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  // Add data rows
+  for (const row of data) {
+    ws.addRow(columns.reduce((obj, c) => { obj[c.key] = row[c.key] ?? ''; return obj; }, {}));
+  }
 
   const today = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `${filename}-${today}.xlsx`);
+  const buf = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename}-${today}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
-export function exportPayrollToExcel(records, periodName) {
+export async function exportPayrollToExcel(records, periodName) {
   const columns = [
     { key: 'emp_code', header: 'الكود', width: 10 },
     { key: 'full_name', header: 'الاسم', width: 25 },
@@ -35,21 +47,36 @@ export function exportPayrollToExcel(records, periodName) {
     { key: 'net_pay', header: 'صافي الراتب', width: 15 },
   ];
 
-  const headers = columns.map(c => c.header);
-  const rows = records.map(r => columns.map(c => r[c.key] ?? 0));
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet(periodName || 'كشف الرواتب', { views: [{ rightToLeft: true }] });
+
+  ws.columns = columns.map(c => ({ header: c.header, key: c.key, width: c.width }));
+  ws.getRow(1).font = { bold: true };
+
+  // Add data rows
+  for (const r of records) {
+    ws.addRow(columns.reduce((obj, c) => { obj[c.key] = r[c.key] ?? 0; return obj; }, {}));
+  }
 
   // Add totals row
-  const totals = columns.map((c, i) => {
-    if (i < 3) return i === 0 ? '' : i === 1 ? 'الإجمالي' : '';
-    return records.reduce((s, r) => s + (Number(r[c.key]) || 0), 0);
-  });
-
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows, totals]);
-  ws['!cols'] = columns.map(c => ({ wch: c.width || 15 }));
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, periodName || 'كشف الرواتب');
+  const totalsRow = ws.addRow(
+    columns.reduce((obj, c, i) => {
+      if (i === 0) obj[c.key] = '';
+      else if (i === 1) obj[c.key] = 'الإجمالي';
+      else if (i === 2) obj[c.key] = '';
+      else obj[c.key] = records.reduce((s, r) => s + (Number(r[c.key]) || 0), 0);
+      return obj;
+    }, {})
+  );
+  totalsRow.font = { bold: true };
 
   const today = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `كشف-رواتب-${periodName || today}.xlsx`);
+  const buf = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `كشف-رواتب-${periodName || today}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
 }

@@ -17,17 +17,35 @@ if (!JWT_SECRET || JWT_SECRET === 'wk-hub-secret-2026-change-in-prod') {
 }
 const JWT_EXPIRES = '24h';
 
-// ── D1: Token blacklist (in-memory, survives for session) ──
-const tokenBlacklist = new Set();
+// ── Phase 1.3: Persistent token blacklist (SQLite table) ──
+// Create revoked_tokens table if not exists
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS revoked_tokens (
+    token_hash TEXT PRIMARY KEY,
+    revoked_at TEXT DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL
+  )`);
+} catch {}
+
+// Periodic cleanup of expired revoked tokens (every hour)
+setInterval(() => {
+  try { db.prepare("DELETE FROM revoked_tokens WHERE expires_at < datetime('now')").run(); } catch {}
+}, 60 * 60 * 1000);
 
 function revokeToken(token) {
-  tokenBlacklist.add(token);
-  // Auto-cleanup after 24h to prevent memory leak
-  setTimeout(() => tokenBlacklist.delete(token), 24 * 60 * 60 * 1000);
+  try {
+    const decoded = jwt.decode(token);
+    const expiresAt = decoded?.exp ? new Date(decoded.exp * 1000).toISOString() : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    db.prepare('INSERT OR IGNORE INTO revoked_tokens (token_hash, expires_at) VALUES (?, ?)').run(tokenHash, expiresAt);
+  } catch {}
 }
 
 function isTokenRevoked(token) {
-  return tokenBlacklist.has(token);
+  try {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    return !!db.prepare('SELECT 1 FROM revoked_tokens WHERE token_hash = ?').get(tokenHash);
+  } catch { return false; }
 }
 
 function generateToken(user) {
@@ -38,19 +56,51 @@ function generateToken(user) {
   );
 }
 
+// ── Phase 1.2: httpOnly cookie helpers ──
+const COOKIE_NAME = 'wk_token';
+const COOKIE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h — matches JWT_EXPIRES
+
+function setAuthCookie(res, token) {
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: false, // Electron app runs on localhost — no HTTPS
+    sameSite: 'lax',
+    maxAge: COOKIE_MAX_AGE,
+    path: '/',
+  });
+}
+
+function clearAuthCookie(res) {
+  res.clearCookie(COOKIE_NAME, { httpOnly: true, sameSite: 'lax', path: '/' });
+}
+
 function requireAuth(req, res, next) {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
+  // Phase 3.5: Skip JWT check if API key already authenticated
+  if (req.isApiKey && req.user) return next();
+
+  // Phase 1.2: Read JWT from httpOnly cookie first, fall back to Authorization header
+  let token = req.cookies?.[COOKIE_NAME] || null;
+  if (!token) {
+    const header = req.headers.authorization;
+    if (header && header.startsWith('Bearer ')) token = header.slice(7);
+  }
+  if (!token) {
     return res.status(401).json({ error: 'غير مصرح — يجب تسجيل الدخول' });
   }
   try {
-    const token = header.slice(7);
     if (isTokenRevoked(token)) {
       return res.status(401).json({ error: 'تم إبطال الجلسة — يرجى تسجيل الدخول مجدداً' });
     }
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
-    req.token = token; // Expose token for logout endpoint
+    req.token = token;
+
+    // Auto-refresh: if token expires within 2 hours, issue a fresh cookie
+    const now = Math.floor(Date.now() / 1000);
+    if (decoded.exp && (decoded.exp - now) < 7200) {
+      const freshToken = generateToken({ id: decoded.id, username: decoded.username, role: decoded.role, full_name: decoded.full_name });
+      setAuthCookie(res, freshToken);
+    }
     next();
   } catch {
     return res.status(401).json({ error: 'انتهت الجلسة — يرجى تسجيل الدخول مجدداً' });
@@ -67,14 +117,36 @@ function requireRole(...roles) {
   };
 }
 
+// Phase 2.3: Permission cache — avoids 2 DB queries per permission check
+const _permCache = new Map();
+const PERM_CACHE_TTL = 60000; // 60 seconds
+
+function _getPermCacheKey(userId) { return `perm:${userId}`; }
+
+function invalidatePermCache(userId) {
+  if (userId) _permCache.delete(_getPermCacheKey(userId));
+  else _permCache.clear(); // Clear all if no userId specified
+}
+
 function canUser(user, mod, action) {
   if (!user) return false;
   if (user.role === 'superadmin') return true;
   try {
-    const userPerm = db.prepare('SELECT allowed FROM user_permissions WHERE user_id=? AND module=? AND action=?').get(user.id, mod, action);
-    if (userPerm) return !!userPerm.allowed;
-    const rolePerm = db.prepare('SELECT allowed FROM role_permissions WHERE role=? AND module=? AND action=?').get(user.role, mod, action);
-    return !!(rolePerm && rolePerm.allowed);
+    // Check cache first
+    const cacheKey = _getPermCacheKey(user.id);
+    let cached = _permCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts < PERM_CACHE_TTL)) {
+      const permKey = `${mod}:${action}`;
+      return cached.perms[permKey] !== undefined ? cached.perms[permKey] : false;
+    }
+    // Build full permission map from DB
+    const userPerms = db.prepare('SELECT module, action, allowed FROM user_permissions WHERE user_id=?').all(user.id);
+    const rolePerms = db.prepare('SELECT module, action, allowed FROM role_permissions WHERE role=?').all(user.role);
+    const perms = {};
+    for (const rp of rolePerms) { perms[`${rp.module}:${rp.action}`] = !!rp.allowed; }
+    for (const up of userPerms) { perms[`${up.module}:${up.action}`] = !!up.allowed; } // user overrides role
+    _permCache.set(cacheKey, { ts: Date.now(), perms });
+    return perms[`${mod}:${action}`] || false;
   } catch { return false; }
 }
 
@@ -106,4 +178,4 @@ function logAudit(req, action, entityType, entityId, entityLabel, oldValues = nu
   } catch(e) { console.error('Audit log error:', e.message); }
 }
 
-module.exports = { generateToken, requireAuth, requireRole, requirePermission, canUser, logAudit, revokeToken };
+module.exports = { generateToken, requireAuth, requireRole, requirePermission, canUser, logAudit, revokeToken, setAuthCookie, clearAuthCookie, invalidatePermCache };

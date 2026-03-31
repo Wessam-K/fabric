@@ -78,7 +78,8 @@
         }
       ],
       "icon": "assets/icon.png",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "_comment_signing": "Phase 1.9: Set signAndEditExecutable=true and provide CSC_LINK + CSC_KEY_PASSWORD env vars with a code signing certificate (.pfx)"
     },
     "nsis": {
       "oneClick": false,

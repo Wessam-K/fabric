@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 >nul
 title WK-Hub Factory System
 echo ═══════════════════════════════════════════
@@ -7,6 +8,14 @@ echo ═════════════════════════
 echo.
 
 cd /d "%~dp0"
+
+:: Use Node.js 22 LTS (better-sqlite3 requires it)
+if exist "%~dp0..\node22\node-v22.16.0-win-x64\node.exe" (
+    set "PATH=%~dp0..\node22\node-v22.16.0-win-x64;%PATH%"
+    echo Using Node.js 22 LTS from node22 folder
+) else (
+    echo WARNING: Node 22 not found, using system Node
+)
 
 :: Kill any existing processes on our ports
 echo [1/5] Stopping any running servers...
@@ -39,8 +48,23 @@ if not exist "backend\wk-hub.db" (
 echo [4/5] Starting backend server on port 9002...
 start /B cmd /C "cd /d %~dp0backend && node server.js"
 
-:: Wait a moment for backend to be ready
-timeout /t 2 /nobreak >nul
+:: Wait for backend to be ready (poll health endpoint)
+echo      Waiting for backend to be ready...
+set BACKEND_READY=0
+for /L %%i in (1,1,30) do (
+    if !BACKEND_READY! == 0 (
+        curl -s -o nul -w "" http://localhost:9002/api/health >nul 2>&1
+        if !errorlevel! == 0 (
+            set BACKEND_READY=1
+            echo      Backend is ready!
+        ) else (
+            timeout /t 1 /nobreak >nul
+        )
+    )
+)
+if !BACKEND_READY! == 0 (
+    echo      WARNING: Backend may not be ready yet, starting frontend anyway...
+)
 
 echo [5/5] Starting frontend on port 9173...
 echo.

@@ -428,7 +428,7 @@ const seedAll = db.transaction(() => {
   // ─── 6. USERS ─────────────────────────────────
   console.log('  → Seeding users...');
   const hash = bcrypt.hashSync('123456', 12);
-  const insUser = db.prepare(`INSERT OR IGNORE INTO users (username, full_name, email, password_hash, role, status, employee_id, must_change_password, created_at) VALUES (?,?,?,?,?,?,?,1,?)`);
+  const insUser = db.prepare(`INSERT OR IGNORE INTO users (username, full_name, email, password_hash, role, status, employee_id, must_change_password, created_at) VALUES (?,?,?,?,?,?,?,0,?)`);
   const userIds = [];
   for (const u of USER_DATA) {
     const empId = u.empIdx !== null ? employeeIds[u.empIdx] : null;
@@ -531,11 +531,11 @@ const seedAll = db.transaction(() => {
   const fabricList = db.prepare('SELECT code, name, price_per_m, fabric_type FROM fabrics WHERE status=?').all('active');
   const accList = db.prepare('SELECT code, name, unit_price, unit, acc_type FROM accessories WHERE status=?').all('active');
 
-  const insPO = db.prepare(`INSERT INTO purchase_orders (po_number, supplier_id, po_type, status, order_date, expected_date, received_date, total_amount, paid_amount, notes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
-  const insPOItem = db.prepare(`INSERT INTO purchase_order_items (po_id, item_type, fabric_code, accessory_code, description, quantity, unit, unit_price, received_qty, notes) VALUES (?,?,?,?,?,?,?,?,?,?)`);
-  const insSupPayment = db.prepare(`INSERT INTO supplier_payments (po_id, supplier_id, amount, payment_date, payment_method, reference, notes) VALUES (?,?,?,?,?,?,?)`);
-  const insBatch = db.prepare(`INSERT INTO fabric_inventory_batches (batch_code, fabric_code, po_id, po_item_id, supplier_id, ordered_meters, received_meters, used_meters, wasted_meters, price_per_meter, received_date, batch_status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insAccBatch = db.prepare(`INSERT INTO accessory_inventory_batches (batch_code, accessory_code, po_id, po_item_id, supplier_id, ordered_qty, received_qty, used_qty, price_per_unit, unit, batch_status, received_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insPO = db.prepare(`INSERT OR IGNORE INTO purchase_orders (po_number, supplier_id, po_type, status, order_date, expected_date, received_date, total_amount, paid_amount, notes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+  const insPOItem = db.prepare(`INSERT OR IGNORE INTO purchase_order_items (po_id, item_type, fabric_code, accessory_code, description, quantity, unit, unit_price, received_qty, notes) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  const insSupPayment = db.prepare(`INSERT OR IGNORE INTO supplier_payments (po_id, supplier_id, amount, payment_date, payment_method, reference, notes) VALUES (?,?,?,?,?,?,?)`);
+  const insBatch = db.prepare(`INSERT OR IGNORE INTO fabric_inventory_batches (batch_code, fabric_code, po_id, po_item_id, supplier_id, ordered_meters, received_meters, used_meters, wasted_meters, price_per_meter, received_date, batch_status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insAccBatch = db.prepare(`INSERT OR IGNORE INTO accessory_inventory_batches (batch_code, accessory_code, po_id, po_item_id, supplier_id, ordered_qty, received_qty, used_qty, price_per_unit, unit, batch_status, received_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
 
   const poStatuses = ['received', 'received', 'received', 'received', 'received', 'partial', 'partial', 'sent', 'sent', 'draft', 'cancelled'];
   let poNum = 1;
@@ -659,15 +659,15 @@ const seedAll = db.transaction(() => {
   const modelList = db.prepare('SELECT m.id, m.model_code, m.model_name, bt.id as tmpl_id, bt.masnaiya, bt.masrouf, bt.margin_pct FROM models m LEFT JOIN bom_templates bt ON bt.model_id=m.id AND bt.is_default=1 WHERE m.status=?').all('active');
   const customerList = db.prepare('SELECT id, code FROM customers WHERE status=?').all('active');
 
-  const insWO = db.prepare(`INSERT INTO work_orders (wo_number, model_id, template_id, status, priority, quantity, start_date, due_date, completed_date, masnaiya, masrouf, margin_pct, consumer_price, wholesale_price, customer_id, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insWOStage = db.prepare(`INSERT INTO wo_stages (wo_id, stage_name, sort_order, status, quantity_in_stage, quantity_completed, quantity_rejected, started_at, completed_at, machine_id, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
-  const insWOSize = db.prepare(`INSERT INTO wo_sizes (wo_id, color_label, qty_s, qty_m, qty_l, qty_xl, qty_2xl, qty_3xl) VALUES (?,?,?,?,?,?,?,?)`);
-  const insWOFabBatch = db.prepare(`INSERT INTO wo_fabric_batches (wo_id, batch_id, fabric_code, role, planned_meters_per_piece, planned_total_meters, waste_pct, actual_total_meters, actual_meters_per_piece, waste_meters, waste_cost, price_per_meter, planned_cost, actual_cost, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insCostSnap = db.prepare(`INSERT INTO cost_snapshots (wo_id, model_id, total_pieces, total_meters_main, main_fabric_cost, lining_cost, accessories_cost, masnaiya, masrouf, waste_cost, total_cost, cost_per_piece, snapshot_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insFabConsumption = db.prepare(`INSERT INTO wo_fabric_consumption (work_order_id, fabric_id, fabric_code, batch_id, po_id, planned_meters, actual_meters, price_per_meter, total_cost, recorded_by_user_id, recorded_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insAccConsumption = db.prepare(`INSERT INTO wo_accessory_consumption (work_order_id, accessory_id, accessory_code, planned_qty, actual_qty, unit_price, total_cost, recorded_at) VALUES (?,?,?,?,?,?,?,?)`);
-  const insWOWaste = db.prepare(`INSERT INTO wo_waste (work_order_id, waste_meters, price_per_meter, waste_cost, notes, recorded_by_user_id, recorded_at) VALUES (?,?,?,?,?,?,?)`);
-  const insWOAccDetail = db.prepare(`INSERT INTO wo_accessories_detail (wo_id, accessory_code, accessory_name, quantity_per_piece, unit_price, planned_total_cost, actual_quantity, actual_cost, notes) VALUES (?,?,?,?,?,?,?,?,?)`);
+  const insWO = db.prepare(`INSERT OR IGNORE INTO work_orders (wo_number, model_id, template_id, status, priority, quantity, start_date, due_date, completed_date, masnaiya, masrouf, margin_pct, consumer_price, wholesale_price, customer_id, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insWOStage = db.prepare(`INSERT OR IGNORE INTO wo_stages (wo_id, stage_name, sort_order, status, quantity_in_stage, quantity_completed, quantity_rejected, started_at, completed_at, machine_id, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+  const insWOSize = db.prepare(`INSERT OR IGNORE INTO wo_sizes (wo_id, color_label, qty_s, qty_m, qty_l, qty_xl, qty_2xl, qty_3xl) VALUES (?,?,?,?,?,?,?,?)`);
+  const insWOFabBatch = db.prepare(`INSERT OR IGNORE INTO wo_fabric_batches (wo_id, batch_id, fabric_code, role, planned_meters_per_piece, planned_total_meters, waste_pct, actual_total_meters, actual_meters_per_piece, waste_meters, waste_cost, price_per_meter, planned_cost, actual_cost, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insCostSnap = db.prepare(`INSERT OR IGNORE INTO cost_snapshots (wo_id, model_id, total_pieces, total_meters_main, main_fabric_cost, lining_cost, accessories_cost, masnaiya, masrouf, waste_cost, total_cost, cost_per_piece, snapshot_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insFabConsumption = db.prepare(`INSERT OR IGNORE INTO wo_fabric_consumption (work_order_id, fabric_id, fabric_code, batch_id, po_id, planned_meters, actual_meters, price_per_meter, total_cost, recorded_by_user_id, recorded_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insAccConsumption = db.prepare(`INSERT OR IGNORE INTO wo_accessory_consumption (work_order_id, accessory_id, accessory_code, planned_qty, actual_qty, unit_price, total_cost, recorded_at) VALUES (?,?,?,?,?,?,?,?)`);
+  const insWOWaste = db.prepare(`INSERT OR IGNORE INTO wo_waste (work_order_id, waste_meters, price_per_meter, waste_cost, notes, recorded_by_user_id, recorded_at) VALUES (?,?,?,?,?,?,?)`);
+  const insWOAccDetail = db.prepare(`INSERT OR IGNORE INTO wo_accessories_detail (wo_id, accessory_code, accessory_name, quantity_per_piece, unit_price, planned_total_cost, actual_quantity, actual_cost, notes) VALUES (?,?,?,?,?,?,?,?,?)`);
 
   let woNum = 1;
   const woIds = [];
@@ -998,9 +998,9 @@ const seedAll = db.transaction(() => {
 
   // ─── 12. INVOICES ─────────────────────────────
   console.log('  → Seeding invoices...');
-  const insInv = db.prepare(`INSERT INTO invoices (invoice_number, customer_name, customer_phone, customer_id, wo_id, status, tax_pct, discount, subtotal, total, due_date, notes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insInvItem = db.prepare(`INSERT INTO invoice_items (invoice_id, description, model_code, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?)`);
-  const insCustPayment = db.prepare(`INSERT INTO customer_payments (customer_id, invoice_id, amount, payment_date, payment_method, reference, created_by, created_at) VALUES (?,?,?,?,?,?,?,?)`);
+  const insInv = db.prepare(`INSERT OR IGNORE INTO invoices (invoice_number, customer_name, customer_phone, customer_id, wo_id, status, tax_pct, discount, subtotal, total, due_date, notes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insInvItem = db.prepare(`INSERT OR IGNORE INTO invoice_items (invoice_id, description, model_code, quantity, unit_price, total, sort_order) VALUES (?,?,?,?,?,?,?)`);
+  const insCustPayment = db.prepare(`INSERT OR IGNORE INTO customer_payments (customer_id, invoice_id, amount, payment_date, payment_method, reference, created_by, created_at) VALUES (?,?,?,?,?,?,?,?)`);
 
   const invStatuses = ['paid', 'paid', 'paid', 'sent', 'sent', 'draft', 'overdue'];
   let invNum = 1;
@@ -1052,7 +1052,7 @@ const seedAll = db.transaction(() => {
   // ─── 13. QUOTATIONS ───────────────────────────
   console.log('  → Seeding quotations...');
   const insQuot = db.prepare(`INSERT INTO quotations (quotation_number, customer_id, status, valid_until, subtotal, tax_rate, tax_amount, discount, total, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insQuotItem = db.prepare(`INSERT INTO quotation_items (quotation_id, model_code, description, quantity, unit_price, total) VALUES (?,?,?,?,?,?)`);
+  const insQuotItem = db.prepare(`INSERT OR IGNORE INTO quotation_items (quotation_id, model_code, description, quantity, unit_price, total) VALUES (?,?,?,?,?,?)`);
   const quotStatuses = ['accepted', 'accepted', 'sent', 'sent', 'draft', 'rejected', 'expired', 'converted'];
 
   for (let i = 0; i < 25; i++) {
@@ -1076,8 +1076,8 @@ const seedAll = db.transaction(() => {
 
   // ─── 14. SALES ORDERS ─────────────────────────
   console.log('  → Seeding sales orders...');
-  const insSO = db.prepare(`INSERT INTO sales_orders (so_number, customer_id, status, order_date, delivery_date, subtotal, tax_rate, tax_amount, total, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insSOItem = db.prepare(`INSERT INTO sales_order_items (sales_order_id, model_code, description, quantity, unit_price, total) VALUES (?,?,?,?,?,?)`);
+  const insSO = db.prepare(`INSERT OR IGNORE INTO sales_orders (so_number, customer_id, status, order_date, delivery_date, subtotal, tax_rate, tax_amount, total, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insSOItem = db.prepare(`INSERT OR IGNORE INTO sales_order_items (sales_order_id, model_code, description, quantity, unit_price, total) VALUES (?,?,?,?,?,?)`);
   const soStatuses = ['completed', 'completed', 'in_production', 'in_production', 'confirmed', 'draft', 'shipped'];
 
   for (let i = 0; i < 20; i++) {
@@ -1099,8 +1099,8 @@ const seedAll = db.transaction(() => {
 
   // ─── 15. SHIPMENTS ────────────────────────────
   console.log('  → Seeding shipments...');
-  const insShip = db.prepare(`INSERT INTO shipments (shipment_number, shipment_type, status, customer_id, carrier_name, tracking_number, shipping_cost, packages_count, ship_date, expected_delivery, actual_delivery, shipping_address, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  const insShipItem = db.prepare(`INSERT INTO shipment_items (shipment_id, description, model_code, quantity, unit) VALUES (?,?,?,?,?)`);
+  const insShip = db.prepare(`INSERT OR IGNORE INTO shipments (shipment_number, shipment_type, status, customer_id, carrier_name, tracking_number, shipping_cost, packages_count, ship_date, expected_delivery, actual_delivery, shipping_address, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insShipItem = db.prepare(`INSERT OR IGNORE INTO shipment_items (shipment_id, description, model_code, quantity, unit) VALUES (?,?,?,?,?)`);
   const carriers = ['أرامكس', 'فيدكس مصر', 'النيل للشحن', 'DHL مصر', 'شحن داخلي'];
   const shipStatuses = ['delivered', 'delivered', 'delivered', 'shipped', 'in_transit', 'ready'];
 
@@ -1123,7 +1123,7 @@ const seedAll = db.transaction(() => {
 
   // ─── 16. EXPENSES ─────────────────────────────
   console.log('  → Seeding expenses...');
-  const insExpense = db.prepare(`INSERT INTO expenses (expense_type, amount, description, expense_date, status, created_by, vendor_name, payment_method, currency, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  const insExpense = db.prepare(`INSERT OR IGNORE INTO expenses (expense_type, amount, description, expense_date, status, created_by, vendor_name, payment_method, currency, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`);
   const expenseTypes = ['production', 'utilities', 'maintenance', 'transport', 'salary', 'raw_material', 'other'];
   const expenseDescs = {
     production: ['مستلزمات إنتاج', 'صيانة خط إنتاج', 'أدوات قص', 'إبر ماكينة', 'زيت ماكينات'],
@@ -1236,7 +1236,7 @@ const seedAll = db.transaction(() => {
 
   // ─── 19. LEAVE REQUESTS ───────────────────────
   console.log('  → Seeding leave requests...');
-  const insLeave = db.prepare(`INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, reason, status, created_at) VALUES (?,?,?,?,?,?,?)`);
+  const insLeave = db.prepare(`INSERT OR IGNORE INTO leave_requests (employee_id, leave_type, start_date, end_date, reason, status, created_at) VALUES (?,?,?,?,?,?,?)`);
   const leaveTypes = ['annual', 'annual', 'sick', 'emergency', 'annual'];
   const leaveReasons = ['إجازة سنوية', 'إجازة مرضية', 'ظرف عائلي طارئ', 'إجازة شخصية', 'إجازة زواج'];
 
@@ -1253,7 +1253,7 @@ const seedAll = db.transaction(() => {
 
   // ─── 20. MAINTENANCE ORDERS ───────────────────
   console.log('  → Seeding maintenance orders...');
-  const insMaint = db.prepare(`INSERT INTO maintenance_orders (machine_id, maintenance_type, title, description, priority, status, scheduled_date, completed_date, cost, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+  const insMaint = db.prepare(`INSERT OR IGNORE INTO maintenance_orders (machine_id, maintenance_type, title, description, priority, status, scheduled_date, completed_date, cost, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
   const machineList = db.prepare('SELECT id, name FROM machines WHERE status=?').all('active');
   const maintTypes = ['preventive', 'corrective', 'routine'];
   const maintTitles = ['صيانة دورية', 'تغيير زيت', 'إصلاح عطل', 'تنظيف عام', 'تغيير إبرة', 'ضبط الشد', 'فحص كهربائي', 'تغيير حزام'];
@@ -1270,8 +1270,8 @@ const seedAll = db.transaction(() => {
 
   // ─── 21. QC INSPECTIONS ────────────────────────
   console.log('  → Seeding QC inspections...');
-  const insQCInsp = db.prepare(`INSERT INTO qc_inspections (work_order_id, inspection_number, inspector_id, inspection_date, lot_size, sample_size, passed, failed, result, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`);
-  const insQCItem = db.prepare(`INSERT INTO qc_inspection_items (inspection_id, check_point, result, defect_count, notes) VALUES (?,?,?,?,?)`);
+  const insQCInsp = db.prepare(`INSERT OR IGNORE INTO qc_inspections (work_order_id, inspection_number, inspector_id, inspection_date, lot_size, sample_size, passed, failed, result, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  const insQCItem = db.prepare(`INSERT OR IGNORE INTO qc_inspection_items (inspection_id, check_point, result, defect_count, notes) VALUES (?,?,?,?,?)`);
   const checkPoints = ['جودة الخياطة', 'تناسق اللون', 'دقة المقاسات', 'نظافة القطعة', 'جودة التشطيب', 'سلامة الأزرار/السوست'];
   const inspectorId = userIds.length > 4 ? userIds[4] : userIds[0]; // norhan
 
@@ -1302,7 +1302,7 @@ const seedAll = db.transaction(() => {
 
   // ─── 22. SAMPLES ──────────────────────────────
   console.log('  → Seeding samples...');
-  const insSample = db.prepare(`INSERT INTO samples (sample_number, model_code, customer_id, status, description, cost, requested_date, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
+  const insSample = db.prepare(`INSERT OR IGNORE INTO samples (sample_number, model_code, customer_id, status, description, cost, requested_date, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
   const sampleStatuses = ['completed', 'approved', 'sent', 'in_progress', 'requested', 'converted'];
 
   for (let i = 0; i < 15; i++) {
@@ -1316,8 +1316,8 @@ const seedAll = db.transaction(() => {
 
   // ─── 23. RETURNS ──────────────────────────────
   console.log('  → Seeding returns...');
-  const insReturn = db.prepare(`INSERT INTO sales_returns (return_number, customer_id, return_date, reason, status, subtotal, total, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
-  const insReturnItem = db.prepare(`INSERT INTO sales_return_items (return_id, description, model_code, quantity, unit_price, total) VALUES (?,?,?,?,?,?)`);
+  const insReturn = db.prepare(`INSERT OR IGNORE INTO sales_returns (return_number, customer_id, return_date, reason, status, subtotal, total, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
+  const insReturnItem = db.prepare(`INSERT OR IGNORE INTO sales_return_items (return_id, description, model_code, quantity, unit_price, total) VALUES (?,?,?,?,?,?)`);
   const returnReasons = ['عيب في الخياطة', 'اختلاف لون', 'مقاس خاطئ', 'تلف أثناء الشحن', 'طلب خاطئ'];
 
   for (let i = 0; i < 8; i++) {
@@ -1337,8 +1337,8 @@ const seedAll = db.transaction(() => {
 
   // ─── 24. JOURNAL ENTRIES ──────────────────────
   console.log('  → Seeding journal entries...');
-  const insJE = db.prepare(`INSERT INTO journal_entries (entry_number, entry_date, description, status, created_by, created_at) VALUES (?,?,?,?,?,?)`);
-  const insJEL = db.prepare(`INSERT INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?,?,?,?,?)`);
+  const insJE = db.prepare(`INSERT OR IGNORE INTO journal_entries (entry_number, entry_date, description, status, created_by, created_at) VALUES (?,?,?,?,?,?)`);
+  const insJEL = db.prepare(`INSERT OR IGNORE INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?,?,?,?,?)`);
   const accounts = db.prepare('SELECT id, code, name_ar, type FROM chart_of_accounts').all();
   const getAccId = (code) => accounts.find(a => a.code === code)?.id;
 
@@ -1377,7 +1377,7 @@ const seedAll = db.transaction(() => {
 
   // ─── 25. NOTIFICATIONS ────────────────────────
   console.log('  → Seeding notifications...');
-  const insNotif = db.prepare(`INSERT INTO notifications (user_id, type, title, body, reference_type, reference_id, is_read, created_at) VALUES (?,?,?,?,?,?,?,?)`);
+  const insNotif = db.prepare(`INSERT OR IGNORE INTO notifications (user_id, type, title, body, reference_type, reference_id, is_read, created_at) VALUES (?,?,?,?,?,?,?,?)`);
   const notifTemplates = [
     { type: 'wo_status', title: 'تحديث أمر إنتاج', body: 'تم تحديث حالة أمر الإنتاج', ref: 'work_order' },
     { type: 'po_received', title: 'استلام أمر شراء', body: 'تم استلام شحنة من المورد', ref: 'purchase_order' },
@@ -1397,7 +1397,7 @@ const seedAll = db.transaction(() => {
 
   // ─── 26. AUDIT LOG ────────────────────────────
   console.log('  → Seeding audit log...');
-  const insAudit = db.prepare(`INSERT INTO audit_log (user_id, username, action, entity_type, entity_id, entity_label, created_at) VALUES (?,?,?,?,?,?,?)`);
+  const insAudit = db.prepare(`INSERT OR IGNORE INTO audit_log (user_id, username, action, entity_type, entity_id, entity_label, created_at) VALUES (?,?,?,?,?,?,?)`);
   const auditActions = ['create', 'update', 'delete', 'status_change', 'login', 'export'];
   const entityTypes = ['model', 'work_order', 'purchase_order', 'invoice', 'fabric', 'accessory', 'supplier', 'customer', 'employee', 'expense'];
 
@@ -1412,7 +1412,7 @@ const seedAll = db.transaction(() => {
 
   // ─── 27. STAGE MOVEMENT LOG ───────────────────
   console.log('  → Seeding stage movement log...');
-  const insMove = db.prepare(`INSERT INTO stage_movement_log (wo_id, from_stage_name, to_stage_name, qty_moved, moved_by_name, moved_at, notes) VALUES (?,?,?,?,?,?,?)`);
+  const insMove = db.prepare(`INSERT OR IGNORE INTO stage_movement_log (wo_id, from_stage_name, to_stage_name, qty_moved, moved_by_name, moved_at, notes) VALUES (?,?,?,?,?,?,?)`);
   const stageNames = stages.map(s => s.name);
 
   for (const wo of woIds.filter(w => ['completed', 'in_progress'].includes(w.status))) {
@@ -1429,8 +1429,8 @@ const seedAll = db.transaction(() => {
 
   // ─── 28. FABRIC & ACCESSORY STOCK MOVEMENTS ──
   console.log('  → Seeding stock movements...');
-  const insFSM = db.prepare(`INSERT INTO fabric_stock_movements (fabric_code, movement_type, qty_meters, reference_type, reference_id, notes, created_at) VALUES (?,?,?,?,?,?,?)`);
-  const insASM = db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_at) VALUES (?,?,?,?,?,?,?)`);
+  const insFSM = db.prepare(`INSERT OR IGNORE INTO fabric_stock_movements (fabric_code, movement_type, qty_meters, reference_type, reference_id, notes, created_at) VALUES (?,?,?,?,?,?,?)`);
+  const insASM = db.prepare(`INSERT OR IGNORE INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_at) VALUES (?,?,?,?,?,?,?)`);
 
   // Fabric: inbound from PO batches
   for (const batch of fabricBatches) {
