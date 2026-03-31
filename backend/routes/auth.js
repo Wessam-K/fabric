@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const router = express.Router();
 const db = require('../database');
 const { generateToken, requireAuth, logAudit, revokeToken, setAuthCookie, clearAuthCookie } = require('../middleware/auth');
+const { setCSRFCookie, clearCSRFCookie } = require('../middleware/csrf');
 const jwt = require('jsonwebtoken');
 const { validatePassword } = require('../utils/validators');
 
@@ -41,9 +42,38 @@ router.post('/login', (req, res) => {
     // Reset failed attempts on success
     db.prepare('UPDATE users SET last_login = datetime(?), failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(new Date().toISOString(), user.id);
 
+    // Phase 1.7: Check if 2FA is enabled
+    if (user.totp_enabled) {
+      const { totp_code } = req.body;
+      if (!totp_code) {
+        return res.json({ requires_2fa: true, user_id: user.id });
+      }
+      // Verify TOTP code or backup code
+      let totpValid = false;
+      try {
+        const { authenticator } = require('otplib');
+        totpValid = authenticator.check(totp_code, user.totp_secret);
+      } catch { /* otplib not installed — skip */ }
+      if (!totpValid) {
+        // Check backup codes
+        const backups = JSON.parse(user.totp_backup_codes || '[]');
+        const idx = backups.indexOf(totp_code);
+        if (idx !== -1) {
+          backups.splice(idx, 1);
+          db.prepare('UPDATE users SET totp_backup_codes = ? WHERE id = ?').run(JSON.stringify(backups), user.id);
+          totpValid = true;
+        }
+      }
+      if (!totpValid) {
+        return res.status(401).json({ error: 'رمز المصادقة الثنائية غير صحيح' });
+      }
+    }
+
     const token = generateToken(user);
     // Phase 1.2: Set httpOnly cookie
     setAuthCookie(res, token);
+    // Phase 1.1: Set CSRF cookie for double-submit pattern
+    setCSRFCookie(res);
     try {
       db.prepare(`INSERT INTO audit_log (user_id, username, action, entity_type, entity_id, entity_label) VALUES (?,?,?,?,?,?)`)
         .run(user.id, user.username, 'LOGIN', 'user', String(user.id), user.full_name);
@@ -65,6 +95,8 @@ router.post('/refresh', requireAuth, (req, res) => {
     const token = generateToken(user);
     // Phase 1.2: Set httpOnly cookie
     setAuthCookie(res, token);
+    // Phase 1.1: Refresh CSRF cookie too
+    setCSRFCookie(res);
     res.json({ token });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -75,8 +107,8 @@ router.post('/logout', requireAuth, (req, res) => {
     // D1: Revoke the token so it can't be reused
     if (req.token) revokeToken(req.token);
     // Phase 1.2: Clear httpOnly cookie
-    clearAuthCookie(res);
-    logAudit(req, 'LOGOUT', 'user', req.user.id, req.user.full_name);
+    clearAuthCookie(res);    // Phase 1.1: Clear CSRF cookie
+    clearCSRFCookie(res);    logAudit(req, 'LOGOUT', 'user', req.user.id, req.user.full_name);
     res.json({ message: 'تم تسجيل الخروج' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -140,5 +172,80 @@ router.get('/profile', requireAuth, (req, res) => {
 
 // NOTE: create-admin endpoint is defined in server.js with transaction safety.
 // Removed duplicate here to prevent TOCTOU race condition (audit C2).
+
+// ═══ Phase 1.8: Password Reset Flow ═══
+const crypto = require('crypto');
+
+// POST /api/auth/forgot-password — generate password reset token
+router.post('/forgot-password', (req, res) => {
+  try {
+    const { username, email } = req.body;
+    if (!username && !email) return res.status(400).json({ error: 'اسم المستخدم أو البريد الإلكتروني مطلوب' });
+
+    const user = username
+      ? db.prepare("SELECT id, email FROM users WHERE username = ? AND status = 'active'").get(username)
+      : db.prepare("SELECT id, email FROM users WHERE email = ? AND status = 'active'").get(email);
+
+    // Always return success to prevent user enumeration
+    if (!user) return res.json({ message: 'إذا كان الحساب موجودًا، سيتم إرسال رابط إعادة التعيين' });
+
+    // Generate token (valid 1 hour)
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    try {
+      db.prepare('INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?,?,?)')
+        .run(user.id, tokenHash, expiresAt);
+    } catch {
+      // Table may not exist yet if migration hasn't run — return generic message
+      return res.json({ message: 'إذا كان الحساب موجودًا، سيتم إرسال رابط إعادة التعيين' });
+    }
+
+    // In production, send email with reset link containing rawToken
+    // For now, log it and return token in dev mode
+    const logger = require('../utils/logger');
+    logger.info('Password reset token generated', { userId: user.id });
+
+    const response = { message: 'إذا كان الحساب موجودًا، سيتم إرسال رابط إعادة التعيين' };
+    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+      response.reset_token = rawToken; // Only expose in dev/test
+    }
+    res.json(response);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/auth/reset-password — consume reset token and set new password
+router.post('/reset-password', (req, res) => {
+  try {
+    const { token, new_password } = req.body;
+    if (!token || !new_password) return res.status(400).json({ error: 'الرمز وكلمة المرور الجديدة مطلوبان' });
+
+    const pwErr = validatePassword(new_password);
+    if (pwErr) return res.status(400).json({ error: pwErr });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    let row;
+    try {
+      row = db.prepare('SELECT * FROM password_reset_tokens WHERE token_hash = ? AND used_at IS NULL').get(tokenHash);
+    } catch {
+      return res.status(400).json({ error: 'رابط إعادة التعيين غير صالح' });
+    }
+
+    if (!row) return res.status(400).json({ error: 'رابط إعادة التعيين غير صالح أو مستخدم بالفعل' });
+    if (new Date(row.expires_at) < new Date()) return res.status(400).json({ error: 'رابط إعادة التعيين منتهي الصلاحية' });
+
+    const hash = bcrypt.hashSync(new_password, 12);
+    db.transaction(() => {
+      db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(hash, row.user_id);
+      db.prepare("UPDATE password_reset_tokens SET used_at = datetime('now','localtime') WHERE id = ?").run(row.id);
+      // Save to password history
+      try { db.prepare('INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)').run(row.user_id, hash); } catch {}
+    })();
+
+    logAudit({ user: { id: row.user_id } }, 'RESET_PASSWORD', 'user', row.user_id, 'password-reset');
+    res.json({ message: 'تم إعادة تعيين كلمة المرور بنجاح' });
+  } catch (err) { console.error('Reset password error:', err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
 
 module.exports = router;

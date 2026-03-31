@@ -5,6 +5,10 @@ node_modules/
 *.db
 *.db-shm
 *.db-wal
+*.db.backup
+*.db-shm.backup
+*.db-wal.backup
+*.backup
 
 # Electron build output
 dist-electron/

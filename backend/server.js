@@ -10,6 +10,8 @@ const compression = require('compression');
 const db = require('./database');
 const { requireAuth, requirePermission, canUser, logAudit } = require('./middleware/auth');
 const { apiKeyAuth } = require('./middleware/apiKey'); // Phase 3.5
+const { csrfProtection } = require('./middleware/csrf'); // Phase 1.1: CSRF
+const { contentTypeEnforcement } = require('./middleware/contentType'); // Phase 1.2: Content-Type enforcement
 const logger = require('./utils/logger'); // Phase 6.1: Structured logging
 const { migrate } = require('./migrate'); // Phase 2.1: Migration runner
 const { LicenseManager } = require('./lib/license'); // Phase 5.1: Licensing
@@ -222,6 +224,12 @@ app.use('/api/setup/create-admin', authLimiter);
 app.use('/api', apiKeyAuth);
 app.use('/api/v1', apiKeyAuth);
 
+// Phase 1.1: CSRF protection (after cookie-parser, before routes)
+app.use('/api', csrfProtection);
+
+// Phase 1.2: Content-Type enforcement (JSON required on POST/PUT/PATCH)
+app.use('/api', contentTypeEnforcement);
+
 // ═══ Health check (public, no auth) ═══
 app.get('/api/health', (req, res) => {
   let dbStatus = 'ok';
@@ -296,6 +304,57 @@ app.get('/api/monitoring', requireAuth, (req, res) => {
 
 // ═══ Public routes (no auth) ═══
 app.use('/api/auth', authRouter);
+
+// Phase 1.7: 2FA routes (requires auth)
+const twofaRouter = require('./routes/twofa');
+app.use('/api/auth/2fa', requireAuth, twofaRouter);
+
+// ═══ Phase 2.3: Session management endpoints ═══
+// GET /api/sessions — list active sessions for current user
+app.get('/api/sessions', requireAuth, (req, res) => {
+  try {
+    const sessions = db.prepare("SELECT id, ip_address, user_agent, created_at, expires_at FROM user_sessions WHERE user_id = ? AND (revoked = 0 OR revoked IS NULL) ORDER BY created_at DESC").all(req.user.id);
+    res.json(sessions);
+  } catch { res.json([]); }
+});
+
+// DELETE /api/sessions/:id — revoke a session
+app.delete('/api/sessions/:id', requireAuth, (req, res) => {
+  try {
+    db.prepare("UPDATE user_sessions SET revoked = 1 WHERE id = ? AND user_id = ?").run(req.params.id, req.user.id);
+    res.json({ message: 'تم إلغاء الجلسة' });
+  } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// DELETE /api/sessions — revoke all sessions except current
+app.delete('/api/sessions', requireAuth, (req, res) => {
+  try {
+    db.prepare("UPDATE user_sessions SET revoked = 1 WHERE user_id = ? AND (revoked = 0 OR revoked IS NULL)").run(req.user.id);
+    res.json({ message: 'تم إلغاء جميع الجلسات' });
+  } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// ═══ Phase 2.4: Data retention policy endpoint (superadmin) ═══
+app.get('/api/admin/retention', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  try {
+    const auditDays = parseInt(db.prepare("SELECT value FROM settings WHERE key='audit_retention_days'").get()?.value) || 365;
+    const backupDays = parseInt(db.prepare("SELECT value FROM settings WHERE key='backup_retention_days'").get()?.value) || 30;
+    const auditCount = db.prepare("SELECT COUNT(*) as c FROM audit_log").get().c;
+    const oldAuditCount = db.prepare("SELECT COUNT(*) as c FROM audit_log WHERE created_at < datetime('now', '-' || ? || ' days')").get(auditDays).c;
+    res.json({ audit_retention_days: auditDays, backup_retention_days: backupDays, total_audit_records: auditCount, purgeable_audit_records: oldAuditCount });
+  } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+app.post('/api/admin/retention/purge', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  try {
+    const auditDays = parseInt(db.prepare("SELECT value FROM settings WHERE key='audit_retention_days'").get()?.value) || 365;
+    const result = db.prepare("DELETE FROM audit_log WHERE created_at < datetime('now', '-' || ? || ' days')").run(auditDays);
+    logAudit(req, 'PURGE', 'audit_log', null, `Purged ${result.changes} old records`);
+    res.json({ purged: result.changes });
+  } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
 
 // Setup status (public)
 app.get('/api/setup/status', (req, res) => {

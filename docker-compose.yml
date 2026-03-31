@@ -1,0 +1,27 @@
+# Docker Compose for WK-Factory
+version: '3.8'
+
+services:
+  wk-factory:
+    build: .
+    container_name: wk-factory
+    ports:
+      - "9002:9002"
+    volumes:
+      - wk-data:/data
+    environment:
+      - NODE_ENV=production
+      - PORT=9002
+      - WK_DB_DIR=/data
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGIN=http://localhost:9002
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9002/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  wk-data:
+    driver: local

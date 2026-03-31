@@ -1,6 +1,6 @@
 {
   "name": "wk-factory",
-  "version": "3.0.0",
+  "version": "3.4.0",
   "description": "WK-Factory — نظام إدارة المصنع",
   "main": "electron.js",
   "scripts": {
@@ -12,7 +12,7 @@
     "electron:dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npx wait-on http://localhost:9173 && npx electron .\"",
     "build:frontend": "cd frontend && npm run build",
     "prebuild:native": "node tools/copy-native.js",
-    "prebuild:node-runtime": "node -e \"const fs=require('fs'),p=require('path');const t=p.join(__dirname,'node-runtime');fs.mkdirSync(t,{recursive:true});const s='C:/msn3/node22/node-v22.16.0-win-x64/node.exe';if(!fs.existsSync(p.join(t,'node.exe'))){fs.copyFileSync(s,p.join(t,'node.exe'));console.log('Copied node.exe to node-runtime/')}else{console.log('node-runtime/node.exe already present')}\"",
+    "prebuild:node-runtime": "node tools/download-node-runtime.js",
     "build": "npm run prebuild:native && npm run prebuild:node-runtime && npm run build:frontend && npx electron-builder --win",
     "test": "cd backend && node --test tests/api.test.js",
     "test:backend": "cd backend && node --test tests/api.test.js"

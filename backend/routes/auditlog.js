@@ -29,4 +29,32 @@ router.get('/', requirePermission('audit', 'view'), (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// GET /api/audit-log/export — export audit logs as CSV
+router.get('/export', requirePermission('audit', 'view'), (req, res) => {
+  try {
+    const { user_id, action, entity_type, date_from, date_to } = req.query;
+    const conditions = [];
+    const params = [];
+
+    if (user_id) { conditions.push('a.user_id = ?'); params.push(user_id); }
+    if (action) { conditions.push('a.action = ?'); params.push(action); }
+    if (entity_type) { conditions.push('a.entity_type = ?'); params.push(entity_type); }
+    if (date_from) { conditions.push('a.created_at >= ?'); params.push(date_from); }
+    if (date_to) { conditions.push('a.created_at <= ?'); params.push(date_to + ' 23:59:59'); }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const logs = db.prepare(`SELECT a.id, a.user_id, a.username, a.action, a.entity_type, a.entity_id, a.entity_label, a.created_at FROM audit_log a ${where} ORDER BY a.created_at DESC LIMIT 10000`).all(...params);
+
+    // CSV output
+    const header = 'ID,User ID,Username,Action,Entity Type,Entity ID,Entity Label,Created At\n';
+    const csvRows = logs.map(l =>
+      `${l.id},${l.user_id},"${(l.username || '').replace(/"/g, '""')}",${l.action},${l.entity_type},"${(l.entity_id || '').toString().replace(/"/g, '""')}","${(l.entity_label || '').replace(/"/g, '""')}",${l.created_at}`
+    ).join('\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="audit-log-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send('\ufeff' + header + csvRows); // BOM for UTF-8 Excel compatibility
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 module.exports = router;

@@ -5,6 +5,58 @@
 
 ---
 
+## Phase P — Enterprise Hardening v3.4 (2026-03-31)
+
+### Security — CSRF Protection
+- **middleware/csrf.js** (NEW): Double-submit cookie pattern — `wk_csrf` cookie (httpOnly:false, sameSite:strict) validated against `X-CSRF-Token` header on mutating requests; skips GET/HEAD/OPTIONS, API-key auth, and `NODE_ENV=test`
+- **middleware/contentType.js** (NEW): Enforces `Content-Type: application/json` on POST/PUT/PATCH; exempts `/upload`, `/import`, `/restore` paths; returns 415 on mismatch
+- **server.js**: Registered CSRF + content-type middleware after API key auth
+- **routes/auth.js**: Sets CSRF cookie on login/refresh, clears on logout
+- **frontend/src/utils/api.js**: Added request interceptor to read `wk_csrf` cookie and set `X-CSRF-Token` header on non-GET requests
+
+### Security — Two-Factor Authentication
+- **routes/twofa.js** (NEW): TOTP 2FA with setup (QR code + backup codes), verify, and disable endpoints; gracefully returns 501 if `otplib` not installed
+- **routes/auth.js**: Login flow checks `totp_enabled`; returns `{ requires_2fa: true }` when TOTP code is required but not provided
+
+### Security — Password Reset
+- **routes/auth.js**: Added `POST /forgot-password` (generates token, returns in dev/test) and `POST /reset-password` (consumes token, validates password strength, updates hash in transaction)
+
+### Security — WebSocket Hardening
+- **utils/websocket.js**: 5-second auth timeout (closes with 1008), IP-based connection rate limiting (10 conn/min), `getClientIP()` helper, `authenticated` flag per client
+
+### Security — API Key Rate Limiting
+- **middleware/apiKey.js**: Per-key sliding window rate limiter using in-memory `keyRateMap`; reads `rate_limit` and `rate_window_seconds` from `api_keys` table; returns 429 on exceeded
+
+### Database — Migration 039 (Security Schema)
+- **migrations/006_security_hardening.js** (NEW, version 39): Adds `is_deleted`/`deleted_at`/`deleted_by` soft-delete columns to 10 tables, `totp_secret`/`totp_enabled`/`totp_backup_codes` to users, `password_reset_tokens` table, `user_invitations` table, `revoked_at` to `user_sessions`, `rate_limit`/`rate_window_seconds` to `api_keys`
+
+### User Management — Invitations
+- **routes/users.js**: Added `POST /invite` (generates invitation token, stores hash), `GET /invitations` (lists pending), `DELETE /invitations/:id` (revokes); routes placed before `/:id` to avoid Express conflict
+
+### User Management — Session Management
+- **server.js**: Added `GET /api/sessions` (lists active sessions for current user) and `DELETE /api/sessions/:id` (revokes a session)
+
+### Audit & Compliance
+- **routes/auditlog.js**: Added `GET /export` endpoint returning CSV with UTF-8 BOM, limit 10,000 rows, supports same filters as list
+- **server.js**: Added `GET /api/admin/retention` and `POST /api/admin/retention` for data retention policy management
+
+### API Hardening — Webhook Backoff
+- **utils/webhooks.js**: Added `deliverWithRetry()` with exponential backoff (3 retries, delays: 1s/2s/4s); replaces inline delivery
+
+### Frontend — License Banner
+- **components/LicenseBanner.jsx** (NEW): Trial/expiry warning banner (≤7 days trial, ≤30 days expiry, expired); dismissible
+- **App.jsx**: Imported and rendered LicenseBanner above header
+
+### DevOps — Docker
+- **Dockerfile** (NEW): Multi-stage build (frontend-build → production), node:22-alpine, exposes 9002, healthcheck
+- **docker-compose.yml** (NEW): Single service with volume mount for data persistence
+
+### Test Results
+- API tests: **112/112 pass** (19 new tests covering CSRF, content-type, password reset, 2FA, sessions, invitations, audit export, data retention, license, health/monitoring)
+- Build: Frontend Vite build successful
+
+---
+
 ## Phase O — Production Audit v13 — Critical Stage Flow & Data Integrity Fixes (2026-03-27)
 
 ### O1: Backend CRITICAL — Stage Stall on 100% Rejection Fixed

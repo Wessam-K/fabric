@@ -1,5 +1,60 @@
-# WK-Factory v3.0 — Feature Changelog
+# WK-Factory v3.4 — Feature Changelog
 > Release Date: March 2026
+
+## v3.4 — Enterprise Hardening
+
+### 🔒 CSRF Protection
+- Double-submit cookie pattern for all mutating requests
+- Content-Type enforcement middleware (415 on non-JSON for POST/PUT/PATCH)
+
+### 🔐 Two-Factor Authentication
+- TOTP-based 2FA setup with QR code and backup codes
+- Login flow integration — returns `requires_2fa` when enabled
+
+### 🔑 Password Reset
+- `POST /forgot-password` generates secure reset token
+- `POST /reset-password` consumes token with password strength validation
+
+### 🌐 WebSocket Security
+- 5-second authentication timeout
+- IP-based connection rate limiting (10 conn/min)
+
+### ⚡ API Key Rate Limiting
+- Per-key sliding window rate limiter
+- Configurable `rate_limit` and `rate_window_seconds` per API key
+
+### 🗑️ Soft Delete Infrastructure
+- `is_deleted`/`deleted_at`/`deleted_by` columns on 10 core tables
+- Database migration v39
+
+### 👥 User Invitations
+- Email-based user invitation workflow with token-based accept
+
+### 📋 Session Management
+- List and revoke active sessions per user
+
+### 📊 Audit Log Export
+- CSV export with UTF-8 BOM support, up to 10,000 rows
+
+### 📅 Data Retention
+- Configurable retention policies per data type
+
+### ⚠️ License Banner
+- Frontend trial/expiry warning banner (dismissible)
+
+### 🔄 Webhook Backoff
+- Exponential backoff retry (3 retries: 1s/2s/4s delays)
+
+### 🐳 Docker Support
+- Multi-stage Dockerfile (node:22-alpine)
+- docker-compose.yml with volume persistence
+
+### ✅ Tests
+- 112 total tests (19 new), 49 suites, 100% pass rate
+
+---
+
+## v3.0 — Major Release
 
 ## New Features
 

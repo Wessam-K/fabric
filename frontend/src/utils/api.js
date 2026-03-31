@@ -3,6 +3,15 @@ import axios from 'axios';
 // Phase 1.2: withCredentials sends httpOnly cookies automatically — no more localStorage token
 const api = axios.create({ baseURL: '/api', timeout: 30000, withCredentials: true });
 
+// Phase 1.1: CSRF double-submit — read wk_csrf cookie and attach as header on state-changing requests
+api.interceptors.request.use(config => {
+  if (config.method && !['get', 'head', 'options'].includes(config.method)) {
+    const match = document.cookie.match(/(?:^|;\s*)wk_csrf=([^;]+)/);
+    if (match) config.headers['X-CSRF-Token'] = match[1];
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   res => res,
   err => {

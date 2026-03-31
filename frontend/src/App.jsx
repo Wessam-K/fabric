@@ -69,6 +69,7 @@ import HelpButton from './components/HelpButton';
 import OnboardingTour from './components/OnboardingTour'; // Phase 4.8
 import { ToastProvider } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
+import LicenseBanner from './components/LicenseBanner'; // Phase 6.3
 
 // Phase 4.4: Page loading fallback with skeleton
 function PageLoader() {
@@ -408,6 +409,7 @@ function AppLayout() {
 
       {/* Main content */}
       <main className="flex-1 min-w-0" role="main" aria-label="المحتوى الرئيسي">
+        <LicenseBanner />
         {/* Top header bar */}
         <header className="sticky top-0 z-30 bg-white dark:bg-[#1a1a2e] border-b border-gray-200 dark:border-white/8 flex items-center gap-3 px-4 h-14">
           <button onClick={() => setMobileOpen(true)} aria-label="فتح القائمة" className="lg:hidden text-[#1a1a2e] dark:text-gray-300 p-1">

@@ -1,9 +1,64 @@
 ﻿const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const router = express.Router();
 const db = require('../database');
 const { requireRole, logAudit } = require('../middleware/auth');
 const { validatePassword } = require('../utils/validators');
+
+// ═══ Phase 2.1: User Invitations (MUST be before /:id routes) ═══
+
+// POST /api/users/invite — create user invitation (superadmin only)
+router.post('/invite', requireRole('superadmin'), (req, res) => {
+  try {
+    const { email, role, department } = req.body;
+    if (!email) return res.status(400).json({ error: 'البريد الإلكتروني مطلوب' });
+
+    try {
+      const existing = db.prepare("SELECT id FROM user_invitations WHERE email = ? AND accepted_at IS NULL AND expires_at > datetime('now','localtime')").get(email);
+      if (existing) return res.status(400).json({ error: 'تم إرسال دعوة بالفعل لهذا البريد' });
+    } catch { /* table may not exist yet */ }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    try {
+      db.prepare('INSERT INTO user_invitations (email, role, department, token_hash, invited_by, expires_at) VALUES (?,?,?,?,?,?)')
+        .run(email, role || 'viewer', department || null, tokenHash, req.user.id, expiresAt);
+    } catch {
+      return res.status(500).json({ error: 'خطأ في إنشاء الدعوة — تأكد من تشغيل migration 006' });
+    }
+
+    logAudit(req, 'INVITE', 'user', null, email);
+    const response = { message: 'تم إرسال الدعوة بنجاح', email };
+    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+      response.invite_token = rawToken;
+    }
+    res.status(201).json(response);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/users/invitations — list pending invitations
+router.get('/invitations', requireRole('superadmin'), (req, res) => {
+  try {
+    const invitations = db.prepare(`
+      SELECT ui.id, ui.email, ui.role, ui.department, ui.expires_at, ui.created_at, ui.accepted_at,
+        u.full_name as invited_by_name
+      FROM user_invitations ui LEFT JOIN users u ON u.id = ui.invited_by
+      ORDER BY ui.created_at DESC
+    `).all();
+    res.json(invitations);
+  } catch (err) { res.json([]); }
+});
+
+// DELETE /api/users/invitations/:id — revoke invitation
+router.delete('/invitations/:id', requireRole('superadmin'), (req, res) => {
+  try {
+    db.prepare('DELETE FROM user_invitations WHERE id = ? AND accepted_at IS NULL').run(req.params.id);
+    res.json({ message: 'تم إلغاء الدعوة' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
 
 // GET /api/users — list all (superadmin only)
 router.get('/', requireRole('superadmin'), (req, res) => {

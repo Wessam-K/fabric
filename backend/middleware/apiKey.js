@@ -2,9 +2,26 @@
  * Phase 3.5: API key authentication middleware
  * Allows external systems to authenticate via X-API-Key header
  * API keys are stored hashed in the api_keys table
+ * Phase 1.5: Per-key rate limiting via in-memory sliding window
  */
 const crypto = require('crypto');
 const db = require('../database');
+
+// Per-key rate limit tracking: keyId -> [timestamps]
+const keyRateMap = new Map();
+
+function checkKeyRateLimit(keyId, limit, windowMs) {
+  const now = Date.now();
+  let timestamps = keyRateMap.get(keyId) || [];
+  timestamps = timestamps.filter(t => now - t < windowMs);
+  if (timestamps.length >= limit) {
+    keyRateMap.set(keyId, timestamps);
+    return false;
+  }
+  timestamps.push(now);
+  keyRateMap.set(keyId, timestamps);
+  return true;
+}
 
 // Ensure api_keys table exists
 db.exec(`CREATE TABLE IF NOT EXISTS api_keys (
@@ -48,6 +65,13 @@ function apiKeyAuth(req, res, next) {
   if (!row) return res.status(401).json({ error: 'مفتاح API غير صالح' });
   if (row.expires_at && new Date(row.expires_at) < new Date()) {
     return res.status(401).json({ error: 'مفتاح API منتهي الصلاحية' });
+  }
+
+  // Phase 1.5: Per-key rate limit
+  const rateLimit = row.rate_limit || 100;
+  const rateWindow = (row.rate_window_seconds || 60) * 1000;
+  if (!checkKeyRateLimit(row.id, rateLimit, rateWindow)) {
+    return res.status(429).json({ error: 'تجاوز الحد الأقصى للطلبات لمفتاح API' });
   }
 
   // Update last_used_at

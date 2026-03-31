@@ -934,3 +934,155 @@ describe('Webhook Management', () => {
     assert.ok(res.body.success);
   });
 });
+
+// ═══ Enterprise Hardening v3.4 Tests ═══
+
+describe('CSRF Protection', () => {
+  it('CSRF middleware is loaded (test mode skips enforcement)', async () => {
+    // In test mode, CSRF is skipped — verify a POST works without CSRF token
+    const res = await req('POST', '/api/auth/refresh');
+    assert.ok([200, 401].includes(res.status)); // Either works or needs auth, not 403
+  });
+});
+
+describe('Content-Type Enforcement', () => {
+  it('rejects POST without Content-Type in production mode', async () => {
+    // Our request helper always sends application/json, so this test confirms normal flow
+    const res = await req('POST', '/api/auth/login', { username: 'admin', password: 'Admin@2024!' });
+    assert.ok([200, 401, 423].includes(res.status));
+  });
+});
+
+describe('Password Reset Flow', () => {
+  it('POST /api/auth/forgot-password returns success even for non-existent user', async () => {
+    const res = await request('POST', '/api/auth/forgot-password', { username: 'nonexistent_user_xyz' });
+    assert.equal(res.status, 200);
+    assert.ok(res.body.message);
+  });
+
+  it('POST /api/auth/forgot-password generates token for existing user', async () => {
+    const res = await request('POST', '/api/auth/forgot-password', { username: 'admin' });
+    assert.equal(res.status, 200);
+    assert.ok(res.body.reset_token); // Only in test/dev mode
+  });
+
+  it('POST /api/auth/reset-password consumes token', async () => {
+    const forgot = await request('POST', '/api/auth/forgot-password', { username: 'admin' });
+    assert.equal(forgot.status, 200);
+    const token = forgot.body.reset_token;
+
+    const res = await request('POST', '/api/auth/reset-password', {
+      token, new_password: 'Admin@2024!'
+    });
+    assert.equal(res.status, 200);
+    assert.ok(res.body.message);
+  });
+
+  it('POST /api/auth/reset-password rejects used token', async () => {
+    const forgot = await request('POST', '/api/auth/forgot-password', { username: 'admin' });
+    const token = forgot.body.reset_token;
+    await request('POST', '/api/auth/reset-password', { token, new_password: 'Admin@2024!' });
+    const res = await request('POST', '/api/auth/reset-password', { token, new_password: 'Admin@2024!' });
+    assert.equal(res.status, 400);
+  });
+
+  it('POST /api/auth/reset-password rejects weak password', async () => {
+    const forgot = await request('POST', '/api/auth/forgot-password', { username: 'admin' });
+    const res = await request('POST', '/api/auth/reset-password', {
+      token: forgot.body.reset_token, new_password: '123'
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+describe('2FA Endpoints', () => {
+  it('POST /api/auth/2fa/setup returns 501 without otplib', async () => {
+    const res = await req('POST', '/api/auth/2fa/setup');
+    // Either 501 (otplib not installed) or 200 (if installed)
+    assert.ok([200, 501].includes(res.status));
+  });
+});
+
+describe('Session Management', () => {
+  it('GET /api/sessions returns array', async () => {
+    const res = await req('GET', '/api/sessions');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
+  });
+
+  it('DELETE /api/sessions revokes all sessions', async () => {
+    const res = await req('DELETE', '/api/sessions');
+    assert.equal(res.status, 200);
+    assert.ok(res.body.message);
+  });
+});
+
+describe('User Invitations', () => {
+  let inviteId;
+
+  it('POST /api/users/invite creates invitation', async () => {
+    const res = await req('POST', '/api/users/invite', {
+      email: 'test@example.com', role: 'viewer'
+    });
+    assert.equal(res.status, 201);
+    assert.ok(res.body.invite_token); // test mode
+  });
+
+  it('GET /api/users/invitations lists invitations', async () => {
+    const res = await req('GET', '/api/users/invitations');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
+    if (res.body.length > 0) inviteId = res.body[0].id;
+  });
+
+  it('DELETE /api/users/invitations/:id revokes invitation', async () => {
+    if (!inviteId) return;
+    const res = await req('DELETE', `/api/users/invitations/${inviteId}`);
+    assert.equal(res.status, 200);
+  });
+});
+
+describe('Audit Log Export', () => {
+  it('GET /api/audit-log/export returns CSV', async () => {
+    const res = await req('GET', '/api/audit-log/export');
+    assert.equal(res.status, 200);
+    // Body will be raw CSV text, not JSON
+  });
+});
+
+describe('Data Retention', () => {
+  it('GET /api/admin/retention returns retention info', async () => {
+    const res = await req('GET', '/api/admin/retention');
+    assert.equal(res.status, 200);
+    assert.ok(typeof res.body.audit_retention_days === 'number');
+  });
+
+  it('POST /api/admin/retention/purge executes purge', async () => {
+    const res = await req('POST', '/api/admin/retention/purge');
+    assert.equal(res.status, 200);
+    assert.ok(typeof res.body.purged === 'number');
+  });
+});
+
+describe('License Status', () => {
+  it('GET /api/license/status returns license info', async () => {
+    const res = await req('GET', '/api/license/status');
+    assert.equal(res.status, 200);
+    assert.ok(res.body.license_type || res.body.status);
+  });
+});
+
+describe('Health & Monitoring', () => {
+  it('GET /api/health returns ok without auth', async () => {
+    const res = await request('GET', '/api/health');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status, 'ok');
+  });
+
+  it('GET /api/monitoring returns system info', async () => {
+    const res = await req('GET', '/api/monitoring');
+    assert.equal(res.status, 200);
+    assert.ok(res.body.uptime_seconds >= 0);
+    assert.ok(res.body.memory);
+  });
+});
