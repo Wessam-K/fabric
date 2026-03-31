@@ -32,11 +32,11 @@ router.get('/', requirePermission('documents', 'view'), (req, res) => {
   try {
     const { entity_type, entity_id, category, search, page = 1, limit = 25 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    let where = '1=1 AND d.deleted_at IS NULL'; const params = [];
+    let where = '1=1'; const params = [];
     if (entity_type) { where += ' AND d.entity_type=?'; params.push(entity_type); }
     if (entity_id) { where += ' AND d.entity_id=?'; params.push(entity_id); }
     if (category) { where += ' AND d.category=?'; params.push(category); }
-    if (search) { where += ' AND (d.title LIKE ? OR d.file_name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+    if (search) { where += ' AND (d.description LIKE ? OR d.file_name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
 
     const total = db.prepare(`SELECT COUNT(*) as c FROM documents d WHERE ${where}`).get(...params).c;
     const rows = db.prepare(`SELECT d.*, u.full_name as uploaded_by_name

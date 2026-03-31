@@ -726,7 +726,7 @@ app.get('/api/dashboard/kpis/hr', requireAuth, requirePermission('dashboard', 'v
     const presentToday = db.prepare("SELECT COUNT(*) as c FROM attendance WHERE work_date=? AND attendance_status != 'absent'").get(today).c;
     const attendanceRate = totalEmployees > 0 ? Math.round((presentToday / totalEmployees) * 100) : 0;
     const pendingLeaves = db.prepare("SELECT COUNT(*) as c FROM leave_requests WHERE status='pending'").get().c;
-    const payrollThisMonth = db.prepare("SELECT COALESCE(SUM(net_salary),0) as v FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pp.period_month=strftime('%Y-%m','now')").get().v;
+    const payrollThisMonth = db.prepare("SELECT COALESCE(SUM(net_pay),0) as v FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pp.period_month=strftime('%Y-%m','now')").get().v;
     // Department headcount
     const departments = db.prepare("SELECT department, COUNT(*) as count FROM employees WHERE status='active' AND department IS NOT NULL GROUP BY department ORDER BY count DESC").all();
     res.json({
@@ -748,10 +748,10 @@ app.get('/api/dashboard/kpis/hr', requireAuth, requirePermission('dashboard', 'v
 app.get('/api/reports/executive-summary', requireAuth, (req, res) => {
   try {
     const thisMonth = new Date().toISOString().slice(0, 7);
-    const revenue = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status != 'cancelled' AND invoice_date LIKE ?").get(`${thisMonth}%`).v;
+    const revenue = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status != 'cancelled' AND created_at LIKE ?").get(`${thisMonth}%`).v;
     const expenses = db.prepare("SELECT COALESCE(SUM(amount), 0) as v FROM expenses WHERE is_deleted = 0 AND expense_date LIKE ?").get(`${thisMonth}%`).v;
     const activeWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status NOT IN ('completed','cancelled')").get().v;
-    const completedWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status = 'completed' AND completed_at LIKE ?").get(`${thisMonth}%`).v;
+    const completedWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status = 'completed' AND completed_date LIKE ?").get(`${thisMonth}%`).v;
     const pendingInvoices = db.prepare("SELECT COUNT(*) as v FROM invoices WHERE status IN ('sent','partial','overdue')").get().v;
     const totalAR = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status NOT IN ('paid','cancelled','draft')").get().v;
     const employeeCount = db.prepare("SELECT COUNT(*) as v FROM employees WHERE status = 'active'").get().v;
@@ -765,7 +765,7 @@ app.get('/api/reports/cost-analysis', requireAuth, (req, res) => {
     const fabricCost = db.prepare("SELECT COALESCE(SUM(actual_cost), 0) as v FROM wo_fabric_batches").get().v;
     let accessoryCost = 0;
     try { accessoryCost = db.prepare("SELECT COALESCE(SUM(total_cost), 0) as v FROM wo_accessory_consumption").get().v; } catch {}
-    const laborCost = db.prepare("SELECT COALESCE(SUM(net_salary), 0) as v FROM payroll").get().v;
+    const laborCost = db.prepare("SELECT COALESCE(SUM(net_pay), 0) as v FROM payroll_records").get().v;
     const overheadCost = db.prepare("SELECT COALESCE(SUM(amount), 0) as v FROM expenses WHERE is_deleted = 0").get().v;
     const woRevenue = db.prepare("SELECT COALESCE(SUM(i.total), 0) as v FROM invoices i WHERE i.status != 'cancelled'").get().v;
     const totalCost = fabricCost + accessoryCost + laborCost + overheadCost;
@@ -875,7 +875,7 @@ app.get('/api/activity-feed', requireAuth, (req, res) => {
   try {
     const limit = Math.min(100, parseInt(req.query.limit) || 30);
     const feed = db.prepare(`
-      SELECT al.id, al.action, al.entity_type, al.entity_id, al.details, al.created_at,
+      SELECT al.id, al.action, al.entity_type, al.entity_id, al.entity_label as details, al.created_at,
         u.full_name as user_name
       FROM audit_log al
       LEFT JOIN users u ON u.id = al.user_id

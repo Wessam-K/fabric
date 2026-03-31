@@ -277,7 +277,7 @@ router.get('/stock-valuation', requirePermission('inventory', 'view'), (req, res
         AND (fib.received_meters - fib.used_meters - fib.wasted_meters) > 0
       WHERE f.status = 'active'
       GROUP BY f.code
-      HAVING available_meters > 0
+      HAVING COALESCE(SUM(fib.received_meters - fib.used_meters - fib.wasted_meters), 0) > 0
       ORDER BY total_value DESC
     `).all();
 

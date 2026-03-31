@@ -1,7 +1,8 @@
 {
   "name": "wk-factory",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "description": "WK-Factory — نظام إدارة المصنع",
+  "author": "WK-Factory",
   "main": "electron.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
@@ -78,8 +79,7 @@
         }
       ],
       "icon": "assets/icon.png",
-      "signAndEditExecutable": false,
-      "_comment_signing": "Phase 1.9: Set signAndEditExecutable=true and provide CSC_LINK + CSC_KEY_PASSWORD env vars with a code signing certificate (.pfx)"
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,

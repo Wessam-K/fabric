@@ -63,14 +63,14 @@ router.post('/', requirePermission('quotations', 'create'), (req, res) => {
 
     const qId = db.transaction(() => {
       const result = db.prepare(`INSERT INTO quotations 
-        (quotation_number, customer_id, valid_until, notes, subtotal, discount_percent, discount_amount, tax_percent, tax_amount, total, status, created_by)
-        VALUES (?,?,?,?,?,?,?,?,?,?,'draft',?)`)
-        .run(quotation_number, customer_id, valid_until || null, notes || null, subtotal, discount_percent || 0, discountAmt, tax_percent || 0, taxAmt, total, req.user.id);
+        (quotation_number, customer_id, valid_until, notes, subtotal, discount, tax_rate, tax_amount, total, status, created_by)
+        VALUES (?,?,?,?,?,?,?,?,?,'draft',?)`)
+        .run(quotation_number, customer_id, valid_until || null, notes || null, subtotal, discount_percent || 0, tax_percent || 0, taxAmt, total, req.user.id);
 
       const id = result.lastInsertRowid;
-      const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit, unit_price, total_price, notes) VALUES (?,?,?,?,?,?,?)');
+      const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit_price, total, notes) VALUES (?,?,?,?,?,?)');
       for (const it of items) {
-        ins.run(id, it.description, it.quantity, it.unit || 'pc', it.unit_price, safeMultiply(it.quantity || 0, it.unit_price || 0), it.notes || null);
+        ins.run(id, it.description, it.quantity, it.unit_price, safeMultiply(it.quantity || 0, it.unit_price || 0), it.notes || null);
       }
       return id;
     })();
@@ -98,22 +98,22 @@ router.put('/:id', requirePermission('quotations', 'edit'), (req, res) => {
         subtotal = 0;
         for (const it of items) { subtotal = safeAdd(subtotal, safeMultiply(it.quantity || 0, it.unit_price || 0)); }
       }
-      const dp = discount_percent ?? old.discount_percent;
-      const tp = tax_percent ?? old.tax_percent;
+      const dp = discount_percent ?? old.discount ?? 0;
+      const tp = tax_percent ?? old.tax_rate ?? 0;
       const discountAmt = round2(subtotal * dp / 100);
       const taxAmt = round2(safeSubtract(subtotal, discountAmt) * tp / 100);
       const total = safeAdd(safeSubtract(subtotal, discountAmt), taxAmt);
 
       db.prepare(`UPDATE quotations SET customer_id=COALESCE(?,customer_id), valid_until=COALESCE(?,valid_until),
-        notes=COALESCE(?,notes), subtotal=?, discount_percent=?, discount_amount=?, tax_percent=?, tax_amount=?, total=?,
+        notes=COALESCE(?,notes), subtotal=?, discount=?, tax_rate=?, tax_amount=?, total=?,
         status=COALESCE(?,status), updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-        .run(customer_id, valid_until, notes, subtotal, dp, discountAmt, tp, taxAmt, total, status, id);
+        .run(customer_id, valid_until, notes, subtotal, dp, tp, taxAmt, total, status, id);
 
       if (items?.length) {
         db.prepare('DELETE FROM quotation_items WHERE quotation_id=?').run(id);
-        const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit, unit_price, total_price, notes) VALUES (?,?,?,?,?,?,?)');
+        const ins = db.prepare('INSERT INTO quotation_items (quotation_id, description, quantity, unit_price, total, notes) VALUES (?,?,?,?,?,?)');
         for (const it of items) {
-          ins.run(id, it.description, it.quantity, it.unit || 'pc', it.unit_price, safeMultiply(it.quantity || 0, it.unit_price || 0), it.notes || null);
+          ins.run(id, it.description, it.quantity, it.unit_price, safeMultiply(it.quantity || 0, it.unit_price || 0), it.notes || null);
         }
       }
     })();
@@ -136,15 +136,15 @@ router.post('/:id/convert-to-so', requirePermission('sales_orders', 'create'), (
 
     const soId = db.transaction(() => {
       const soResult = db.prepare(`INSERT INTO sales_orders 
-        (so_number, quotation_id, customer_id, order_date, delivery_date, notes, subtotal, discount_percent, discount_amount, tax_percent, tax_amount, total, status, created_by)
-        VALUES (?,?,?,datetime('now','localtime'),?,?,?,?,?,?,?,?,'confirmed',?)`)
-        .run(soNumber, id, q.customer_id, q.valid_until, q.notes, q.subtotal, q.discount_percent, q.discount_amount, q.tax_percent, q.tax_amount, q.total, req.user.id);
+        (so_number, quotation_id, customer_id, order_date, delivery_date, notes, subtotal, discount, tax_rate, tax_amount, total, status, created_by)
+        VALUES (?,?,?,datetime('now','localtime'),?,?,?,?,?,?,?,'confirmed',?)`)
+        .run(soNumber, id, q.customer_id, q.valid_until, q.notes, q.subtotal, q.discount || 0, q.tax_rate || 0, q.tax_amount || 0, q.total, req.user.id);
 
       const sid = soResult.lastInsertRowid;
       const qItems = db.prepare('SELECT * FROM quotation_items WHERE quotation_id=?').all(id);
-      const ins = db.prepare('INSERT INTO sales_order_items (sales_order_id, description, quantity, unit, unit_price, total_price) VALUES (?,?,?,?,?,?)');
+      const ins = db.prepare('INSERT INTO sales_order_items (sales_order_id, description, quantity, unit_price, total) VALUES (?,?,?,?,?)');
       for (const it of qItems) {
-        ins.run(sid, it.description, it.quantity, it.unit, it.unit_price, it.total_price);
+        ins.run(sid, it.description, it.quantity, it.unit_price, it.total);
       }
 
       db.prepare("UPDATE quotations SET status='accepted', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id);

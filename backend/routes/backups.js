@@ -11,7 +11,7 @@ if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 // GET /api/backups
 router.get('/', requirePermission('backups', 'view'), (req, res) => {
   try {
-    const rows = db.prepare('SELECT b.*, u.full_name as created_by_name FROM backups b LEFT JOIN users u ON u.id=b.created_by ORDER BY b.created_at DESC').all();
+    const rows = db.prepare('SELECT b.id, b.file_name, b.file_path, b.file_size, b.notes, b.status, b.created_at, u.full_name as created_by_name FROM backups b LEFT JOIN users u ON u.id=b.created_by ORDER BY b.created_at DESC').all();
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -30,16 +30,18 @@ router.post('/', requirePermission('backups', 'create'), (req, res) => {
       const sizeKB = Math.round(stats.size / 1024);
       const sizeMB = (sizeKB / 1024).toFixed(2);
 
-      const result = db.prepare(`INSERT INTO backups (file_name, file_path, file_size, description, status, created_by)
+      const result = db.prepare(`INSERT INTO backups (file_name, file_path, file_size, notes, status, created_by)
         VALUES (?,?,?,?,'completed',?)`)
-        .run(filename, filePath, `${sizeMB} MB`, description || `نسخة احتياطية ${timestamp}`, req.user.id);
+        .run(filename, filePath, stats.size, description || `نسخة احتياطية ${timestamp}`, req.user.id);
 
       logAudit(req, 'BACKUP', 'database', result.lastInsertRowid, filename);
       res.status(201).json({ id: result.lastInsertRowid, file_name: filename, size: `${sizeMB} MB` });
     }).catch(err => {
       console.error('Backup failed:', err);
-      db.prepare("INSERT INTO backups (file_name, file_path, file_size, description, status, created_by) VALUES (?,?,?,'0','failed',?)")
-        .run(filename, filePath, 'backup_error', req.user.id);
+      try {
+        db.prepare("INSERT INTO backups (file_name, file_path, file_size, notes, status, created_by) VALUES (?,?,0,?,'failed',?)")
+          .run(filename, filePath, String(err.message).slice(0, 200), req.user.id);
+      } catch (_) { /* ignore secondary insert failure */ }
       res.status(500).json({ error: 'فشل النسخ الاحتياطي' });
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

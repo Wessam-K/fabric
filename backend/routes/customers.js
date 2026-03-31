@@ -385,8 +385,8 @@ router.get('/:id/profitability', requirePermission('customers', 'view'), (req, r
 
     const woStats = db.prepare(`
       SELECT COUNT(*) as total_orders,
-        COALESCE(SUM(total_pieces), 0) as total_pieces,
-        AVG(CASE WHEN completed_at IS NOT NULL THEN JULIANDAY(completed_at) - JULIANDAY(created_at) END) as avg_lead_days
+        COALESCE(SUM(quantity), 0) as total_pieces,
+        AVG(CASE WHEN completed_date IS NOT NULL THEN JULIANDAY(completed_date) - JULIANDAY(created_at) END) as avg_lead_days
       FROM work_orders WHERE customer_id = ?
     `).get(customerId);
 

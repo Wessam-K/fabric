@@ -25,8 +25,10 @@ router.post('/templates', requirePermission('quality', 'create'), (req, res) => 
     if (!name) return res.status(400).json({ error: 'اسم القالب مطلوب' });
 
     const templateId = db.transaction(() => {
+      const validTypes = ['normal','tightened','reduced'];
+      const insType = validTypes.includes(product_type) ? product_type : 'normal';
       const result = db.prepare('INSERT INTO qc_templates (name, description, inspection_type) VALUES (?,?,?)')
-        .run(name, description || null, product_type || 'inline');
+        .run(name, description || null, insType);
       const tid = result.lastInsertRowid;
 
       if (items?.length) {
@@ -59,10 +61,12 @@ router.put('/templates/:id', requirePermission('quality', 'edit'), (req, res) =>
     const old = db.prepare('SELECT * FROM qc_templates WHERE id=? AND is_active=1').get(id);
     if (!old) return res.status(404).json({ error: 'القالب غير موجود' });
     const { name, description, product_type, items } = req.body;
+    const validTypes = ['normal','tightened','reduced'];
+    const insType = product_type && validTypes.includes(product_type) ? product_type : undefined;
 
     db.transaction(() => {
       db.prepare('UPDATE qc_templates SET name=COALESCE(?,name), description=COALESCE(?,description), inspection_type=COALESCE(?,inspection_type) WHERE id=?')
-        .run(name, description, product_type, id);
+        .run(name, description, insType, id);
 
       if (items) {
         db.prepare('DELETE FROM qc_template_items WHERE template_id=?').run(id);

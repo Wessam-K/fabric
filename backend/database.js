@@ -2663,6 +2663,30 @@ function runMigrations() {
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (38)`);
   }
+
+  // ──── V39 — Fix missing columns used by routes ────
+  const v39 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 39').get();
+  if (!v39) {
+    const addCol = (table, column, definition) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch(e) {}
+    };
+    // quotations route uses discount_percent / discount_amount / tax_percent
+    addCol('quotations', 'discount_percent', 'REAL DEFAULT 0');
+    addCol('quotations', 'discount_amount', 'REAL DEFAULT 0');
+    addCol('quotations', 'tax_percent', 'REAL DEFAULT 0');
+    // quotation_items route uses total_price
+    addCol('quotation_items', 'total_price', 'REAL DEFAULT 0');
+    addCol('quotation_items', 'unit', 'TEXT');
+    // documents route uses deleted_at
+    addCol('documents', 'deleted_at', 'TEXT');
+    addCol('documents', 'title', 'TEXT');
+    // backups route uses description
+    addCol('backups', 'description', 'TEXT');
+    // attendance clock uses check_in / check_out
+    addCol('attendance', 'check_in', 'TEXT');
+    addCol('attendance', 'check_out', 'TEXT');
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (39)`);
+  }
 }
 
 initializeDatabase();

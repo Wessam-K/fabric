@@ -434,7 +434,7 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
 
     const woId = transaction();
     logAudit(req, 'CREATE', 'work_order', woId, wo_number);
-    fireWebhook('workorder.created', { id: woId, wo_number, customer_id, order_date });
+    fireWebhook('workorder.created', { id: woId, wo_number });
     res.status(201).json(getFullWO(woId));
   } catch (err) {
     if (err.message?.includes('UNIQUE')) return res.status(409).json({ error: 'رقم أمر الشغل موجود بالفعل' });
