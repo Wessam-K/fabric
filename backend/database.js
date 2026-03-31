@@ -271,7 +271,7 @@ function initializeDatabase() {
       customer_phone  TEXT,
       customer_email  TEXT,
       wo_id           INTEGER REFERENCES work_orders(id),
-      status          TEXT DEFAULT 'draft' CHECK(status IN ('draft','sent','paid','overdue','cancelled')),
+      status          TEXT DEFAULT 'draft' CHECK(status IN ('draft','sent','paid','partially_paid','overdue','cancelled')),
       tax_pct         REAL DEFAULT 0,
       discount        REAL DEFAULT 0,
       subtotal        REAL DEFAULT 0,
@@ -2686,6 +2686,37 @@ function runMigrations() {
     addCol('attendance', 'check_in', 'TEXT');
     addCol('attendance', 'check_out', 'TEXT');
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (39)`);
+  }
+
+  // v40: Recreate invoices table to add 'partially_paid' to CHECK constraint
+  const v40 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 40').get();
+  if (!v40) {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS invoices_new (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_number  TEXT UNIQUE NOT NULL,
+          customer_name   TEXT NOT NULL,
+          customer_phone  TEXT,
+          customer_email  TEXT,
+          wo_id           INTEGER REFERENCES work_orders(id),
+          customer_id     INTEGER REFERENCES customers(id),
+          status          TEXT DEFAULT 'draft' CHECK(status IN ('draft','sent','paid','partially_paid','overdue','cancelled')),
+          tax_pct         REAL DEFAULT 0,
+          discount        REAL DEFAULT 0,
+          subtotal        REAL DEFAULT 0,
+          total           REAL DEFAULT 0,
+          notes           TEXT,
+          due_date        TEXT,
+          created_at      TEXT DEFAULT (datetime('now')),
+          updated_at      TEXT DEFAULT (datetime('now'))
+        );
+        INSERT OR IGNORE INTO invoices_new SELECT id, invoice_number, customer_name, customer_phone, customer_email, wo_id, customer_id, status, tax_pct, discount, subtotal, total, notes, due_date, created_at, updated_at FROM invoices;
+        DROP TABLE invoices;
+        ALTER TABLE invoices_new RENAME TO invoices;
+      `);
+      db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (40)`);
+    })();
   }
 }
 

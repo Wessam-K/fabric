@@ -213,9 +213,9 @@ router.post('/sales-orders/:id/convert-to-wo', requirePermission('work_orders', 
 
     const woId = db.transaction(() => {
       const result = db.prepare(`INSERT INTO work_orders 
-        (wo_number, customer_id, start_date, due_date, status, quantity, notes, created_by)
-        VALUES (?,?,datetime('now','localtime'),?,'pending',?,?,?)`)
-        .run(woNumber, so.customer_id, so.delivery_date, totalQty, `من أمر بيع ${so.so_number}: ${desc}`, req.user.id);
+        (wo_number, customer_id, start_date, due_date, status, quantity, notes)
+        VALUES (?,?,datetime('now','localtime'),?,'pending',?,?)`)
+        .run(woNumber, so.customer_id, so.delivery_date, totalQty, `من أمر بيع ${so.so_number}: ${desc}`);
 
       db.prepare("UPDATE sales_orders SET status='in_production', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
       return result.lastInsertRowid;
@@ -230,7 +230,7 @@ router.post('/sales-orders/:id/convert-to-wo', requirePermission('work_orders', 
 router.patch('/sales-orders/:id/status', requirePermission('sales_orders', 'edit'), (req, res) => {
   try {
     const { status } = req.body;
-    const validStatuses = ['confirmed','in_production','shipped','delivered','cancelled'];
+    const validStatuses = ['confirmed','in_production','partially_shipped','shipped','completed','cancelled'];
     if (!status || !validStatuses.includes(status)) return res.status(400).json({ error: 'الحالة غير صالحة' });
     const so = db.prepare('SELECT * FROM sales_orders WHERE id=?').get(req.params.id);
     if (!so) return res.status(404).json({ error: 'أمر البيع غير موجود' });

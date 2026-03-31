@@ -124,7 +124,7 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
     const created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
     created.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoiceId);
     logAudit(req, 'CREATE', 'invoice', invoiceId, invoice_number);
-    fireWebhook('invoice.created', { id: invoiceId, invoice_number, customer_id: created.customer_id, total: created.total_amount });
+    fireWebhook('invoice.created', { id: invoiceId, invoice_number, customer_id: created.customer_id, total: created.total });
     res.status(201).json(created);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

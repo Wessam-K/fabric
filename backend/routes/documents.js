@@ -163,14 +163,14 @@ router.get('/template/invoice/:id', requirePermission('invoices', 'view'), (req,
 
     let html = templateHeader(`فاتورة ${inv.invoice_number}`, company);
     html += `<div class="doc-title">فاتورة رقم: ${inv.invoice_number}</div>`;
-    html += `<p>العميل: ${inv.customer_name || '-'} | التاريخ: ${inv.invoice_date || inv.created_at} | الحالة: ${inv.status}</p>`;
+    html += `<p>العميل: ${inv.customer_name || '-'} | التاريخ: ${inv.created_at} | الحالة: ${inv.status}</p>`;
     html += `<table><thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>`;
     items.forEach((item, i) => {
-      html += `<tr><td>${i + 1}</td><td>${item.description || item.item_code || '-'}</td><td>${item.quantity}</td><td>${item.unit_price}</td><td>${item.total_price}</td></tr>`;
+      html += `<tr><td>${i + 1}</td><td>${item.description || item.model_code || '-'}</td><td>${item.quantity}</td><td>${item.unit_price}</td><td>${item.total}</td></tr>`;
     });
     html += `</tbody></table>`;
     html += `<table><tr class="total-row"><td colspan="4">الإجمالي</td><td>${inv.total}</td></tr>`;
-    if (inv.tax_amount) html += `<tr><td colspan="4">الضريبة</td><td>${inv.tax_amount}</td></tr>`;
+    if (inv.tax_pct) html += `<tr><td colspan="4">الضريبة (${inv.tax_pct}%)</td><td>${Math.round((inv.subtotal - (inv.discount || 0)) * inv.tax_pct / 100)}</td></tr>`;
     html += `</table>`;
     html += templateFooter;
 
@@ -182,18 +182,18 @@ router.get('/template/invoice/:id', requirePermission('invoices', 'view'), (req,
 // GET /api/documents/template/quotation/:id — printable quotation HTML
 router.get('/template/quotation/:id', requirePermission('quotations', 'view'), (req, res) => {
   try {
-    const q = db.prepare('SELECT * FROM quotations WHERE id = ?').get(req.params.id);
+    const q = db.prepare('SELECT q.*, c.name as customer_name FROM quotations q LEFT JOIN customers c ON q.customer_id = c.id WHERE q.id = ?').get(req.params.id);
     if (!q) return res.status(404).json({ error: 'عرض السعر غير موجود' });
     const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ?').all(q.id);
     const company = db.prepare("SELECT value FROM settings WHERE key='company_name'").get()?.value || 'WK-Factory';
 
     let html = templateHeader(`عرض سعر ${q.quotation_number}`, company);
     html += `<div class="doc-title">عرض سعر رقم: ${q.quotation_number}</div>`;
-    html += `<p>العميل: ${q.customer_name || '-'} | التاريخ: ${q.quotation_date || q.created_at} | الحالة: ${q.status}</p>`;
+    html += `<p>العميل: ${q.customer_name || '-'} | التاريخ: ${q.created_at} | الحالة: ${q.status}</p>`;
     if (q.notes) html += `<p>ملاحظات: ${q.notes}</p>`;
     html += `<table><thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>`;
     items.forEach((item, i) => {
-      html += `<tr><td>${i + 1}</td><td>${item.description || '-'}</td><td>${item.quantity}</td><td>${item.unit_price}</td><td>${item.total_price || (item.quantity * item.unit_price)}</td></tr>`;
+      html += `<tr><td>${i + 1}</td><td>${item.description || '-'}</td><td>${item.quantity}</td><td>${item.unit_price}</td><td>${item.total || (item.quantity * item.unit_price)}</td></tr>`;
     });
     html += `</tbody></table>`;
     html += `<table><tr class="total-row"><td colspan="4">الإجمالي</td><td>${q.total || '-'}</td></tr></table>`;
@@ -207,22 +207,22 @@ router.get('/template/quotation/:id', requirePermission('quotations', 'view'), (
 // GET /api/documents/template/payslip/:periodId/:employeeId — printable pay slip
 router.get('/template/payslip/:periodId/:employeeId', requirePermission('hr', 'view'), (req, res) => {
   try {
-    const p = db.prepare('SELECT * FROM payroll WHERE period_id = ? AND employee_id = ?').get(req.params.periodId, req.params.employeeId);
+    const p = db.prepare('SELECT * FROM payroll_records WHERE period_id = ? AND employee_id = ?').get(req.params.periodId, req.params.employeeId);
     if (!p) return res.status(404).json({ error: 'كشف الراتب غير موجود' });
     const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(p.employee_id);
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(p.period_id);
     const company = db.prepare("SELECT value FROM settings WHERE key='company_name'").get()?.value || 'WK-Factory';
 
     let html = templateHeader(`كشف راتب - ${emp?.full_name || ''}`, company);
-    html += `<div class="doc-title">كشف راتب — ${period?.period_month || ''} / ${period?.period_year || ''}</div>`;
+    html += `<div class="doc-title">كشف راتب — ${period?.period_month || ''}</div>`;
     html += `<p>الموظف: ${emp?.full_name || '-'} (${emp?.emp_code || '-'}) | القسم: ${emp?.department || '-'} | الوظيفة: ${emp?.job_title || '-'}</p>`;
     html += `<table><thead><tr><th>البند</th><th>المبلغ</th></tr></thead><tbody>`;
-    html += `<tr><td>الراتب الأساسي</td><td>${p.base_salary || 0}</td></tr>`;
-    if (p.total_allowances) html += `<tr><td>البدلات</td><td>${p.total_allowances}</td></tr>`;
-    if (p.overtime_amount) html += `<tr><td>العمل الإضافي</td><td>${p.overtime_amount}</td></tr>`;
-    if (p.bonus) html += `<tr><td>مكافآت</td><td>${p.bonus}</td></tr>`;
+    html += `<tr><td>الراتب الأساسي</td><td>${p.base_pay || 0}</td></tr>`;
+    if (p.gross_pay) html += `<tr><td>إجمالي الراتب</td><td>${p.gross_pay}</td></tr>`;
+    if (p.overtime_pay) html += `<tr><td>العمل الإضافي</td><td>${p.overtime_pay}</td></tr>`;
+    if (p.bonuses) html += `<tr><td>مكافآت</td><td>${p.bonuses}</td></tr>`;
     if (p.total_deductions) html += `<tr style="color:#dc2626"><td>الخصومات</td><td>-${p.total_deductions}</td></tr>`;
-    html += `<tr class="total-row"><td>صافي الراتب</td><td>${p.net_salary || 0}</td></tr>`;
+    html += `<tr class="total-row"><td>صافي الراتب</td><td>${p.net_pay || 0}</td></tr>`;
     html += `</tbody></table>`;
     html += templateFooter;
 
