@@ -370,6 +370,58 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+
+  // Phase 5.4: Auto-update check (production only)
+  if (app.isPackaged) {
+    try {
+      const { autoUpdater } = require('electron-updater');
+      autoUpdater.logger = getLogger();
+      autoUpdater.autoDownload = false;
+      autoUpdater.autoInstallOnAppQuit = true;
+
+      autoUpdater.on('update-available', (info) => {
+        getLogger().info('Update available', { version: info.version });
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update:available', info);
+          dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'تحديث متاح',
+            message: `يتوفر إصدار جديد (v${info.version}). هل تريد تحميله الآن؟`,
+            buttons: ['تحميل', 'لاحقاً'],
+            defaultId: 0,
+          }).then(({ response }) => {
+            if (response === 0) autoUpdater.downloadUpdate();
+          });
+        }
+      });
+
+      autoUpdater.on('update-downloaded', (info) => {
+        getLogger().info('Update downloaded', { version: info.version });
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update:downloaded', info);
+          dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'تم تحميل التحديث',
+            message: `تم تحميل الإصدار v${info.version}. سيتم التثبيت عند إغلاق التطبيق.`,
+            buttons: ['تثبيت الآن', 'لاحقاً'],
+            defaultId: 0,
+          }).then(({ response }) => {
+            if (response === 0) autoUpdater.quitAndInstall();
+          });
+        }
+      });
+
+      autoUpdater.on('error', (err) => {
+        getLogger().warn('Auto-update error', { error: err.message });
+      });
+
+      // Check for updates after 10 seconds, then every 6 hours
+      setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 10000);
+      setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 6 * 60 * 60 * 1000);
+    } catch (e) {
+      getLogger().warn('Auto-updater not available', { error: e.message });
+    }
+  }
 });
 
 app.on('window-all-closed', () => {

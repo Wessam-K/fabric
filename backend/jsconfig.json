@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "checkJs": true,
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@utils/*": ["utils/*"],
+      "@middleware/*": ["middleware/*"],
+      "@routes/*": ["routes/*"],
+      "@lib/*": ["lib/*"]
+    },
+    "types": ["node"],
+    "strict": false,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true
+  },
+  "include": ["**/*.js"],
+  "exclude": ["node_modules", "tests", "uploads", "backups"]
+}

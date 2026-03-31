@@ -10,6 +10,32 @@ const compression = require('compression');
 const db = require('./database');
 const { requireAuth, requirePermission, canUser, logAudit } = require('./middleware/auth');
 const { apiKeyAuth } = require('./middleware/apiKey'); // Phase 3.5
+const logger = require('./utils/logger'); // Phase 6.1: Structured logging
+const { migrate } = require('./migrate'); // Phase 2.1: Migration runner
+const { LicenseManager } = require('./lib/license'); // Phase 5.1: Licensing
+const { initWebSocket, broadcast, getClientCount } = require('./utils/websocket'); // Phase 3.7: WebSocket
+
+// Phase 5.3: Sentry error tracking (optional — only if DSN configured)
+if (process.env.SENTRY_DSN) {
+  const Sentry = require('@sentry/node');
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    release: `wk-factory@${require('./package.json').version}`,
+    tracesSampleRate: 0.2,
+  });
+}
+
+// Phase 2.1: Run pending migrations on startup
+try {
+  const result = migrate(db);
+  if (result.applied > 0) logger.info('Migrations applied', result);
+} catch (err) {
+  logger.error('Migration failed', { error: err.message });
+}
+
+// Phase 5.1: Initialize license manager
+const licenseManager = new LicenseManager(db);
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
 const hrRouter = require('./routes/hr');
@@ -205,6 +231,32 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', app: 'WK-Factory', database: dbStatus });
 });
 
+// Phase 3.4: Swagger API documentation (public)
+try {
+  const swaggerUi = require('swagger-ui-express');
+  const swaggerSpec = require('./swagger');
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'WK-Factory API Docs',
+  }));
+  app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
+} catch (e) { logger.warn('Swagger UI not available', { error: e.message }); }
+
+// Phase 5.1: License status endpoint
+app.get('/api/license/status', requireAuth, (req, res) => {
+  try {
+    res.json(licenseManager.getStatus());
+  } catch (err) { res.status(500).json({ error: 'خطأ في التحقق من الترخيص' }); }
+});
+app.post('/api/license/activate', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  const { licenseKey } = req.body;
+  if (!licenseKey) return res.status(400).json({ error: 'مفتاح الترخيص مطلوب' });
+  const result = licenseManager.activate(licenseKey);
+  if (!result.success) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
 // Phase 5.6: Detailed monitoring endpoint (requires auth)
 app.get('/api/monitoring', requireAuth, (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
@@ -235,9 +287,11 @@ app.get('/api/monitoring', requireAuth, (req, res) => {
         total: backupCount,
         last_backup: lastBackup?.created_at || null,
       },
+      websocket_clients: getClientCount(),
+      license: licenseManager.getStatus(),
       node_version: process.version,
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'خطأ في المراقبة' }); }
+  } catch (err) { logger.error('Monitoring error', { error: err.message }); res.status(500).json({ error: 'خطأ في المراقبة' }); }
 });
 
 // ═══ Public routes (no auth) ═══
@@ -269,7 +323,7 @@ app.post('/api/setup/create-admin', (req, res) => {
     const result = createAdmin();
     if (!result) return res.status(403).json({ error: 'تم إكمال الإعداد بالفعل' });
     res.json({ message: 'تم إنشاء حساب مدير النظام', user_id: result.lastInsertRowid });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ أثناء إنشاء الحساب' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ أثناء إنشاء الحساب' }); }
 });
 
 // ═══ Protected routes ═══
@@ -347,7 +401,7 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
     try {
       const cancelledCount = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE status='cancelled'`).get().c;
       productionPipeline.cancelled = cancelledCount;
-    } catch (e) { console.error('dashboard cancelled count:', e.message); }
+    } catch (e) { logger.debug('dashboard cancelled count', e.message); }
     pipelineRows.forEach(r => { if (productionPipeline.hasOwnProperty(r.status)) productionPipeline[r.status] = r.count; });
 
     // V9 — low stock alerts (return arrays for frontend iteration)
@@ -380,7 +434,7 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
     try {
       topModels = db.prepare(`SELECT model_code, model_name, total_wo, completed_wo, total_quantity, total_pieces_completed, avg_cost_per_piece
         FROM model_production_summary ORDER BY total_wo DESC LIMIT ?`).all(dashboardListLimit);
-    } catch (e) { console.error('dashboard topModels:', e.message); }
+    } catch (e) { logger.debug('dashboard topModels', e.message); }
 
     // V11 — stage bottleneck detection (stages with most WIP)
     let stageBottlenecks = [];
@@ -390,13 +444,13 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
         FROM wo_stages ws JOIN work_orders wo ON wo.id=ws.wo_id
         WHERE wo.status='in_progress' AND ws.status='in_progress' AND ws.quantity_in_stage > 0
         GROUP BY ws.stage_name ORDER BY total_wip DESC LIMIT ?`).all(dashboardListLimit);
-    } catch (e) { console.error('dashboard stageBottlenecks:', e.message); }
+    } catch (e) { logger.debug('dashboard stageBottlenecks', e.message); }
 
     // V17 — Machine status board
     let machineStatusBoard = [];
     try {
       machineStatusBoard = db.prepare(`SELECT id, code, name, status, location, machine_type FROM machines ORDER BY sort_order, name LIMIT ?`).all(dashboardMachineLimit);
-    } catch (e) { console.error('dashboard machineStatusBoard:', e.message); }
+    } catch (e) { logger.debug('dashboard machineStatusBoard', e.message); }
 
     // V18 — Today's summary
     const today = new Date().toISOString().slice(0, 10);
@@ -408,13 +462,13 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
       const todayExpenses = db.prepare("SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND expense_date=?").get(today)?.v || 0;
       const todayInvoices = db.prepare("SELECT COUNT(*) as c FROM invoices WHERE DATE(created_at)=?").get(today)?.c || 0;
       todaySummary = { attendance: todayAttendance, deliveries: todayDeliveries, due_today: dueTodayWO, expenses: Math.round(todayExpenses * 100) / 100, invoices: todayInvoices };
-    } catch (e) { console.error('dashboard todaySummary:', e.message); todaySummary = { attendance: 0, deliveries: 0, due_today: 0, expenses: 0, invoices: 0 }; }
+    } catch (e) { logger.debug('dashboard todaySummary', e.message); todaySummary = { attendance: 0, deliveries: 0, due_today: 0, expenses: 0, invoices: 0 }; }
 
     // V18 — Overdue invoices
     let overdueInvoicesList = [];
     try {
       overdueInvoicesList = db.prepare(`SELECT id, invoice_number, customer_name, total, due_date FROM invoices WHERE status='overdue' ORDER BY due_date ASC LIMIT ?`).all(dashboardListLimit);
-    } catch (e) { console.error('dashboard overdueInvoices:', e.message); }
+    } catch (e) { logger.debug('dashboard overdueInvoices', e.message); }
 
     // V18 — Overdue work orders list (detailed)
     let overdueWOList = [];
@@ -423,7 +477,7 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
         FROM work_orders wo LEFT JOIN models m ON m.id=wo.model_id
         WHERE wo.due_date < date('now') AND wo.status NOT IN ('completed','cancelled')
         ORDER BY wo.due_date ASC LIMIT ?`).all(dashboardListLimit);
-    } catch (e) { console.error('dashboard overdueWOList:', e.message); }
+    } catch (e) { logger.debug('dashboard overdueWOList', e.message); }
 
     res.json({
       total_models: totalModels, total_fabrics: totalFabrics, total_accessories: totalAccessories,
@@ -454,7 +508,7 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
       overdue_invoices: overdueInvoicesList,
       overdue_work_orders: overdueWOList,
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══ Dashboard KPI Endpoints ═══
@@ -470,7 +524,7 @@ app.get('/api/dashboard/chart/revenue-trend', requireAuth, requirePermission('da
       GROUP BY month ORDER BY month
     `).all();
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/dashboard/chart/production-status — WO status distribution
@@ -478,7 +532,7 @@ app.get('/api/dashboard/chart/production-status', requireAuth, requirePermission
   try {
     const rows = db.prepare(`SELECT status, COUNT(*) as count FROM work_orders GROUP BY status`).all();
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/dashboard/chart/top-customers — top 10 customers by revenue
@@ -490,7 +544,7 @@ app.get('/api/dashboard/chart/top-customers', requireAuth, requirePermission('da
       GROUP BY customer_id ORDER BY total_revenue DESC LIMIT 10
     `).all();
     res.json(rows);
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/dashboard/chart/inventory-alerts — low stock items summary
@@ -499,7 +553,7 @@ app.get('/api/dashboard/chart/inventory-alerts', requireAuth, requirePermission(
     const fabrics = db.prepare(`SELECT code, name, available_meters as qty, low_stock_threshold as threshold, 'fabric' as type FROM fabrics WHERE status='active' AND available_meters < COALESCE(low_stock_threshold,10) AND COALESCE(low_stock_threshold,10) > 0`).all();
     const accessories = db.prepare(`SELECT code, name, quantity_on_hand as qty, low_stock_threshold as threshold, 'accessory' as type FROM accessories WHERE status='active' AND quantity_on_hand < COALESCE(low_stock_threshold,10) AND COALESCE(low_stock_threshold,10) > 0`).all();
     res.json([...fabrics, ...accessories]);
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/dashboard/kpis/production — production KPIs with period comparison
@@ -518,7 +572,7 @@ app.get('/api/dashboard/kpis/production', requireAuth, requirePermission('dashbo
       avg_cycle_days: Math.round(avgCycleTime * 10) / 10,
       on_time_delivery_rate: onTimeRate,
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/dashboard/kpis/finance — financial KPIs
@@ -543,7 +597,7 @@ app.get('/api/dashboard/kpis/finance', requireAuth, requirePermission('dashboard
         '90_plus': Math.round(ar90plus * 100) / 100,
       },
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/dashboard/kpis/hr — HR KPIs
@@ -565,7 +619,7 @@ app.get('/api/dashboard/kpis/hr', requireAuth, requirePermission('dashboard', 'v
       payroll_this_month: Math.round(payrollThisMonth * 100) / 100,
       departments,
     });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -584,7 +638,7 @@ app.get('/api/reports/executive-summary', requireAuth, (req, res) => {
     const totalAR = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status NOT IN ('paid','cancelled','draft')").get().v;
     const employeeCount = db.prepare("SELECT COUNT(*) as v FROM employees WHERE status = 'active'").get().v;
     res.json({ month: thisMonth, revenue, expenses, net_income: revenue - expenses, active_work_orders: activeWOs, completed_this_month: completedWOs, pending_invoices: pendingInvoices, total_receivables: totalAR, active_employees: employeeCount });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/cost-analysis — production cost breakdown
@@ -598,7 +652,7 @@ app.get('/api/reports/cost-analysis', requireAuth, (req, res) => {
     const woRevenue = db.prepare("SELECT COALESCE(SUM(i.total), 0) as v FROM invoices i WHERE i.status != 'cancelled'").get().v;
     const totalCost = fabricCost + accessoryCost + laborCost + overheadCost;
     res.json({ fabric_cost: fabricCost, accessory_cost: accessoryCost, labor_cost: laborCost, overhead_cost: overheadCost, total_cost: totalCost, total_revenue: woRevenue, gross_margin: woRevenue - totalCost, margin_pct: woRevenue > 0 ? Math.round((woRevenue - totalCost) / woRevenue * 10000) / 100 : 0 });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/inventory-abc — ABC analysis of inventory items
@@ -624,7 +678,7 @@ app.get('/api/reports/inventory-abc', requireAuth, (req, res) => {
       item.category = pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C';
     }
     res.json({ items, total_value: totalValue });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/reports/hr-analytics — HR metrics
@@ -638,7 +692,7 @@ app.get('/api/reports/hr-analytics', requireAuth, (req, res) => {
     const avgSalary = db.prepare("SELECT AVG(base_salary) as v FROM employees WHERE status='active' AND base_salary > 0").get().v;
     const leaveStats = db.prepare("SELECT leave_type, COUNT(*) as count, SUM(CAST(JULIANDAY(end_date) - JULIANDAY(start_date) + 1 AS INTEGER)) as total_days FROM leave_requests WHERE status='approved' AND start_date >= date('now','-12 months') GROUP BY leave_type").all();
     res.json({ department_distribution: deptDist, avg_tenure_years: avgTenure ? Math.round(avgTenure * 10) / 10 : null, turnover_12m: turnover, active_employees: totalActive, turnover_rate: totalActive > 0 ? Math.round(turnover / totalActive * 10000) / 100 : 0, recent_hires_3m: recentHires, avg_salary: avgSalary ? Math.round(avgSalary) : null, leave_stats: leaveStats });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -681,7 +735,7 @@ app.post('/api/import/bulk', requireAuth, (req, res) => {
 
     logAudit(req, 'BULK_IMPORT', entity, null, `Imported ${results.imported} of ${rows.length}`);
     res.json(results);
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/import/templates — list available import templates
@@ -711,7 +765,7 @@ app.get('/api/activity-feed', requireAuth, (req, res) => {
       LIMIT ?
     `).all(limit);
     res.json(feed);
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/sessions/current — current session info
@@ -720,7 +774,7 @@ app.get('/api/sessions/current', requireAuth, (req, res) => {
     const user = req.user;
     const loginTime = db.prepare("SELECT created_at FROM audit_log WHERE user_id = ? AND action = 'LOGIN' ORDER BY created_at DESC LIMIT 1").get(user.id);
     res.json({ user_id: user.id, username: user.username, full_name: user.full_name, role: user.role, last_login: loginTime?.created_at || null });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // Global search — filter by user module permissions
@@ -747,17 +801,17 @@ app.get('/api/search', requireAuth, (req, res) => {
     let maintenanceOrders = [], expensesResults = [], machines = [], employees = [], accounts = [];
     try {
       if (shouldSearch('machines') && canUser(u,'machines','view')) machines = db.prepare(`SELECT id, code, name, barcode, machine_type, status FROM machines WHERE status != 'inactive' AND (code LIKE ? OR name LIKE ? OR barcode LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
-    } catch (e) { console.error('search machines:', e.message); }
+    } catch (e) { logger.debug('search machines', { error: e.message }); }
     try {
       if (shouldSearch('maintenance') && canUser(u,'maintenance','view')) maintenanceOrders = db.prepare(`SELECT mo.id, mo.barcode, mo.title, mo.status, mo.priority, m.name as machine_name FROM maintenance_orders mo LEFT JOIN machines m ON m.id=mo.machine_id WHERE mo.is_deleted=0 AND (mo.title LIKE ? OR mo.barcode LIKE ? OR m.name LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
       if (shouldSearch('expenses') && canUser(u,'expenses','view')) expensesResults = db.prepare(`SELECT id, description, amount, expense_type, status, expense_date FROM expenses WHERE is_deleted=0 AND (description LIKE ? OR expense_type LIKE ?) LIMIT ?`).all(like, like, searchLimit);
-    } catch (e) { console.error('search maintenance/expenses:', e.message); }
+    } catch (e) { logger.debug('search maintenance/expenses', { error: e.message }); }
     try {
       if (shouldSearch('employees') && canUser(u,'hr','view')) employees = db.prepare(`SELECT id, emp_code, full_name, department, job_title FROM employees WHERE status='active' AND (emp_code LIKE ? OR full_name LIKE ? OR department LIKE ?) LIMIT ?`).all(like, like, like, searchLimit);
-    } catch (e) { console.error('search employees:', e.message); }
+    } catch (e) { logger.debug('search employees', { error: e.message }); }
     try {
       if (shouldSearch('accounts') && canUser(u,'accounting','view')) accounts = db.prepare(`SELECT id, code, name_ar, type FROM chart_of_accounts WHERE is_active=1 AND (code LIKE ? OR name_ar LIKE ?) LIMIT ?`).all(like, like, searchLimit);
-    } catch (e) { console.error('search accounts:', e.message); }
+    } catch (e) { logger.debug('search accounts', { error: e.message }); }
 
     const result = { models, fabrics, accessories, invoices, suppliers, workOrders, purchaseOrders, customers, maintenanceOrders, expenses: expensesResults, machines, employees, accounts };
     // Add counts per category and total
@@ -765,7 +819,7 @@ app.get('/api/search', requireAuth, (req, res) => {
     let total = 0;
     for (const [key, arr] of Object.entries(result)) { counts[key] = arr.length; total += arr.length; }
     res.json({ ...result, counts, total });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // Serve built frontend in production (Electron)
@@ -783,34 +837,42 @@ if (fs.existsSync(frontendDist)) {
 
 // ═══ Global error handler ═══
 app.use((err, req, res, _next) => {
-  console.error('Unhandled error:', err.stack || err.message || err);
+  logger.error('Unhandled error', { error: err.stack || err.message || err });
+  // Phase 5.3: Report to Sentry if configured
+  if (process.env.SENTRY_DSN) { try { require('@sentry/node').captureException(err); } catch {} }
   res.status(err.status || 500).json({ error: 'خطأ داخلي في الخادم' });
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`WK-Factory API running on http://localhost:${PORT}`);
+  logger.info(`WK-Factory API running on http://localhost:${PORT}`);
+
+  // Phase 3.7: Initialize WebSocket server
+  initWebSocket(server);
+  logger.info('WebSocket server initialized on /ws');
+
   // Run notification generation on startup and every 5 minutes
-  try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Initial notification gen failed:', e.message); }
-  setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { console.error('Notification gen failed:', e.message); } }, 5 * 60 * 1000);
+  try { notificationsRouter.generateNotifications(); } catch (e) { logger.error('Initial notification gen failed', { error: e.message }); }
+  setInterval(() => { try { notificationsRouter.generateNotifications(); } catch (e) { logger.error('Notification gen failed', { error: e.message }); } }, 5 * 60 * 1000);
 
   // Phase 2.5: Auto-scheduled backup every 6 hours (configurable via AUTO_BACKUP_HOURS env)
   const backupIntervalHours = parseInt(process.env.AUTO_BACKUP_HOURS) || 6;
   const backupFn = require('./backup');
   setInterval(() => {
-    try { backupFn(); console.log('Auto-backup completed'); }
-    catch (e) { console.error('Auto-backup failed:', e.message); }
+    try { backupFn(); logger.info('Auto-backup completed'); }
+    catch (e) { logger.error('Auto-backup failed', { error: e.message }); }
   }, backupIntervalHours * 60 * 60 * 1000);
 });
 
 // ═══ Graceful shutdown ═══
 function shutdown(signal) {
-  console.log(`\n${signal} received — shutting down gracefully`);
+  logger.info(`${signal} received — shutting down gracefully`);
   server.close(() => {
     try { db.close(); } catch (e) { /* already closed */ }
-    console.log('Server closed');
+    logger.info('Server closed');
     process.exit(0);
   });
   setTimeout(() => { process.exit(1); }, 5000);
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+

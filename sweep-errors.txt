@@ -1,5 +1,0 @@
-﻿
-components\ErrorBoundary.jsx:14:    console.error('ErrorBoundary caught:', error, info);
-pages\Dashboard.jsx:27:      } catch (e) { console.error('Dashboard load failed:', e); }
-
-

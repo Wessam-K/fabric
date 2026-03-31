@@ -173,3 +173,51 @@
 | api_keys | API key authentication (Phase 3.5) |
 | webhooks | Webhook subscriptions (Phase 3.6) |
 | webhook_logs | Webhook delivery logs (Phase 3.6) |
+
+---
+
+## Enterprise Hardening (v3.2)
+
+### Phase 2: Database & Performance (continued)
+- **2.1:** Database migration system — `migrate.js` runner with versioned migrations (`001` through `005`), `schema_migrations` tracking table, supports up/down/rollback
+
+### Phase 3: API Hardening (continued)
+- **3.4:** OpenAPI/Swagger documentation — `swagger.js` with 22 documented paths, Swagger UI at `/api/docs`, schemas for all major entities
+- **3.7:** WebSocket real-time — `websocket.js` on `/ws` path with client tracking, broadcast, and auth message handling
+
+### Phase 4: Frontend Improvements (continued)
+- **4.2:** Internationalization (i18n) — `react-i18next` setup with Arabic/English locale files (~100 keys each), language switcher via localStorage
+- **4.3:** Accessibility (a11y) — ARIA labels on sidebar, nav, main content; `role="navigation"` and `role="main"` attributes
+- **4.8:** Onboarding tours — `react-joyride` guided tour with 6 steps (sidebar, dashboard, work orders, search, notifications, help), localStorage persistence
+
+### Phase 5: DevOps & Quality (continued)
+- **5.1:** License management — `LicenseManager` class with trial/standard/professional/enterprise tiers, hardware fingerprint, API endpoints (`/api/license/status`, `/api/license/activate`)
+- **5.3:** Error tracking — Sentry integration (`@sentry/node`), conditional on `SENTRY_DSN` env var, auto-captures unhandled exceptions
+- **5.4:** Auto-updater — `electron-updater` integration in `electron.js`, update-available/downloaded dialogs, checks every 6 hours (production only)
+- **5.5:** Test coverage expanded — 89 tests across 38 suites (was 80), added License API, Swagger Docs, Monitoring, Migration, API Versioning, Rate Limiting tests
+
+### Phase 6: Code Quality
+- **6.1:** Structured logging — `utils/logger.js` with info/warn/error/debug levels, timestamps, JSON metadata; all `console.log/error` replaced with logger calls; removed 4 sweep files
+- **6.2:** Type definitions — `jsconfig.json` for type checking, `types/index.js` with JSDoc typedefs for all major DB entities
+
+### New Files (v3.2)
+| File | Purpose |
+|------|---------|
+| backend/migrate.js | Database migration runner |
+| backend/migrations/001-005 | 5 versioned migration scripts |
+| backend/lib/license.js | License management module |
+| backend/utils/logger.js | Structured logging utility |
+| backend/utils/websocket.js | WebSocket server module |
+| backend/swagger.js | OpenAPI 3.0.3 specification |
+| backend/jsconfig.json | JS project configuration |
+| backend/types/index.js | JSDoc type definitions |
+| frontend/src/i18n.js | i18next initialization |
+| frontend/src/locales/ar.json | Arabic translations |
+| frontend/src/locales/en.json | English translations |
+| frontend/src/components/OnboardingTour.jsx | Guided tour component |
+
+### New Database Tables (v3.2)
+| Table | Purpose |
+|-------|---------|
+| schema_migrations | Migration version tracking (Phase 2.1) |
+| license_info | License keys and activation data (Phase 5.1) |

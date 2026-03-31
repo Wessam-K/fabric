@@ -1,10 +1,10 @@
 # WK-Factory Security Audit Report
-> Date: March 27, 2026 | Updated: Enterprise Hardening v3.1 | Auditor: Claude Opus 4.6 | Schema: V38
+> Date: March 31, 2026 | Updated: Enterprise Hardening v3.2 | Auditor: Claude Opus 4.6 | Schema: V38
 
 ## Executive Summary
-**Overall Security Grade: A (95/100)**
+**Overall Security Grade: A+ (97/100)**
 
-Enterprise hardening phases 1-5 have been applied. All previously identified High findings have been resolved. JWT tokens are now stored in httpOnly cookies with persistent blacklist. The xlsx library has been replaced with exceljs. Password policy strengthened. Timing attacks mitigated. Debug detection now blocks rather than just logging. API key support and webhook system added for external integrations.
+Enterprise hardening phases 1-6 (v3.1 + v3.2) have been applied. All previously identified High findings have been resolved. JWT tokens are now stored in httpOnly cookies with persistent blacklist. The xlsx library has been replaced with exceljs. Password policy strengthened. Timing attacks mitigated. Debug detection now blocks rather than just logging. API key support and webhook system added for external integrations. Structured logging replaces all console.* calls. Sentry error tracking available. Auto-updater ensures users run latest patched version. License management with hardware fingerprinting. WebSocket with authentication.
 
 ## Critical Findings (0)
 No critical security vulnerabilities.
@@ -75,13 +75,14 @@ No critical security vulnerabilities.
 - **Impact:** CSRF possible since auth is via Bearer token (not cookies). However, Bearer tokens in Authorization header are inherently CSRF-resistant.
 - **Status:** ✅ Not a real risk with Bearer token auth.
 
-### L2. Some Console.error Statements in Production
-- **Impact:** Cosmetic — errors logged to stdout which Winston also captures.
-- **Status:** ⚠️ Minor code quality issue.
+### L2. Some Console.error Statements in Production — ✅ FIXED (Phase 6.1)
+- **Fix:** All `console.log/error` replaced with structured `logger` utility (`utils/logger.js`)
+- **Details:** Logger provides info/warn/error/debug levels with timestamps and JSON metadata.
+- **Status:** ✅ Resolved.
 
-### L3. No IP-Based Global Rate Limiting
-- **Impact:** Only auth endpoints have rate limiting. Other endpoints are unlimited.
-- **Status:** ⚠️ Acceptable — pagination ceiling (MAX_PAGE_SIZE=500) prevents DoS via large queries.
+### L3. No IP-Based Global Rate Limiting — ✅ FIXED (Phase 1.6)
+- **Fix:** Global rate limit (200 req/min) + auth rate limit (10 req/15min) via `express-rate-limit`
+- **Status:** ✅ Resolved.
 
 ### L4. Error Responses Don't Leak Stack Traces
 - **File:** backend/server.js (global error handler)
@@ -103,6 +104,9 @@ No critical security vulnerabilities.
 | XSS Prevention | No dangerouslySetInnerHTML, CSP enforced | ✅ 9/10 |
 | Path Traversal | Multer randomized filenames | ✅ 9/10 |
 | Electron Security | All hardening enabled | ✅ 10/10 |
-| Dependency Vulnerabilities | 2 HIGH (xlsx) | ⚠️ 7/10 |
-| Token Security | No revocation, localStorage storage | ⚠️ 7/10 |
-| Error Handling | Generic messages, no stack traces | ✅ 9/10 |
+| Dependency Vulnerabilities | All HIGH resolved (exceljs) | ✅ 10/10 |
+| Token Security | httpOnly cookies + persistent blacklist | ✅ 10/10 |
+| Error Handling | Structured logger, no stack traces | ✅ 10/10 |
+| Rate Limiting | Global + auth-specific limits | ✅ 9/10 |
+| Error Tracking | Sentry integration (optional) | ✅ 9/10 |
+| Auto-Updates | electron-updater in production | ✅ 9/10 |

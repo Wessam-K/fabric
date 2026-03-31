@@ -3,6 +3,7 @@ import { useState, lazy, Suspense } from 'react';
 import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench, Calculator, Send, CalendarClock, CheckSquare, FileSpreadsheet, ShoppingBag, Beaker, RotateCcw, FolderOpen, Database, Download, Sun, Moon } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import './i18n'; // Phase 4.2: i18n initialization
 // Phase 4.1: Code splitting — lazy load all page components
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Fabrics = lazy(() => import('./pages/Fabrics'));
@@ -65,6 +66,7 @@ const Backups = lazy(() => import('./pages/Backups'));
 const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 import QuickActions from './components/QuickActions';
 import HelpButton from './components/HelpButton';
+import OnboardingTour from './components/OnboardingTour'; // Phase 4.8
 import { ToastProvider } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -164,7 +166,7 @@ function AppLayout() {
   const navGroups = [
     {
       items: [
-        { path: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
+        { path: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, tour: 'dashboard' },
       ],
     },
     {
@@ -173,7 +175,7 @@ function AppLayout() {
       icon: Factory,
       show: () => can('work_orders', 'view') || can('models', 'view'),
       items: [
-        { path: '/work-orders', label: 'أوامر الإنتاج', icon: Factory, hide: () => !can('work_orders', 'view') },
+        { path: '/work-orders', label: 'أوامر الإنتاج', icon: Factory, hide: () => !can('work_orders', 'view'), tour: 'workorders' },
         { path: '/work-orders/new', label: 'أمر جديد', icon: PlusCircle, hide: () => !can('work_orders', 'create') },
         { path: '/models', label: 'الموديلات', icon: List, hide: () => !can('models', 'view') },
         { path: '/machines', label: 'الماكينات', icon: Cog, hide: () => !can('machines', 'view') },
@@ -292,7 +294,7 @@ function AppLayout() {
       {mobileOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`${collapsed ? 'w-16' : 'w-56'} bg-[#1a1a2e] flex flex-col shrink-0 no-print transition-all duration-200 fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 right-0 z-50 ${mobileOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
+      <aside data-tour="sidebar" aria-label="القائمة الرئيسية" role="navigation" className={`${collapsed ? 'w-16' : 'w-56'} bg-[#1a1a2e] flex flex-col shrink-0 no-print transition-all duration-200 fixed lg:sticky lg:top-0 lg:self-start lg:h-screen inset-y-0 right-0 z-50 ${mobileOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
         {/* Header */}
         <div className={`flex items-center ${collapsed ? 'justify-center px-2' : 'px-4'} h-14 border-b border-white/8`}>
           {!collapsed && (
@@ -300,13 +302,13 @@ function AppLayout() {
               <span className="text-[15px] font-bold text-[#c9a84c] font-[JetBrains_Mono] tracking-tight">WK-Hub</span>
             </div>
           )}
-          <button onClick={() => setCollapsed(!collapsed)} className="text-gray-500 hover:text-gray-300 p-1 rounded transition-colors">
+          <button onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'توسيع القائمة' : 'تصغير القائمة'} className="text-gray-500 hover:text-gray-300 p-1 rounded transition-colors">
             {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
+        <nav aria-label="التنقل الرئيسي" className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
           {navGroups.map((group, gi) => {
             if (group.show && !group.show()) return null;
             const visibleItems = group.items.filter(item => !item.hide || !item.hide());
@@ -317,6 +319,7 @@ function AppLayout() {
               return visibleItems.map(item => (
                 <NavLink key={item.path} to={item.path} end={item.path === '/dashboard'}
                   onClick={() => setMobileOpen(false)}
+                  data-tour={item.tour || undefined}
                   className={({ isActive }) =>
                     `flex items-center gap-2.5 ${collapsed ? 'justify-center px-2' : 'px-3'} py-2 rounded-lg text-[13px] transition-colors ${
                       isActive ? 'bg-[#c9a84c]/15 text-[#c9a84c]' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
@@ -404,17 +407,17 @@ function AppLayout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 min-w-0">
+      <main className="flex-1 min-w-0" role="main" aria-label="المحتوى الرئيسي">
         {/* Top header bar */}
         <header className="sticky top-0 z-30 bg-white dark:bg-[#1a1a2e] border-b border-gray-200 dark:border-white/8 flex items-center gap-3 px-4 h-14">
-          <button onClick={() => setMobileOpen(true)} className="lg:hidden text-[#1a1a2e] dark:text-gray-300 p-1">
+          <button onClick={() => setMobileOpen(true)} aria-label="فتح القائمة" className="lg:hidden text-[#1a1a2e] dark:text-gray-300 p-1">
             <Menu size={20} />
           </button>
           <span className="lg:hidden text-sm font-bold text-[#c9a84c] font-[JetBrains_Mono]">WK-Hub</span>
-          <div className="flex-1"><GlobalSearch /></div>
+          <div className="flex-1" data-tour="search"><GlobalSearch /></div>
           <ThemeToggle />
-          <RouteAwareHelpButton />
-          <NotificationBell />
+          <span data-tour="help"><RouteAwareHelpButton /></span>
+          <span data-tour="notifications"><NotificationBell /></span>
         </header>
         <div className="p-4 lg:p-0">
           <Breadcrumbs />
@@ -529,6 +532,7 @@ export default function App() {
         <ToastProvider>
           <BrowserRouter>
             <AuthProvider>
+              <OnboardingTour />
               <AuthRouter />
             </AuthProvider>
           </BrowserRouter>

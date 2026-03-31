@@ -2,7 +2,7 @@
 
 نظام ERP متكامل لإدارة مصانع الملابس — مبني بـ Node.js + Express + SQLite (backend) و React 19 + Vite + Tailwind CSS 4 (frontend) + Electron 41 (desktop).
 
-## v3.0 — Enterprise Edition
+## v3.2 — Enterprise Edition
 
 | المرحلة | المحتوى |
 |---------|---------|
@@ -10,9 +10,11 @@
 | Schema V38 | 96+ جدول، 240+ إذن، 15 إعداد نظام |
 | Backend | 34 ملف راوتر — MRP, Scheduling, Quality, Quotations, Samples, Shipping, Returns, Documents, Backups, Exports |
 | Frontend | 56+ صفحة + 31 مكون — واجهات كاملة مع Dark Mode ولوحة تحكم قابلة للتخصيص |
-| Electron | Electron 41 — تطبيق سطح مكتب مستقل مع أمان مشدد |
-| Security | Token blacklist, MIME validation, Request ID tracing, Input limits, RBAC |
+| Electron | Electron 41 — تطبيق سطح مكتب مستقل مع أمان مشدد + Auto-updater |
+| Security | Token blacklist, MIME validation, Request ID tracing, Input limits, RBAC, Rate limiting |
 | v3.0 Enterprise | SSE notifications, Gantt, Financial stmts, Multi-warehouse, HR Leave, CRM, BI, PWA, Bulk import |
+| v3.1 Hardening | Security hardening, DB migrations, API versioning, Swagger docs, CI/CD |
+| v3.2 Hardening | WebSocket, i18n, a11y, Licensing, Sentry, Auto-updater, Structured logging, Type safety |
 
 ## إحصائيات المشروع
 
@@ -24,7 +26,7 @@
 | نقاط API | **290+ نقطة** |
 | ملفات الراوتر | **34 ملف** |
 | أدوار المستخدمين | **7 أدوار** مع 240+ إذن |
-| اختبارات API | **80 اختبار** (100% pass) |
+| اختبارات API | **89 اختبار** (100% pass) |
 | اختبارات E2E | **27 اختبار** (100% pass) |
 | إجمالي الكود | **~45,000 سطر** عبر 170+ ملف |
 
@@ -44,7 +46,7 @@
 
 ## المتطلبات
 
-- Node.js v18+
+- Node.js v22+ (LTS)
 - npm
 
 ## التثبيت والتشغيل
