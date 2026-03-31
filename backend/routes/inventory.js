@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { requirePermission } = require('../middleware/auth');
+const { fireWebhook } = require('../utils/webhooks');
 
 // GET /api/inventory/fabric-stock — aggregated fabric inventory
 router.get('/fabric-stock', requirePermission('inventory', 'view'), (req, res) => {
@@ -208,6 +209,7 @@ router.post('/transfers', requirePermission('inventory', 'edit'), (req, res) => 
     });
 
     const id = txn();
+    fireWebhook('stock.transfer_created', { id, transfer_number: num, from_warehouse_id, to_warehouse_id });
     res.status(201).json({ id, transfer_number: num });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

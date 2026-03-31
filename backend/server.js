@@ -327,6 +327,29 @@ app.post('/api/setup/create-admin', (req, res) => {
 });
 
 // ═══ Protected routes ═══
+// Phase 3.6: Webhook management endpoints (superadmin only)
+const { createWebhook, listWebhooks, deleteWebhook, getWebhookLogs } = require('./utils/webhooks');
+app.get('/api/webhooks', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  res.json(listWebhooks());
+});
+app.post('/api/webhooks', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  const { name, url, events, secret } = req.body;
+  if (!name || !url || !events?.length) return res.status(400).json({ error: 'الاسم والرابط والأحداث مطلوبة' });
+  const id = createWebhook(name, url, events, secret, req.user.id);
+  res.status(201).json({ id });
+});
+app.get('/api/webhooks/:id/logs', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  res.json(getWebhookLogs(parseInt(req.params.id)));
+});
+app.delete('/api/webhooks/:id', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  deleteWebhook(parseInt(req.params.id));
+  res.json({ success: true });
+});
+
 // Phase 3.1: API versioning — mount under both /api and /api/v1 for forward compatibility
 const apiRouter = express.Router();
 apiRouter.use('/users', usersRouter);

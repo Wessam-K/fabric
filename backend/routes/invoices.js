@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
+const { fireWebhook } = require('../utils/webhooks');
 
 // GET /api/invoices — list with search, status filter, date range
 router.get('/', requirePermission('invoices', 'view'), (req, res) => {
@@ -122,6 +123,7 @@ router.post('/', requirePermission('invoices', 'create'), (req, res) => {
     const created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
     created.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoiceId);
     logAudit(req, 'CREATE', 'invoice', invoiceId, invoice_number);
+    fireWebhook('invoice.created', { id: invoiceId, invoice_number, customer_id: created.customer_id, total: created.total_amount });
     res.status(201).json(created);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -217,6 +219,7 @@ router.patch('/:id/status', requirePermission('invoices', 'edit'), (req, res) =>
     }
 
     db.prepare("UPDATE invoices SET status=?, updated_at=datetime('now') WHERE id=?").run(status, req.params.id);
+    fireWebhook('invoice.status_changed', { id: parseInt(req.params.id), status });
     res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id));
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

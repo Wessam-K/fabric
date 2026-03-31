@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { requirePermission, logAudit } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
+const { fireWebhook } = require('../utils/webhooks');
 
 // ═══════════════════════════════════════════
 //  Chart of Accounts
@@ -135,6 +136,7 @@ router.post('/journal', requirePermission('accounting', 'create'), (req, res) =>
     });
     const id = trx();
     logAudit(req, 'CREATE', 'journal_entry', id, `${entry_number}`);
+    fireWebhook('journal.created', { id, entry_number });
     res.status(201).json({ id });
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'رقم القيد موجود بالفعل' });

@@ -4,6 +4,7 @@ const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
 const notificationEmitter = require('../lib/notificationEmitter');
+const { fireWebhook } = require('../utils/webhooks');
 
 // ═══════════════════════════════════════════════
 // COST CALCULATION (used by multiple endpoints)
@@ -433,6 +434,7 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
 
     const woId = transaction();
     logAudit(req, 'CREATE', 'work_order', woId, wo_number);
+    fireWebhook('workorder.created', { id: woId, wo_number, customer_id, order_date });
     res.status(201).json(getFullWO(woId));
   } catch (err) {
     if (err.message?.includes('UNIQUE')) return res.status(409).json({ error: 'رقم أمر الشغل موجود بالفعل' });
@@ -636,6 +638,7 @@ router.patch('/:id/status', requirePermission('work_orders', 'edit'), (req, res)
     doStatusChange();
 
     logAudit(req, 'STATUS_CHANGE', 'work_order', woId, `${wo.status} → ${status}`);
+    fireWebhook('workorder.status_changed', { id: woId, wo_number: wo.wo_number, old_status: wo.status, new_status: status });
 
     // Emit real-time notification for status change
     const statusLabels = { in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغى', delivered: 'تم التسليم' };

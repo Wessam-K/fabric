@@ -895,3 +895,42 @@ describe('Rate Limiting', () => {
     assert.ok(res.status === 401 || res.status === 429);
   });
 });
+
+// ════════════════════════════════════════════════════
+//  Webhook Management Tests
+// ════════════════════════════════════════════════════
+
+describe('Webhook Management', () => {
+  let webhookId;
+
+  it('POST /api/webhooks creates a webhook', async () => {
+    const res = await req('POST', '/api/webhooks', {
+      name: 'Test Hook',
+      url: 'https://example.com/hook',
+      events: ['workorder.created', 'invoice.created'],
+      secret: 'test-secret-123',
+    });
+    assert.equal(res.status, 201);
+    assert.ok(res.body.id);
+    webhookId = res.body.id;
+  });
+
+  it('GET /api/webhooks lists webhooks', async () => {
+    const res = await req('GET', '/api/webhooks');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
+    assert.ok(res.body.length > 0);
+  });
+
+  it('GET /api/webhooks/:id/logs returns logs', async () => {
+    const res = await req('GET', `/api/webhooks/${webhookId}/logs`);
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
+  });
+
+  it('DELETE /api/webhooks/:id removes webhook', async () => {
+    const res = await req('DELETE', `/api/webhooks/${webhookId}`);
+    assert.equal(res.status, 200);
+    assert.ok(res.body.success);
+  });
+});

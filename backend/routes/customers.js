@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
+const { fireWebhook } = require('../utils/webhooks');
 
 // ═══════════════════════════════════════════════
 // GET /api/customers — list with search & filter
@@ -177,6 +178,7 @@ router.post('/', requirePermission('customers', 'create'), (req, res) => {
 
     const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
     logAudit(req, 'CREATE', 'customer', customer.id, customer.name);
+    fireWebhook('customer.created', { id: customer.id, code: customer.code, name: customer.name });
     res.status(201).json(customer);
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE constraint')) {
@@ -327,6 +329,7 @@ router.post('/:id/payments', requirePermission('customers', 'edit'), (req, res) 
     })();
 
     logAudit(req, 'CREATE', 'customer_payment', payment.id, `${amount}`);
+    fireWebhook('payment.received', { id: payment.id, customer_id: payment.customer_id, amount: payment.amount });
     res.status(201).json(payment);
   } catch (err) {
     res.status(500).json({ error: 'حدث خطأ أثناء تسجيل الدفعة' });

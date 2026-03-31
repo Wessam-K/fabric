@@ -156,7 +156,7 @@
 - **3.2:** Response compression — already in place (gzip via `compression` middleware)
 - **3.3:** Standardized API responses — `apiResponse.js` utility (success/error/notFound/badRequest helpers)
 - **3.5:** API key authentication — `X-API-Key` header support for external integrations, keys hashed in `api_keys` table
-- **3.6:** Webhook event system — subscribe to events with HMAC-signed payloads, auto-disable after 10 failures
+- **3.6:** Webhook event system — subscribe to events with HMAC-signed payloads, auto-disable after 10 failures, CRUD management endpoints (`/api/webhooks`), integrated into workorders, invoices, customers, purchase orders, accounting, and inventory routes
 
 ### Phase 4: Frontend Improvements
 - **4.1:** Code splitting — all 50+ page components lazy-loaded via `React.lazy()`, reduced initial bundle from 2340KB to 406KB
@@ -194,7 +194,7 @@
 - **5.1:** License management — `LicenseManager` class with trial/standard/professional/enterprise tiers, hardware fingerprint, API endpoints (`/api/license/status`, `/api/license/activate`)
 - **5.3:** Error tracking — Sentry integration (`@sentry/node`), conditional on `SENTRY_DSN` env var, auto-captures unhandled exceptions
 - **5.4:** Auto-updater — `electron-updater` integration in `electron.js`, update-available/downloaded dialogs, checks every 6 hours (production only)
-- **5.5:** Test coverage expanded — 89 tests across 38 suites (was 80), added License API, Swagger Docs, Monitoring, Migration, API Versioning, Rate Limiting tests
+- **5.5:** Test coverage expanded — 93 tests across 39 suites (was 80), added License API, Swagger Docs, Monitoring, Migration, API Versioning, Rate Limiting, Webhook Management tests
 
 ### Phase 6: Code Quality
 - **6.1:** Structured logging — `utils/logger.js` with info/warn/error/debug levels, timestamps, JSON metadata; all `console.log/error` replaced with logger calls; removed 4 sweep files

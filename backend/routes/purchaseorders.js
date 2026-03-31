@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
+const { fireWebhook } = require('../utils/webhooks');
 
 // GET /api/purchase-orders — list
 router.get('/', requirePermission('purchase_orders', 'view'), (req, res) => {
@@ -134,6 +135,7 @@ router.post('/', requirePermission('purchase_orders', 'create'), (req, res) => {
     const po = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
     po.items = db.prepare('SELECT * FROM purchase_order_items WHERE po_id=?').all(poId);
     logAudit(req, 'CREATE', 'purchase_order', poId, po_number);
+    fireWebhook('purchaseorder.created', { id: poId, po_number, supplier_id: po.supplier_id, total: po.total_amount });
     res.status(201).json(po);
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'رقم أمر الشراء موجود بالفعل' });
