@@ -39,10 +39,11 @@ function createJournalEntry(req, description, lines, refType, refId) {
 
     if (Math.abs(totalDebit - totalCredit) > 0.01) return null; // Unbalanced
 
+    const refText = refType && refId ? `${refType}:${refId}` : (refType || null);
     const result = db.prepare(`INSERT INTO journal_entries 
-      (entry_number, entry_date, description, reference_type, reference_id, status, total_debit, total_credit, created_by)
-      VALUES (?, datetime('now','localtime'), ?, ?, ?, 'draft', ?, ?, ?)`)
-    .run(entryNumber, description, refType || null, refId || null, totalDebit, totalCredit, req.user?.id || null);
+      (entry_number, entry_date, description, reference, status, created_by)
+      VALUES (?, datetime('now','localtime'), ?, ?, 'draft', ?)`)
+    .run(entryNumber, description, refText, req.user?.id || null);
 
     const jeId = result.lastInsertRowid;
     const insLine = db.prepare('INSERT INTO journal_entry_lines (entry_id, account_id, description, debit, credit) VALUES (?,?,?,?,?)');

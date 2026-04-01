@@ -125,7 +125,7 @@ router.post('/employees/import', requirePermission('hr', 'create'), (req, res) =
           db.prepare(`UPDATE employees SET full_name=?, national_id=COALESCE(?,national_id), department=COALESCE(?,department), 
             job_title=COALESCE(?,job_title), employment_type=COALESCE(?,employment_type), salary_type=COALESCE(?,salary_type),
             base_salary=COALESCE(?,base_salary), hire_date=COALESCE(?,hire_date), phone=COALESCE(?,phone), 
-            address=COALESCE(?,address), bank_account=COALESCE(?,bank_account), updated_at=datetime('now') WHERE id=?`)
+            address=COALESCE(?,address), bank_account=COALESCE(?,bank_account) WHERE id=?`)
             .run(d.full_name, d.national_id || null, d.department || null, d.job_title || null,
               d.employment_type || null, d.salary_type || null, d.base_salary || null,
               d.hire_date || null, d.phone || null, d.address || null, d.bank_account || null, existing.id);

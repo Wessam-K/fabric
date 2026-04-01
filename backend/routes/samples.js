@@ -98,11 +98,11 @@ router.post('/:id/convert-to-wo', requirePermission('work_orders', 'create'), (r
       const woNumber = generateNextNumber(db, 'work_order');
 
       const result = db.prepare(`INSERT INTO work_orders 
-        (wo_number, customer_id, start_date, status, quantity, notes, created_by)
-        VALUES (?,?,datetime('now','localtime'),'pending',?,?,?)`)
-        .run(woNumber, s.customer_id, targetQty || 1, `من عينة ${s.sample_number}: ${s.model_code}`, req.user.id);
+        (wo_number, customer_id, start_date, status, quantity, notes)
+        VALUES (?,?,datetime('now','localtime'),'pending',?,?)`)
+        .run(woNumber, s.customer_id, targetQty || 1, `من عينة ${s.sample_number}: ${s.model_code}`);
 
-      db.prepare("UPDATE samples SET status='in_production' WHERE id=?").run(id);
+      db.prepare("UPDATE samples SET status='converted' WHERE id=?").run(id);
 
       return { id: result.lastInsertRowid, wo_number: woNumber };
     })();
@@ -117,7 +117,7 @@ router.delete('/:id', requirePermission('samples', 'delete'), (req, res) => {
   try {
     const sample = db.prepare('SELECT id FROM samples WHERE id=?').get(req.params.id);
     if (!sample) return res.status(404).json({ error: 'العينة غير موجودة' });
-    db.prepare("UPDATE samples SET status='cancelled' WHERE id=?").run(req.params.id);
+    db.prepare('DELETE FROM samples WHERE id=?').run(req.params.id);
     logAudit(req, 'DELETE', 'sample', req.params.id);
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

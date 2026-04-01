@@ -178,11 +178,11 @@ router.patch('/purchases/:id/approve', requirePermission('returns', 'edit'), (re
         if (item.item_type === 'fabric' && item.item_code) {
           db.prepare('UPDATE fabrics SET available_meters = MAX(0, available_meters - ?) WHERE code = ?').run(item.quantity || 0, item.item_code);
           db.prepare(`INSERT INTO fabric_stock_movements (fabric_code, movement_type, qty_meters, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
-            .run(item.item_code, 'purchase_return', -(item.quantity || 0), 'purchase_return', id, 'مرتجع مشتريات ' + pr.return_number, req.user?.id || null);
+            .run(item.item_code, 'return', -(item.quantity || 0), 'purchase_return', id, 'مرتجع مشتريات ' + pr.return_number, req.user?.id || null);
         } else if (item.item_type === 'accessory' && item.item_code) {
           db.prepare('UPDATE accessories SET quantity_on_hand = MAX(0, quantity_on_hand - ?) WHERE code = ?').run(item.quantity || 0, item.item_code);
           db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
-            .run(item.item_code, 'purchase_return', -(item.quantity || 0), 'purchase_return', id, 'مرتجع مشتريات ' + pr.return_number, req.user?.id || null);
+            .run(item.item_code, 'return', -(item.quantity || 0), 'purchase_return', id, 'مرتجع مشتريات ' + pr.return_number, req.user?.id || null);
         }
       }
     })();

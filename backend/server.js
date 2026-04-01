@@ -752,7 +752,7 @@ app.get('/api/reports/executive-summary', requireAuth, (req, res) => {
     const expenses = db.prepare("SELECT COALESCE(SUM(amount), 0) as v FROM expenses WHERE is_deleted = 0 AND expense_date LIKE ?").get(`${thisMonth}%`).v;
     const activeWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status NOT IN ('completed','cancelled')").get().v;
     const completedWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status = 'completed' AND completed_date LIKE ?").get(`${thisMonth}%`).v;
-    const pendingInvoices = db.prepare("SELECT COUNT(*) as v FROM invoices WHERE status IN ('sent','partial','overdue')").get().v;
+    const pendingInvoices = db.prepare("SELECT COUNT(*) as v FROM invoices WHERE status IN ('sent','partially_paid','overdue')").get().v;
     const totalAR = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status NOT IN ('paid','cancelled','draft')").get().v;
     const employeeCount = db.prepare("SELECT COUNT(*) as v FROM employees WHERE status = 'active'").get().v;
     res.json({ month: thisMonth, revenue, expenses, net_income: revenue - expenses, active_work_orders: activeWOs, completed_this_month: completedWOs, pending_invoices: pendingInvoices, total_receivables: totalAR, active_employees: employeeCount });

@@ -41,6 +41,7 @@ router.post('/coa', requirePermission('accounting', 'create'), (req, res) => {
 router.put('/coa/:id', requirePermission('accounting', 'edit'), (req, res) => {
   try {
     const { code, name_ar, type, parent_id, is_active } = req.body;
+    if (!code || !name_ar || !type) return res.status(400).json({ error: 'الكود والاسم والنوع مطلوبين' });
     db.prepare('UPDATE chart_of_accounts SET code=?, name_ar=?, type=?, parent_id=?, is_active=? WHERE id=?')
       .run(code, name_ar, type, parent_id || null, is_active ?? 1, req.params.id);
     logAudit(req, 'UPDATE', 'chart_of_accounts', req.params.id, `${code}`);
@@ -276,21 +277,24 @@ router.get('/income-statement', requirePermission('accounting', 'view'), (req, r
     `).all(fromDate, toDate, type);
 
     const revenue = getBalance('revenue');
-    const cogs = getBalance('cogs');
     const expenses = getBalance('expense');
 
+    // COGS: accounts starting with code '5' that are expense type (convention: 5xxx = cost accounts)
+    const cogsAccounts = expenses.filter(a => a.code.startsWith('5'));
+    const operatingExpenses = expenses.filter(a => !a.code.startsWith('5'));
+
     const totalRevenue = revenue.reduce((s, r) => s + (r.total_credit - r.total_debit), 0);
-    const totalCOGS = cogs.reduce((s, r) => s + (r.total_debit - r.total_credit), 0);
-    const totalExpenses = expenses.reduce((s, r) => s + (r.total_debit - r.total_credit), 0);
+    const totalCOGS = cogsAccounts.reduce((s, r) => s + (r.total_debit - r.total_credit), 0);
+    const totalExpenses = operatingExpenses.reduce((s, r) => s + (r.total_debit - r.total_credit), 0);
     const grossProfit = totalRevenue - totalCOGS;
     const netProfit = grossProfit - totalExpenses;
 
     res.json({
       period: { from: fromDate, to: toDate },
       revenue: { accounts: revenue, total: Math.round(totalRevenue * 100) / 100 },
-      cogs: { accounts: cogs, total: Math.round(totalCOGS * 100) / 100 },
+      cogs: { accounts: cogsAccounts, total: Math.round(totalCOGS * 100) / 100 },
       gross_profit: Math.round(grossProfit * 100) / 100,
-      expenses: { accounts: expenses, total: Math.round(totalExpenses * 100) / 100 },
+      expenses: { accounts: operatingExpenses, total: Math.round(totalExpenses * 100) / 100 },
       net_profit: Math.round(netProfit * 100) / 100,
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -325,7 +329,7 @@ router.get('/balance-sheet', requirePermission('accounting', 'view'), (req, res)
     const retainedEarnings = (() => {
       try {
         const rev = db.prepare("SELECT COALESCE(SUM(jl.credit - jl.debit), 0) as v FROM journal_entry_lines jl JOIN chart_of_accounts c ON c.id=jl.account_id JOIN journal_entries je ON je.id=jl.entry_id WHERE c.type='revenue' AND je.status='posted' AND je.entry_date <= ?").get(asOf).v;
-        const exp = db.prepare("SELECT COALESCE(SUM(jl.debit - jl.credit), 0) as v FROM journal_entry_lines jl JOIN chart_of_accounts c ON c.id=jl.account_id JOIN journal_entries je ON je.id=jl.entry_id WHERE c.type IN ('expense','cogs') AND je.status='posted' AND je.entry_date <= ?").get(asOf).v;
+        const exp = db.prepare("SELECT COALESCE(SUM(jl.debit - jl.credit), 0) as v FROM journal_entry_lines jl JOIN chart_of_accounts c ON c.id=jl.account_id JOIN journal_entries je ON je.id=jl.entry_id WHERE c.type='expense' AND je.status='posted' AND je.entry_date <= ?").get(asOf).v;
         return rev - exp;
       } catch { return 0; }
     })();

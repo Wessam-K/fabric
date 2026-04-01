@@ -156,7 +156,7 @@ router.post('/inspections', requirePermission('quality', 'create'), (req, res) =
       if (items?.length) {
         const ins = db.prepare('INSERT INTO qc_inspection_items (inspection_id, check_point, result, defect_code, defect_count, notes) VALUES (?,?,?,?,?,?)');
         for (const it of items) {
-          ins.run(inspId, it.check_point, it.result || 'pending', it.defect_code || null, it.defect_count || 0, it.notes || null);
+          ins.run(inspId, it.check_point, it.result || 'pass', it.defect_code || null, it.defect_count || 0, it.notes || null);
         }
       }
 

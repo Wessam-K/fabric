@@ -42,7 +42,7 @@ router.get('/:code', requirePermission('work_orders', 'view'), (req, res) => {
     // 3. Check fabrics
     if (canUser(u, 'fabrics', 'view')) {
       const fabric = db.prepare(`
-        SELECT id, code, name, fabric_type, color, width, available_meters, price_per_m, status
+        SELECT id, code, name, fabric_type, color, available_meters, price_per_m, status
         FROM fabrics WHERE code = ? AND status = 'active'
       `).get(code);
       if (fabric) return res.json({ type: 'fabric', id: fabric.id, data: fabric });
@@ -60,7 +60,7 @@ router.get('/:code', requirePermission('work_orders', 'view'), (req, res) => {
     // 5. Check models
     if (canUser(u, 'models', 'view')) {
       const model = db.prepare(`
-        SELECT id, model_code, model_name, serial_number, category, status, total_cost
+        SELECT id, model_code, model_name, serial_number, category, status
         FROM models WHERE model_code = ? OR serial_number = ?
       `).get(code, code);
       if (model) return res.json({ type: 'model', id: model.id, data: model });

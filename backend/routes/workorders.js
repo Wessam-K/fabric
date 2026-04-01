@@ -598,9 +598,8 @@ router.patch('/:id/status', requirePermission('work_orders', 'edit'), (req, res)
       draft: ['in_progress', 'cancelled'],
       pending: ['in_progress', 'cancelled'],
       in_progress: ['completed', 'cancelled'],
-      completed: ['delivered'],
+      completed: [],
       cancelled: [],
-      delivered: [],
     };
     const allowed = validTransitions[wo.status] || [];
     if (!allowed.includes(status)) {
@@ -1389,7 +1388,7 @@ router.patch('/:id/accessory-consumption/:consumptionId', requirePermission('wor
         .run(newQty, newPrice, newQty * newPrice, cId);
       if (delta !== 0 && record.accessory_code) {
         db.prepare('UPDATE accessories SET quantity_on_hand = MAX(0, quantity_on_hand - ?) WHERE code=?').run(delta, record.accessory_code);
-        const mvType = delta > 0 ? 'consumption' : 'return';
+        const mvType = delta > 0 ? 'out' : 'return';
         db.prepare(`INSERT INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by) VALUES (?,?,?,?,?,?,?)`)
           .run(record.accessory_code, mvType, Math.abs(delta), 'work_order', woId, 'تعديل استهلاك إكسسوار - أمر تشغيل ' + (wo?.wo_number || woId), req.user?.id || null);
       }
