@@ -228,22 +228,22 @@ router.put('/transfers/:id/complete', requirePermission('inventory', 'edit'), (r
       for (const line of lines) {
         if (line.item_type === 'fabric') {
           // Decrease from source
-          db.prepare(`UPDATE fabric_location_stock SET quantity_meters = quantity_meters - ?, updated_at = datetime('now')
+          db.prepare(`UPDATE fabric_location_stock SET quantity_meters = COALESCE(quantity_meters,0) - ?, updated_at = datetime('now')
             WHERE fabric_code = ? AND warehouse_id = ? AND (batch_id = ? OR (batch_id IS NULL AND ? IS NULL))`).run(line.quantity, line.item_code, transfer.from_warehouse_id, line.batch_id, line.batch_id);
           // Increase at destination (insert or update)
           const existing = db.prepare('SELECT id FROM fabric_location_stock WHERE fabric_code = ? AND warehouse_id = ? AND (batch_id = ? OR (batch_id IS NULL AND ? IS NULL))').get(line.item_code, transfer.to_warehouse_id, line.batch_id, line.batch_id);
           if (existing) {
-            db.prepare("UPDATE fabric_location_stock SET quantity_meters = quantity_meters + ?, updated_at = datetime('now') WHERE id = ?").run(line.quantity, existing.id);
+            db.prepare("UPDATE fabric_location_stock SET quantity_meters = COALESCE(quantity_meters,0) + ?, updated_at = datetime('now') WHERE id = ?").run(line.quantity, existing.id);
           } else {
             db.prepare('INSERT INTO fabric_location_stock (fabric_code, warehouse_id, batch_id, quantity_meters) VALUES (?,?,?,?)').run(line.item_code, transfer.to_warehouse_id, line.batch_id, line.quantity);
           }
         } else {
           // Accessory
-          db.prepare(`UPDATE accessory_location_stock SET quantity = quantity - ?, updated_at = datetime('now')
+          db.prepare(`UPDATE accessory_location_stock SET quantity = COALESCE(quantity,0) - ?, updated_at = datetime('now')
             WHERE accessory_code = ? AND warehouse_id = ? AND (batch_id = ? OR (batch_id IS NULL AND ? IS NULL))`).run(line.quantity, line.item_code, transfer.from_warehouse_id, line.batch_id, line.batch_id);
           const existing = db.prepare('SELECT id FROM accessory_location_stock WHERE accessory_code = ? AND warehouse_id = ? AND (batch_id = ? OR (batch_id IS NULL AND ? IS NULL))').get(line.item_code, transfer.to_warehouse_id, line.batch_id, line.batch_id);
           if (existing) {
-            db.prepare("UPDATE accessory_location_stock SET quantity = quantity + ?, updated_at = datetime('now') WHERE id = ?").run(line.quantity, existing.id);
+            db.prepare("UPDATE accessory_location_stock SET quantity = COALESCE(quantity,0) + ?, updated_at = datetime('now') WHERE id = ?").run(line.quantity, existing.id);
           } else {
             db.prepare('INSERT INTO accessory_location_stock (accessory_code, warehouse_id, batch_id, quantity) VALUES (?,?,?,?)').run(line.item_code, transfer.to_warehouse_id, line.batch_id, line.quantity);
           }

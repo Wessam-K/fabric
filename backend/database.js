@@ -2718,6 +2718,26 @@ function runMigrations() {
       db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (40)`);
     })();
   }
+
+  // ──── V41 — password_reset_tokens table + 2FA columns on users ────
+  const v41 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 41').get();
+  if (!v41) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL REFERENCES users(id),
+        token_hash  TEXT NOT NULL,
+        expires_at  TEXT NOT NULL,
+        used_at     TEXT,
+        created_at  TEXT DEFAULT (datetime('now'))
+      );
+    `);
+    const addCol = (table, col, def) => { try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch {} };
+    addCol('users', 'totp_enabled', 'INTEGER DEFAULT 0');
+    addCol('users', 'totp_secret', 'TEXT');
+    addCol('users', 'totp_backup_codes', 'TEXT');
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (41)`);
+  }
 }
 
 initializeDatabase();

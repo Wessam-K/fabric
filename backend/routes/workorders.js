@@ -379,7 +379,7 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
           const plannedCost = plannedTotal * pricePerMeter;
           ins.run(woId, fb.batch_id, fb.fabric_code, fb.role || 'main', plannedMPP, plannedTotal, wastePct, pricePerMeter, plannedCost, fb.color_note || null, fb.sort_order ?? i);
           // Reserve fabric on batch and aggregate
-          db.prepare('UPDATE fabric_inventory_batches SET used_meters = used_meters + ? WHERE id=?').run(plannedWithWaste, fb.batch_id);
+          db.prepare('UPDATE fabric_inventory_batches SET used_meters = COALESCE(used_meters,0) + ? WHERE id=?').run(plannedWithWaste, fb.batch_id);
           db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) - ? WHERE code=?').run(plannedWithWaste, fb.fabric_code);
         }
       }
@@ -545,7 +545,7 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
           const pricePerMeter = batch.price_per_meter;
           ins.run(woId, fb.batch_id, fb.fabric_code, fb.role || 'main', plannedMPP, plannedTotal, wastePct, pricePerMeter, plannedTotal * pricePerMeter, fb.color_note || null, fb.sort_order ?? i);
           // Reserve on batch and aggregate
-          db.prepare('UPDATE fabric_inventory_batches SET used_meters = used_meters + ? WHERE id=?').run(plannedWithWaste, fb.batch_id);
+          db.prepare('UPDATE fabric_inventory_batches SET used_meters = COALESCE(used_meters,0) + ? WHERE id=?').run(plannedWithWaste, fb.batch_id);
           db.prepare('UPDATE fabrics SET available_meters = COALESCE(available_meters,0) - ? WHERE code=?').run(plannedWithWaste, fb.fabric_code);
         }
       }
@@ -1225,7 +1225,7 @@ router.post('/:id/fabric-consumption', requirePermission('work_orders', 'edit'),
 
       // Update batch used_meters if batch linked
       if (batch_id) {
-        db.prepare('UPDATE fabric_inventory_batches SET used_meters = used_meters + ? WHERE id=?').run(parseFloat(actual_meters), batch_id);
+        db.prepare('UPDATE fabric_inventory_batches SET used_meters = COALESCE(used_meters,0) + ? WHERE id=?').run(parseFloat(actual_meters), batch_id);
         const inv = db.prepare('SELECT available_meters FROM fabric_inventory_batches WHERE id=?').get(batch_id);
         if (inv && inv.available_meters <= 0) {
           db.prepare("UPDATE fabric_inventory_batches SET batch_status='depleted' WHERE id=?").run(batch_id);
@@ -1265,7 +1265,7 @@ router.patch('/:id/fabric-consumption/:consumptionId', requirePermission('work_o
       // Update batch used_meters delta
       if (record.batch_id && actual_meters !== undefined) {
         const delta = newMeters - (record.actual_meters || 0);
-        db.prepare('UPDATE fabric_inventory_batches SET used_meters = used_meters + ? WHERE id=?').run(delta, record.batch_id);
+        db.prepare('UPDATE fabric_inventory_batches SET used_meters = COALESCE(used_meters,0) + ? WHERE id=?').run(delta, record.batch_id);
         const inv = db.prepare('SELECT available_meters FROM fabric_inventory_batches WHERE id=?').get(record.batch_id);
         if (inv && inv.available_meters <= 0) {
           db.prepare("UPDATE fabric_inventory_batches SET batch_status='depleted' WHERE id=?").run(record.batch_id);

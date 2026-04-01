@@ -199,7 +199,7 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
 router.patch('/:id/status', requirePermission('invoices', 'edit'), (req, res) => {
   try {
     const { status } = req.body;
-    if (!['draft', 'sent', 'paid', 'overdue', 'cancelled'].includes(status)) {
+    if (!['draft', 'sent', 'paid', 'partially_paid', 'overdue', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'حالة غير صالحة' });
     }
     const invoice = db.prepare('SELECT id, status FROM invoices WHERE id = ?').get(req.params.id);
