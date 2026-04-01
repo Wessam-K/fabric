@@ -73,11 +73,11 @@ router.post('/upload', requirePermission('documents', 'create'), upload.single('
       return res.status(400).json({ error: 'نوع الملف غير متطابق مع المحتوى' });
     }
 
-    const { title, entity_type, entity_id, category, notes } = req.body;
+    const { title, entity_type, entity_id, category, description } = req.body;
 
     const result = db.prepare(`INSERT INTO documents 
-      (title, file_name, file_path, file_size, file_type, entity_type, entity_id, category, uploaded_by)
-      VALUES (?,?,?,?,?,?,?,?,?)`)
+      (title, file_name, file_path, file_size, file_type, entity_type, entity_id, category, description, uploaded_by)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
       .run(
         title || req.file.originalname,
         req.file.originalname,
@@ -87,6 +87,7 @@ router.post('/upload', requirePermission('documents', 'create'), upload.single('
         entity_type || 'general',
         entity_id || 0,
         category || null,
+        description || null,
         req.user.id
       );
 

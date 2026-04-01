@@ -93,8 +93,8 @@ router.post('/invite/accept', (req, res) => {
     if (!token || !username || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
     if (username.length < 3) return res.status(400).json({ error: 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل' });
 
-    const passCheck = validatePassword(password);
-    if (!passCheck.valid) return res.status(400).json({ error: passCheck.message });
+    const passErr = validatePassword(password);
+    if (passErr) return res.status(400).json({ error: passErr });
 
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const invite = db.prepare(
@@ -123,8 +123,8 @@ inviteRouter.post('/accept', (req, res) => {
     if (!token || !username || !password) return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
     if (username.length < 3) return res.status(400).json({ error: 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل' });
 
-    const passCheck = validatePassword(password);
-    if (!passCheck.valid) return res.status(400).json({ error: passCheck.message });
+    const passErr = validatePassword(password);
+    if (passErr) return res.status(400).json({ error: passErr });
 
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const invite = db.prepare(

@@ -71,6 +71,10 @@ router.put('/:id', requirePermission('samples', 'edit'), (req, res) => {
     const { model_code, description, fabrics_used, accessories_used,
       cost, requested_date, completion_date, status, customer_feedback } = req.body;
 
+    if (status && !['requested','in_progress','completed','sent','approved','rejected','converted'].includes(status)) {
+      return res.status(400).json({ error: 'حالة العينة غير صالحة' });
+    }
+
     db.prepare(`UPDATE samples SET model_code=COALESCE(?,model_code), description=COALESCE(?,description),
       fabrics_used=COALESCE(?,fabrics_used), accessories_used=COALESCE(?,accessories_used),
       cost=COALESCE(?,cost), requested_date=COALESCE(?,requested_date),

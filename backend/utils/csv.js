@@ -5,13 +5,14 @@
  * @returns {string} CSV string
  */
 function toCSV(rows, columns) {
-  const quoteCol = c => '"' + String(c).replace(/"/g, '""') + '"';
+  const escapeFormula = s => /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+  const quoteCol = c => '"' + escapeFormula(String(c).replace(/"/g, '""')) + '"';
   if (!rows || rows.length === 0) return '\uFEFF' + columns.map(quoteCol).join(',') + '\n';
   const header = columns.map(quoteCol).join(',');
   const lines = rows.map(row =>
     columns.map(col => {
       const val = row[col] == null ? '' : String(row[col]);
-      return '"' + val.replace(/"/g, '""') + '"';
+      return '"' + escapeFormula(val.replace(/"/g, '""')) + '"';
     }).join(',')
   );
   return '\uFEFF' + header + '\n' + lines.join('\n');

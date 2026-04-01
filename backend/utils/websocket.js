@@ -6,6 +6,7 @@
 const { WebSocketServer } = require('ws');
 const crypto = require('crypto');
 const logger = require('./logger');
+const jwt = require('jsonwebtoken');
 
 const AUTH_TIMEOUT_MS = 5000;      // 5 seconds to authenticate
 const MAX_CONN_PER_IP = 10;        // max connections per minute per IP
@@ -58,14 +59,32 @@ function initWebSocket(server) {
     ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data.toString());
-        // Handle auth message to associate user
-        if (msg.type === 'auth' && msg.userId) {
+        // Handle auth message — require JWT token, not just userId
+        if (msg.type === 'auth') {
           const client = clients.get(ws);
           if (client) {
-            client.userId = msg.userId;
-            client.username = msg.username;
-            client.authenticated = true;
-            clearTimeout(authTimer);
+            if (msg.token) {
+              try {
+                const { JWT_SECRET } = require('../middleware/auth');
+                const decoded = jwt.verify(msg.token, JWT_SECRET);
+                client.userId = decoded.id;
+                client.username = decoded.username;
+                client.authenticated = true;
+                clearTimeout(authTimer);
+              } catch {
+                ws.close(1008, 'Invalid token');
+              }
+            } else if (msg.userId) {
+              // Fallback: accept userId only in test/dev mode
+              if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+                client.userId = msg.userId;
+                client.username = msg.username;
+                client.authenticated = true;
+                clearTimeout(authTimer);
+              } else {
+                ws.close(1008, 'Authentication token required');
+              }
+            }
           }
         }
       } catch {

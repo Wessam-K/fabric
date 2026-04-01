@@ -13,7 +13,10 @@ async function validateFileType(filePath, allowedMimes) {
   try {
     const result = await fromFile(filePath);
     if (!result) {
-      // file-type couldn't detect — could be plain text (CSV) or unknown format
+      // file-type couldn't detect — plain text (CSV, TXT) files have no magic bytes
+      if (allowedMimes.some(m => m.startsWith('text/'))) {
+        return { valid: true, detectedMime: 'text/plain' };
+      }
       return { valid: false, detectedMime: null };
     }
     return { valid: allowedMimes.includes(result.mime), detectedMime: result.mime };

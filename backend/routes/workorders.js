@@ -815,10 +815,12 @@ router.post('/:id/expenses', requirePermission('work_orders', 'edit'), (req, res
     const { description, amount, stage_id, notes } = req.body;
     if (!description || amount == null || parseFloat(amount) <= 0) return res.status(400).json({ error: 'الوصف والمبلغ (أكبر من صفر) مطلوبان' });
 
-    db.prepare('INSERT INTO wo_extra_expenses (wo_id,description,amount,stage_id,notes) VALUES (?,?,?,?,?)')
-      .run(woId, description, parseFloat(amount), stage_id || null, notes || null);
-    const total = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM wo_extra_expenses WHERE wo_id=?').get(woId).v;
-    db.prepare('UPDATE work_orders SET extra_expenses_total=? WHERE id=?').run(total, woId);
+    db.transaction(() => {
+      db.prepare('INSERT INTO wo_extra_expenses (wo_id,description,amount,stage_id,notes) VALUES (?,?,?,?,?)')
+        .run(woId, description, parseFloat(amount), stage_id || null, notes || null);
+      const total = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM wo_extra_expenses WHERE wo_id=?').get(woId).v;
+      db.prepare('UPDATE work_orders SET extra_expenses_total=? WHERE id=?').run(total, woId);
+    })();
 
     res.status(201).json(getFullWO(woId));
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -828,9 +830,11 @@ router.post('/:id/expenses', requirePermission('work_orders', 'edit'), (req, res
 router.delete('/:id/expenses/:expId', requirePermission('work_orders', 'edit'), (req, res) => {
   try {
     const woId = parseInt(req.params.id);
-    db.prepare('DELETE FROM wo_extra_expenses WHERE id=? AND wo_id=?').run(parseInt(req.params.expId), woId);
-    const total = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM wo_extra_expenses WHERE wo_id=?').get(woId).v;
-    db.prepare('UPDATE work_orders SET extra_expenses_total=? WHERE id=?').run(total, woId);
+    db.transaction(() => {
+      db.prepare('DELETE FROM wo_extra_expenses WHERE id=? AND wo_id=?').run(parseInt(req.params.expId), woId);
+      const total = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM wo_extra_expenses WHERE wo_id=?').get(woId).v;
+      db.prepare('UPDATE work_orders SET extra_expenses_total=? WHERE id=?').run(total, woId);
+    })();
     res.json(getFullWO(woId));
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

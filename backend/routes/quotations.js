@@ -89,6 +89,9 @@ router.put('/:id', requirePermission('quotations', 'edit'), (req, res) => {
     if (old.status === 'accepted') return res.status(400).json({ error: 'لا يمكن تعديل عرض سعر مقبول' });
 
     const { customer_id, valid_until, notes, discount_percent, tax_percent, items, status } = req.body;
+    if (status && !['draft','sent','accepted','rejected','cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'حالة عرض السعر غير صالحة' });
+    }
     if (discount_percent != null && (parseFloat(discount_percent) < 0 || parseFloat(discount_percent) > 100)) return res.status(400).json({ error: 'نسبة الخصم يجب أن تكون بين 0 و 100' });
     if (tax_percent != null && (parseFloat(tax_percent) < 0 || parseFloat(tax_percent) > 100)) return res.status(400).json({ error: 'نسبة الضريبة يجب أن تكون بين 0 و 100' });
 
