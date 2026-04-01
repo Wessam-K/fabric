@@ -481,8 +481,8 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
     const woId = parseInt(req.params.id);
     const existing = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
-    if (['completed', 'cancelled', 'delivered'].includes(existing.status)) {
-      return res.status(400).json({ error: 'لا يمكن تعديل أمر تشغيل مكتمل أو ملغي أو تم تسليمه' });
+    if (['completed', 'cancelled'].includes(existing.status)) {
+      return res.status(400).json({ error: 'لا يمكن تعديل أمر تشغيل مكتمل أو ملغي' });
     }
     const { model_id, priority, due_date, assigned_to, masnaiya, masrouf, margin_pct,
             consumer_price, wholesale_price, quantity, is_size_based,
@@ -640,7 +640,7 @@ router.patch('/:id/status', requirePermission('work_orders', 'edit'), (req, res)
     fireWebhook('workorder.status_changed', { id: woId, wo_number: wo.wo_number, old_status: wo.status, new_status: status });
 
     // Emit real-time notification for status change
-    const statusLabels = { in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغى', delivered: 'تم التسليم' };
+    const statusLabels = { in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغى' };
     notificationEmitter.emit('notification', {
       user_id: null,
       type: 'work_order_status',
@@ -726,7 +726,11 @@ router.patch('/:id/stages/:stageId', requirePermission('work_orders', 'edit'), (
     transaction();
 
     res.json(getFullWO(woId));
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+  } catch (err) {
+    if (err.message?.includes('لا يمكن تغيير حالة المرحلة'))
+      return res.status(400).json({ error: err.message });
+    console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' });
+  }
 });
 
 // PATCH /api/work-orders/:id/stage-quantity — WIP tracking
@@ -950,8 +954,8 @@ router.delete('/:id', requirePermission('work_orders', 'delete'), (req, res) => 
     const woId = parseInt(req.params.id);
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
     if (!wo) return res.status(404).json({ error: 'غير موجود' });
-    if (['completed', 'cancelled', 'delivered'].includes(wo.status)) {
-      return res.status(400).json({ error: 'لا يمكن حذف أمر تشغيل مكتمل أو ملغي أو مسلّم' });
+    if (['completed', 'cancelled'].includes(wo.status)) {
+      return res.status(400).json({ error: 'لا يمكن حذف أمر تشغيل مكتمل أو ملغي' });
     }
     const userId = req.user ? req.user.id : null;
     db.transaction(() => {
@@ -1513,8 +1517,8 @@ router.post('/:id/cancel', requirePermission('work_orders', 'edit'), (req, res) 
     const wo = db.prepare('SELECT * FROM work_orders WHERE id=?').get(woId);
     if (!wo) return res.status(404).json({ error: 'أمر التشغيل غير موجود' });
 
-    // Cannot cancel already completed/cancelled/delivered WOs
-    const forbidden = ['completed', 'cancelled', 'delivered'];
+    // Cannot cancel already completed/cancelled WOs
+    const forbidden = ['completed', 'cancelled'];
     if (forbidden.includes(wo.status)) {
       return res.status(400).json({ error: 'لا يمكن إلغاء أمر تشغيل في حالة: ' + wo.status });
     }

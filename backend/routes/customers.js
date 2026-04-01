@@ -57,8 +57,8 @@ router.post('/import', requirePermission('customers', 'create'), (req, res) => {
         try {
           if (!item.code || !item.name) { errors.push(`سطر بدون كود أو اسم`); continue; }
           const existing = db.prepare('SELECT id FROM customers WHERE code=?').get(item.code);
-          if (existing) { update.run(item.name, item.customer_type||'retail', item.phone||null, item.email||null, item.address||null, item.city||null, item.tax_number||null, parseFloat(item.credit_limit)||0, item.contact_name||null, item.payment_terms||null, item.notes||null, item.code); updated++; }
-          else { insert.run(item.code, item.name, item.customer_type||'retail', item.phone||null, item.email||null, item.address||null, item.city||null, item.tax_number||null, parseFloat(item.credit_limit)||0, item.contact_name||null, item.payment_terms||null, item.notes||null); imported++; }
+          if (existing) { update.run(item.name, item.customer_type||'wholesale', item.phone||null, item.email||null, item.address||null, item.city||null, item.tax_number||null, parseFloat(item.credit_limit)||0, item.contact_name||null, item.payment_terms||null, item.notes||null, item.code); updated++; }
+          else { insert.run(item.code, item.name, item.customer_type||'wholesale', item.phone||null, item.email||null, item.address||null, item.city||null, item.tax_number||null, parseFloat(item.credit_limit)||0, item.contact_name||null, item.payment_terms||null, item.notes||null); imported++; }
         } catch (e) { errors.push(`${item.code}: ${e.message}`); }
       }
     })();
@@ -174,7 +174,7 @@ router.post('/', requirePermission('customers', 'create'), (req, res) => {
     const result = db.prepare(`
       INSERT INTO customers (code, name, phone, email, address, city, tax_number, credit_limit, notes, customer_type, contact_name, payment_terms)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(customerCode, name.trim(), phone || null, email || null, address || null, city || null, tax_number || null, credit_limit || 0, notes || null, customer_type || 'retail', contact_name || null, payment_terms || null);
+    `).run(customerCode, name.trim(), phone || null, email || null, address || null, city || null, tax_number || null, credit_limit || 0, notes || null, customer_type || 'wholesale', contact_name || null, payment_terms || null);
 
     const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
     logAudit(req, 'CREATE', 'customer', customer.id, customer.name);

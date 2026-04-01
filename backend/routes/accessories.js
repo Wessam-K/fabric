@@ -95,14 +95,14 @@ router.post('/import', requirePermission('accessories', 'create'), (req, res) =>
     let imported = 0, updated = 0, errors = [];
     const insert = db.prepare(`INSERT INTO accessories (code,acc_type,name,unit_price,unit,quantity_on_hand,low_stock_threshold,reorder_qty,notes) VALUES (?,?,?,?,?,?,?,?,?)`);
     const update = db.prepare(`UPDATE accessories SET acc_type=?,name=?,unit_price=?,unit=?,low_stock_threshold=?,reorder_qty=?,notes=? WHERE code=?`);
+    // Hoist settings queries outside loop
+    const defLowStock = parseInt(db.prepare("SELECT value FROM settings WHERE key='low_stock_threshold'").get()?.value) || 20;
+    const defReorderQty = parseInt(db.prepare("SELECT value FROM settings WHERE key='default_reorder_qty'").get()?.value) || 50;
     db.transaction(() => {
       for (const item of items) {
         try {
           if (!item.code || !item.name) { errors.push(`سطر بدون كود أو اسم`); continue; }
           const existing = db.prepare('SELECT id FROM accessories WHERE code=?').get(item.code);
-          // Get defaults from settings for import
-          const defLowStock = parseInt(db.prepare("SELECT value FROM settings WHERE key='low_stock_threshold'").get()?.value) || 20;
-          const defReorderQty = parseInt(db.prepare("SELECT value FROM settings WHERE key='default_reorder_qty'").get()?.value) || 50;
           if (existing) { update.run(item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.low_stock_threshold)||defLowStock, parseInt(item.reorder_qty)||defReorderQty, item.notes||null, item.code); updated++; }
           else { insert.run(item.code, item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.quantity_on_hand)||0, parseInt(item.low_stock_threshold)||defLowStock, parseInt(item.reorder_qty)||defReorderQty, item.notes||null); imported++; }
         } catch (e) { errors.push(`${item.code}: ${e.message}`); }
@@ -174,8 +174,8 @@ router.post('/:code/stock/adjust', requirePermission('accessories', 'edit'), (re
     const acc = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     if (!acc) return res.status(404).json({ error: 'الاكسسوار غير موجود' });
     const { qty_change, notes } = req.body;
-    if (qty_change == null || qty_change === 0) return res.status(400).json({ error: 'الكمية مطلوبة ويجب أن لا تساوي صفر' });
-    const change = parseInt(qty_change);
+    const change = parseFloat(qty_change);
+    if (isNaN(change) || change === 0) return res.status(400).json({ error: 'الكمية مطلوبة ويجب أن لا تساوي صفر' });
     const newQty = acc.quantity_on_hand + change;
     if (newQty < 0) return res.status(400).json({ error: 'الكمية الناتجة لا يمكن أن تكون سالبة' });
     const userId = req.user ? req.user.id : null;

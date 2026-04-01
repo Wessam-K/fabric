@@ -2489,7 +2489,7 @@ function runMigrations() {
     idx('idx_wo_sizes_wo', 'wo_sizes', 'wo_id');
     idx('idx_wo_stages_wo', 'wo_stages', 'wo_id');
     idx('idx_wo_stages_status', 'wo_stages', 'status');
-    idx('idx_wo_expenses_wo', 'wo_expenses', 'wo_id');
+    idx('idx_wo_expenses_wo', 'wo_extra_expenses', 'wo_id');
     idx('idx_wo_fabric_batches_wo', 'wo_fabric_batches', 'wo_id');
     // Invoices
     idx('idx_inv_customer', 'invoices', 'customer_id');
@@ -2503,8 +2503,8 @@ function runMigrations() {
     // HR
     idx('idx_att_employee', 'attendance', 'employee_id');
     idx('idx_att_date', 'attendance', 'work_date');
-    idx('idx_payroll_employee', 'payroll', 'employee_id');
-    idx('idx_payroll_period', 'payroll', 'period_month, period_year');
+    idx('idx_payroll_employee', 'payroll_records', 'employee_id');
+    idx('idx_payroll_period', 'payroll_records', 'period_id');
     idx('idx_leave_employee', 'leave_requests', 'employee_id');
     // Expenses
     idx('idx_exp_date', 'expenses', 'expense_date');
@@ -2523,7 +2523,7 @@ function runMigrations() {
     idx('idx_doc_entity', 'documents', 'entity_type, entity_id');
     // Accounting
     idx('idx_je_date', 'journal_entries', 'entry_date');
-    idx('idx_jel_je', 'journal_entry_lines', 'journal_entry_id');
+    idx('idx_jel_je', 'journal_entry_lines', 'entry_id');
     idx('idx_jel_account', 'journal_entry_lines', 'account_id');
 
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (35)`);

@@ -295,7 +295,7 @@ router.get('/po-by-supplier', requirePermission('reports', 'view'), async (req, 
         po.total_amount, po.paid_amount,
         (po.total_amount - po.paid_amount) as outstanding,
         poi.item_type, poi.fabric_code, poi.accessory_code, poi.description as item_desc,
-        poi.quantity, poi.unit, poi.unit_price, poi.received_qty,
+        poi.quantity, poi.unit, poi.unit_price, COALESCE(poi.received_qty_actual, poi.received_qty) as received_qty,
         ROUND(poi.quantity * poi.unit_price, 2) as line_total
       FROM purchase_orders po
       JOIN suppliers s ON s.id = po.supplier_id
@@ -371,12 +371,12 @@ router.get('/waste-analysis', requirePermission('reports', 'view'), async (req, 
         ww.waste_meters, ww.price_per_meter, ww.waste_cost, ww.notes, ww.recorded_at,
         wfb.fabric_code, f.name as fabric_name,
         CASE WHEN wfb.actual_total_meters > 0
-          THEN ROUND(wfb.waste_meters / wfb.actual_total_meters * 100, 2)
+          THEN ROUND(ww.waste_meters / wfb.actual_total_meters * 100, 2)
           ELSE 0 END as waste_pct
       FROM wo_waste ww
       JOIN work_orders wo ON wo.id = ww.work_order_id
       LEFT JOIN models m ON m.id = wo.model_id
-      LEFT JOIN wo_fabric_batches wfb ON wfb.wo_id = wo.id
+      LEFT JOIN wo_fabric_batches wfb ON wfb.wo_id = wo.id AND wfb.id = (SELECT MIN(wfb2.id) FROM wo_fabric_batches wfb2 WHERE wfb2.wo_id = wo.id)
       LEFT JOIN fabrics f ON f.code = wfb.fabric_code
       WHERE ww.recorded_at BETWEEN ? AND ?
       ORDER BY ww.waste_cost DESC
@@ -714,7 +714,7 @@ router.get('/purchase-summary', requirePermission('reports', 'view'), async (req
       SELECT po.po_type,
              COUNT(*) as total_orders,
              SUM(CASE WHEN po.status='received' THEN 1 ELSE 0 END) as received_count,
-             SUM(CASE WHEN po.status='pending' THEN 1 ELSE 0 END) as pending_count,
+             SUM(CASE WHEN po.status IN ('draft','sent','partial') THEN 1 ELSE 0 END) as pending_count,
              ROUND(SUM(po.total_amount),2) as total_amount,
              ROUND(SUM(po.paid_amount),2) as total_paid,
              ROUND(SUM(po.total_amount) - SUM(po.paid_amount),2) as outstanding,

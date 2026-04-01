@@ -911,21 +911,26 @@ router.patch('/leaves/:id', requirePermission('hr', 'edit'), (req, res) => {
     if (!leave) return res.status(404).json({ error: 'الطلب غير موجود' });
     if (leave.status !== 'pending') return res.status(400).json({ error: 'لا يمكن تعديل طلب تمت مراجعته' });
 
-    db.prepare(`UPDATE leave_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?`)
-      .run(status, req.user?.id || null, req.params.id);
-
-    // If approved, mark attendance as 'leave' for the date range (max 90 days)
+    // Validate 90-day limit BEFORE updating status
     if (status === 'approved') {
       const start = new Date(leave.start_date);
       const end = new Date(leave.end_date);
       const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
       if (diffDays > 90) return res.status(400).json({ error: 'مدة الإجازة لا يمكن أن تتجاوز 90 يومًا' });
+    }
+
+    db.prepare(`UPDATE leave_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?`)
+      .run(status, req.user?.id || null, req.params.id);
+
+    // If approved, mark attendance as 'leave' for the date range
+    if (status === 'approved') {
+      const start = new Date(leave.start_date);
+      const end = new Date(leave.end_date);
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().slice(0, 10);
-        const dayNames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
         db.prepare(`INSERT INTO attendance (employee_id, work_date, day_of_week, actual_hours, attendance_status)
           VALUES (?,?,?,0,'leave') ON CONFLICT(employee_id, work_date) DO UPDATE SET attendance_status='leave', actual_hours=0`)
-          .run(leave.employee_id, dateStr, dayNames[d.getDay()]);
+          .run(leave.employee_id, dateStr, ARABIC_DAYS[d.getDay()]);
       }
     }
 

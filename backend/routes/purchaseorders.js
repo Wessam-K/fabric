@@ -98,7 +98,7 @@ router.post('/', requirePermission('purchase_orders', 'create'), (req, res) => {
     const { po_number, supplier_id, po_type, expected_date, items, notes, tax_pct, discount } = req.body;
     if (!po_number || !supplier_id) return res.status(400).json({ error: 'رقم أمر الشراء ومعرف المورد مطلوبان' });
 
-    const validItemTypes = ['fabric', 'accessory'];
+    const validItemTypes = ['fabric', 'accessory', 'other'];
     if (items?.length) {
       for (const i of items) {
         if (i.item_type && !validItemTypes.includes(i.item_type)) {

@@ -124,7 +124,7 @@ router.get('/inspections', requirePermission('quality', 'view'), (req, res) => {
     const offset = (parseInt(page) - 1) * parseInt(limit);
     let where = '1=1';
     const params = [];
-    if (status) { where += ' AND qi.status=?'; params.push(status); }
+    if (status) { where += ' AND qi.result=?'; params.push(status); }
     if (work_order_id) { where += ' AND qi.work_order_id=?'; params.push(work_order_id); }
 
     const total = db.prepare(`SELECT COUNT(*) as c FROM qc_inspections qi WHERE ${where}`).get(...params).c;

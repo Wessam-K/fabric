@@ -542,9 +542,9 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
     const totalCustomers = db.prepare("SELECT COUNT(*) as c FROM customers WHERE status='active'").get().c;
     const customerOutstanding = db.prepare(`SELECT COALESCE(SUM(total),0) - COALESCE(SUM(CASE WHEN status='paid' THEN total ELSE 0 END),0) as v FROM invoices WHERE customer_id IS NOT NULL AND status NOT IN ('cancelled','draft')`).get().v;
 
-    // V10 — overall quality (rejection rate)
-    const totalPassed = db.prepare(`SELECT COALESCE(SUM(quantity_completed),0) as v FROM wo_stages`).get().v;
-    const totalRejected = db.prepare(`SELECT COALESCE(SUM(quantity_rejected),0) as v FROM wo_stages`).get().v;
+    // V10 — overall quality (rejection rate) — only final stage per WO to avoid double-counting
+    const totalPassed = db.prepare(`SELECT COALESCE(SUM(ws.quantity_completed),0) as v FROM wo_stages ws WHERE ws.sort_order = (SELECT MAX(ws2.sort_order) FROM wo_stages ws2 WHERE ws2.wo_id=ws.wo_id)`).get().v;
+    const totalRejected = db.prepare(`SELECT COALESCE(SUM(ws.quantity_rejected),0) as v FROM wo_stages ws WHERE ws.sort_order = (SELECT MAX(ws2.sort_order) FROM wo_stages ws2 WHERE ws2.wo_id=ws.wo_id)`).get().v;
     const qualityRate = (totalPassed + totalRejected) > 0 ? Math.round((totalPassed / (totalPassed + totalRejected)) * 10000) / 100 : 100;
 
     // V11 — top models by production volume
@@ -658,8 +658,8 @@ app.get('/api/dashboard/chart/top-customers', requireAuth, requirePermission('da
   try {
     const rows = db.prepare(`
       SELECT customer_name, SUM(total) as total_revenue, COUNT(*) as invoice_count
-      FROM invoices WHERE status NOT IN ('cancelled','draft')
-      GROUP BY customer_id ORDER BY total_revenue DESC LIMIT 10
+      FROM invoices WHERE status NOT IN ('cancelled','draft') AND customer_id IS NOT NULL
+      GROUP BY customer_id, customer_name ORDER BY total_revenue DESC LIMIT 10
     `).all();
     res.json(rows);
   } catch (err) { logger.error('Server error', { error: err.message }); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -748,7 +748,7 @@ app.get('/api/dashboard/kpis/hr', requireAuth, requirePermission('dashboard', 'v
 app.get('/api/reports/executive-summary', requireAuth, (req, res) => {
   try {
     const thisMonth = new Date().toISOString().slice(0, 7);
-    const revenue = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status != 'cancelled' AND created_at LIKE ?").get(`${thisMonth}%`).v;
+    const revenue = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status = 'paid' AND created_at LIKE ?").get(`${thisMonth}%`).v;
     const expenses = db.prepare("SELECT COALESCE(SUM(amount), 0) as v FROM expenses WHERE is_deleted = 0 AND expense_date LIKE ?").get(`${thisMonth}%`).v;
     const activeWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status NOT IN ('completed','cancelled')").get().v;
     const completedWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status = 'completed' AND completed_date LIKE ?").get(`${thisMonth}%`).v;

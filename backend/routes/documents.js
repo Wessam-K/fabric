@@ -32,7 +32,7 @@ router.get('/', requirePermission('documents', 'view'), (req, res) => {
   try {
     const { entity_type, entity_id, category, search, page = 1, limit = 25 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    let where = '1=1'; const params = [];
+    let where = 'd.deleted_at IS NULL'; const params = [];
     if (entity_type) { where += ' AND d.entity_type=?'; params.push(entity_type); }
     if (entity_id) { where += ' AND d.entity_id=?'; params.push(entity_id); }
     if (category) { where += ' AND d.category=?'; params.push(category); }
@@ -76,18 +76,17 @@ router.post('/upload', requirePermission('documents', 'create'), upload.single('
     const { title, entity_type, entity_id, category, notes } = req.body;
 
     const result = db.prepare(`INSERT INTO documents 
-      (title, file_name, file_path, file_size, mime_type, entity_type, entity_id, category, notes, uploaded_by)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      (title, file_name, file_path, file_size, file_type, entity_type, entity_id, category, uploaded_by)
+      VALUES (?,?,?,?,?,?,?,?,?)`)
       .run(
         title || req.file.originalname,
         req.file.originalname,
         `/uploads/documents/${req.file.filename}`,
         req.file.size,
         req.file.mimetype,
-        entity_type || null,
-        entity_id || null,
+        entity_type || 'general',
+        entity_id || 0,
         category || null,
-        notes || null,
         req.user.id
       );
 
@@ -109,9 +108,9 @@ router.get('/:id', requirePermission('documents', 'view'), (req, res) => {
 router.put('/:id', requirePermission('documents', 'edit'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { title, category, notes } = req.body;
-    db.prepare('UPDATE documents SET title=COALESCE(?,title), category=COALESCE(?,category), notes=COALESCE(?,notes), updated_at=CURRENT_TIMESTAMP WHERE id=?')
-      .run(title, category, notes, id);
+    const { title, category } = req.body;
+    db.prepare('UPDATE documents SET title=COALESCE(?,title), category=COALESCE(?,category) WHERE id=?')
+      .run(title, category, id);
     logAudit(req, 'UPDATE', 'document', id, title);
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

@@ -273,7 +273,7 @@ router.get('/stock-valuation', requirePermission('inventory', 'view'), (req, res
             / SUM(fib.received_meters - fib.used_meters - fib.wasted_meters)
           ELSE 0 END as weighted_avg_cost
       FROM fabrics f
-      LEFT JOIN fabric_inventory_batches fib ON fib.fabric_code = f.code AND fib.batch_status != 'cancelled'
+      LEFT JOIN fabric_inventory_batches fib ON fib.fabric_code = f.code
         AND (fib.received_meters - fib.used_meters - fib.wasted_meters) > 0
       WHERE f.status = 'active'
       GROUP BY f.code
@@ -289,7 +289,7 @@ router.get('/stock-valuation', requirePermission('inventory', 'view'), (req, res
           THEN COALESCE(SUM((aib.received_qty - aib.used_qty) * aib.price_per_unit), 0) / a.quantity_on_hand
           ELSE a.unit_price END as weighted_avg_cost
       FROM accessories a
-      LEFT JOIN accessory_inventory_batches aib ON aib.accessory_code = a.code AND aib.batch_status != 'cancelled'
+      LEFT JOIN accessory_inventory_batches aib ON aib.accessory_code = a.code
         AND (aib.received_qty - aib.used_qty) > 0
       WHERE a.status = 'active' AND a.quantity_on_hand > 0
       GROUP BY a.code
@@ -322,7 +322,7 @@ router.get('/reorder-alerts', requirePermission('inventory', 'view'), (req, res)
         f.low_stock_threshold as reorder_point,
         f.low_stock_threshold as suggested_reorder_qty
       FROM fabrics f
-      LEFT JOIN fabric_inventory_batches fib ON fib.fabric_code = f.code AND fib.batch_status != 'cancelled'
+      LEFT JOIN fabric_inventory_batches fib ON fib.fabric_code = f.code
       WHERE f.status = 'active'
       GROUP BY f.code
       HAVING available <= COALESCE(f.low_stock_threshold, ?)

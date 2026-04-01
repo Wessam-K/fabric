@@ -151,6 +151,7 @@ router.put('/:id/approve', requirePermission('expenses', 'approve'), (req, res) 
   try {
     const old = db.prepare('SELECT * FROM expenses WHERE id=? AND is_deleted=0').get(req.params.id);
     if (!old) return res.status(404).json({ error: 'المصروف غير موجود' });
+    if (old.status !== 'pending') return res.status(400).json({ error: 'لا يمكن اعتماد مصروف ليس في حالة معلق' });
     db.prepare("UPDATE expenses SET status='approved', approved_by=? WHERE id=?").run(req.user.id, req.params.id);
     logAudit(req, 'approve', 'expenses', old.id, old.description, { status: old.status }, { status: 'approved' });
     res.json(db.prepare('SELECT * FROM expenses WHERE id=?').get(req.params.id));
@@ -164,6 +165,7 @@ router.put('/:id/reject', requirePermission('expenses', 'approve'), (req, res) =
   try {
     const old = db.prepare('SELECT * FROM expenses WHERE id=? AND is_deleted=0').get(req.params.id);
     if (!old) return res.status(404).json({ error: 'المصروف غير موجود' });
+    if (old.status !== 'pending') return res.status(400).json({ error: 'لا يمكن رفض مصروف ليس في حالة معلق' });
     if (!req.body.reason) return res.status(400).json({ error: 'سبب الرفض مطلوب' });
     db.prepare("UPDATE expenses SET status='rejected', approved_by=?, notes=COALESCE(notes||' | ','') || ? WHERE id=?")
       .run(req.user.id, 'سبب الرفض: ' + req.body.reason, req.params.id);
@@ -198,6 +200,7 @@ router.post('/import', requirePermission('expenses', 'create'), (req, res) => {
     for (let i = 0; i < items.length; i++) {
       const r = items[i];
       if (!r.amount || !r.description) { errors.push({ row: i+1, error: 'المبلغ والوصف مطلوبان' }); continue; }
+      if (parseFloat(r.amount) <= 0) { errors.push({ row: i+1, error: 'المبلغ يجب أن يكون أكبر من صفر' }); continue; }
       valid.push(r);
     }
     const inserted = db.transaction(() => {
