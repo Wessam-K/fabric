@@ -254,6 +254,19 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', app: 'WK-Factory', database: dbStatus });
 });
 
+// ═══ Readiness check (public, no auth) ═══
+app.get('/api/readiness', (req, res) => {
+  const checks = { database: false, tables: false };
+  try {
+    db.prepare('SELECT 1').get();
+    checks.database = true;
+    const tableCount = db.prepare("SELECT COUNT(*) as c FROM sqlite_master WHERE type='table'").get().c;
+    checks.tables = tableCount > 0;
+  } catch {}
+  const ready = checks.database && checks.tables;
+  res.status(ready ? 200 : 503).json({ ready, checks });
+});
+
 // Phase 3.4: Swagger API documentation (public)
 try {
   const swaggerUi = require('swagger-ui-express');
