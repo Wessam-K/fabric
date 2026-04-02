@@ -2738,6 +2738,25 @@ function runMigrations() {
     addCol('users', 'totp_backup_codes', 'TEXT');
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (41)`);
   }
+
+  // ──── V43 — Additional performance indexes ────
+  const v43 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 43').get();
+  if (!v43) {
+    const indexes = [
+      'CREATE INDEX IF NOT EXISTS idx_fib_fabric_code ON fabric_inventory_batches(fabric_code)',
+      'CREATE INDEX IF NOT EXISTS idx_fib_batch_status ON fabric_inventory_batches(batch_status)',
+      'CREATE INDEX IF NOT EXISTS idx_fib_po_id ON fabric_inventory_batches(po_id)',
+      'CREATE INDEX IF NOT EXISTS idx_fib_received_date ON fabric_inventory_batches(received_date)',
+      'CREATE INDEX IF NOT EXISTS idx_fib_code_status ON fabric_inventory_batches(fabric_code, batch_status)',
+      'CREATE INDEX IF NOT EXISTS idx_aib_accessory_code ON accessory_inventory_batches(accessory_code)',
+      'CREATE INDEX IF NOT EXISTS idx_wo_fabric_batch_id ON wo_fabric_batches(batch_id)',
+      'CREATE INDEX IF NOT EXISTS idx_expenses_status_date ON expenses(status, expense_date)',
+    ];
+    for (const sql of indexes) {
+      try { db.exec(sql); } catch {}
+    }
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (43)`);
+  }
 }
 
 initializeDatabase();
