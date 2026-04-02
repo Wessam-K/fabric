@@ -30,6 +30,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS api_keys (
   key_hash TEXT NOT NULL UNIQUE,
   key_prefix TEXT NOT NULL,
   permissions TEXT DEFAULT '{}',
+  rate_limit INTEGER DEFAULT 100,
+  rate_window_seconds INTEGER DEFAULT 60,
   created_by INTEGER,
   created_at TEXT DEFAULT (datetime('now','localtime')),
   last_used_at TEXT,
@@ -37,6 +39,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS api_keys (
   status TEXT DEFAULT 'active' CHECK(status IN ('active','revoked')),
   FOREIGN KEY (created_by) REFERENCES users(id)
 )`);
+
+// Ensure rate_limit columns exist for existing databases
+try { db.exec(`ALTER TABLE api_keys ADD COLUMN rate_limit INTEGER DEFAULT 100`); } catch {}
+try { db.exec(`ALTER TABLE api_keys ADD COLUMN rate_window_seconds INTEGER DEFAULT 60`); } catch {}
 
 /**
  * Generate a new API key. Returns the raw key (only shown once) and stores the hash.
