@@ -100,6 +100,48 @@ class LicenseManager {
   }
 
   activate(licenseKey) {
+    // Validate license key format: XXXX-XXXX-XXXX-XXXX or {PREFIX}{16CHARS}-{HMAC8}
+    const hmacSecret = process.env.LICENSE_HMAC_SECRET;
+
+    if (hmacSecret) {
+      // HMAC-validated key format: {TIER_PREFIX}{16RANDOM}-{8HMAC}
+      const hmacMatch = licenseKey.match(/^([A-Z]{2})([A-Z0-9]{16})-([A-Z0-9]{8})$/);
+      if (!hmacMatch) {
+        return { success: false, error: 'صيغة مفتاح الترخيص غير صحيحة' };
+      }
+      const [, prefix, randomPart, providedHmac] = hmacMatch;
+      let tierKey = 'standard';
+      if (prefix === 'PR') tierKey = 'professional';
+      else if (prefix === 'EN') tierKey = 'enterprise';
+
+      const hwId = getHardwareId();
+      const expectedHmac = crypto.createHmac('sha256', hmacSecret)
+        .update(`${tierKey}:${randomPart}:${hwId}`)
+        .digest('hex')
+        .substring(0, 8)
+        .toUpperCase();
+
+      if (!crypto.timingSafeEqual(Buffer.from(providedHmac), Buffer.from(expectedHmac))) {
+        return { success: false, error: 'مفتاح الترخيص غير صالح' };
+      }
+
+      const tier = LICENSE_TIERS[tierKey];
+      const now = new Date();
+      const expires = new Date(now.getTime() + tier.durationDays * 86400000);
+
+      this.db.prepare('UPDATE license_info SET status = ? WHERE status = ?').run('revoked', 'active');
+      this.db.prepare(`
+        INSERT INTO license_info (license_key, license_type, activated_at, expires_at, max_users, features, hardware_id, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
+      `).run(licenseKey, tierKey, now.toISOString(), expires.toISOString(), tier.maxUsers, JSON.stringify(tier.features), hwId);
+
+      return { success: true, license: this.getLicense() };
+    }
+
+    // Fallback: prefix-only method (backward compatibility when LICENSE_HMAC_SECRET not set)
+    const logger = require('../utils/logger');
+    logger.warn('LICENSE_HMAC_SECRET not set — using prefix-only license validation (insecure)');
+
     // Validate license key format: XXXX-XXXX-XXXX-XXXX
     if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(licenseKey)) {
       return { success: false, error: 'صيغة مفتاح الترخيص غير صحيحة' };
