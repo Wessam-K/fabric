@@ -40,8 +40,8 @@ module.exports = {
       );
     `);
 
-    // ── User sessions — add revoked_at column if missing ──
-    try { db.exec(`ALTER TABLE user_sessions ADD COLUMN revoked_at TEXT`); } catch {}
+    // ── User sessions — ensure revoked column exists (schema uses INTEGER, not TEXT) ──
+    try { db.exec(`ALTER TABLE user_sessions ADD COLUMN revoked INTEGER DEFAULT 0`); } catch {}
 
     // ── API key per-key rate limit tracking ──
     try { db.exec(`ALTER TABLE api_keys ADD COLUMN rate_limit INTEGER DEFAULT 100`); } catch {}
