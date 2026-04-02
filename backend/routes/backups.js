@@ -56,12 +56,17 @@ router.post('/:id/restore', requirePermission('backups', 'create'), (req, res) =
     const safePath = path.join(backupDir, path.basename(backup.file_name));
     if (!fs.existsSync(safePath)) return res.status(404).json({ error: 'ملف النسخة الاحتياطية غير موجود' });
 
-    // For safety, we don't auto-restore — just provide the file path
-    // Restoration must be done by an admin who stops the server first
+    // Write a pending-restore marker so the server swaps the DB on next startup
+    const dbPath = db.name; // current database file path
+    const marker = { backup_file: safePath, db_path: dbPath, requested_at: new Date().toISOString(), requested_by: req.user.id };
+    const markerPath = path.join(path.dirname(dbPath), 'pending_restore.json');
+    fs.writeFileSync(markerPath, JSON.stringify(marker, null, 2));
+
     logAudit(req, 'RESTORE_REQUEST', 'database', backup.id, backup.file_name);
-    res.json({ 
-      message: 'لاستعادة النسخة الاحتياطية، يجب إيقاف الخادم واستبدال ملف قاعدة البيانات يدوياً',
-      file_name: backup.file_name
+    res.json({
+      message: 'تم جدولة الاستعادة. أعد تشغيل الخادم لتطبيق النسخة الاحتياطية.',
+      file_name: backup.file_name,
+      restart_required: true
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Building, Clock, Shield, Key, CalendarDays } from 'lucide-react';
+import { User, Mail, Building, Clock, Shield, Key, CalendarDays, Monitor, Trash2, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,21 @@ export default function Profile() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/auth/profile').then(r => setProfile(r.data)).catch(() => {}).finally(() => setLoading(false));
+    api.get('/sessions').then(r => setSessions(r.data)).catch(() => {}).finally(() => setSessionsLoading(false));
+  }, []);
+
+  const revokeSession = (id) => {
+    api.delete(`/sessions/${id}`).then(() => setSessions(prev => prev.filter(s => s.id !== id))).catch(() => {});
+  };
+
+  const revokeAllSessions = () => {
+    api.delete('/sessions').then(() => setSessions([])).catch(() => {});
+  };
 
   useEffect(() => {
     api.get('/auth/profile').then(r => setProfile(r.data)).catch(() => {}).finally(() => setLoading(false));
@@ -109,6 +124,42 @@ export default function Profile() {
               ))
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Active Sessions */}
+      <div className="mt-6 bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="p-5 border-b flex items-center justify-between">
+          <h3 className="text-sm font-bold text-[#1a1a2e]">الجلسات النشطة</h3>
+          {sessions.length > 0 && (
+            <button onClick={revokeAllSessions} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1">
+              <LogOut size={12} /> إلغاء الكل
+            </button>
+          )}
+        </div>
+        <div className="divide-y divide-gray-50 max-h-[300px] overflow-y-auto">
+          {sessionsLoading ? (
+            <div className="p-8 text-center text-gray-400 text-sm">جاري التحميل...</div>
+          ) : sessions.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 text-sm">لا توجد جلسات نشطة</div>
+          ) : (
+            sessions.map(s => (
+              <div key={s.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/50">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <Monitor size={14} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-[#1a1a2e] truncate">{s.user_agent || 'متصفح غير معروف'}</p>
+                  <p className="text-[10px] text-gray-400">
+                    {s.ip_address || '—'} · {s.created_at ? new Date(s.created_at).toLocaleString('ar-EG') : ''}
+                  </p>
+                </div>
+                <button onClick={() => revokeSession(s.id)} className="text-red-400 hover:text-red-600 p-1" title="إلغاء الجلسة">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

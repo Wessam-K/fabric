@@ -397,6 +397,28 @@ app.post('/api/admin/retention/purge', requireAuth, (req, res) => {
   } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// PUT /api/admin/retention — update retention settings
+app.put('/api/admin/retention', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  try {
+    const { audit_retention_days, backup_retention_days } = req.body;
+    if (audit_retention_days != null) {
+      const v = parseInt(audit_retention_days);
+      if (isNaN(v) || v < 30) return res.status(400).json({ error: 'مدة الاحتفاظ بسجل المراجعة يجب أن تكون 30 يوماً على الأقل' });
+      db.prepare("INSERT INTO settings (key, value) VALUES ('audit_retention_days', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(v));
+    }
+    if (backup_retention_days != null) {
+      const v = parseInt(backup_retention_days);
+      if (isNaN(v) || v < 7) return res.status(400).json({ error: 'مدة الاحتفاظ بالنسخ الاحتياطية يجب أن تكون 7 أيام على الأقل' });
+      db.prepare("INSERT INTO settings (key, value) VALUES ('backup_retention_days', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(v));
+    }
+    logAudit(req, 'UPDATE', 'retention_settings', null, JSON.stringify({ audit_retention_days, backup_retention_days }));
+    const auditDays = parseInt(db.prepare("SELECT value FROM settings WHERE key='audit_retention_days'").get()?.value) || 365;
+    const backupDays = parseInt(db.prepare("SELECT value FROM settings WHERE key='backup_retention_days'").get()?.value) || 30;
+    res.json({ audit_retention_days: auditDays, backup_retention_days: backupDays });
+  } catch (err) { res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 // ═══ Phase 3.1: Import job progress tracking ═══
 app.get('/api/import/jobs/:id', requireAuth, (req, res) => {
   try {
@@ -536,7 +558,7 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
     const totalModels = db.prepare("SELECT COUNT(*) as c FROM models WHERE status='active'").get().c;
     const totalFabrics = db.prepare("SELECT COUNT(*) as c FROM fabrics WHERE status='active'").get().c;
     const totalAccessories = db.prepare("SELECT COUNT(*) as c FROM accessories WHERE status='active'").get().c;
-    const totalInvoices = db.prepare("SELECT COUNT(*) as c FROM invoices").get().c;
+    const totalInvoices = db.prepare("SELECT COUNT(*) as c FROM invoices WHERE status != 'cancelled'").get().c;
     const activeWorkOrders = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='in_progress'").get().c;
     const completedThisMonth = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month')").get().c;
     const urgentOrders = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE priority='urgent' AND status NOT IN ('completed','cancelled')").get().c;
@@ -1002,6 +1024,31 @@ if (fs.existsSync(frontendDist)) {
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
 }
+
+// ═══ Pending restore check on startup ═══
+(function checkPendingRestore() {
+  try {
+    const dbPath = db.name;
+    const markerPath = require('path').join(require('path').dirname(dbPath), 'pending_restore.json');
+    if (require('fs').existsSync(markerPath)) {
+      const marker = JSON.parse(require('fs').readFileSync(markerPath, 'utf-8'));
+      if (marker.backup_file && require('fs').existsSync(marker.backup_file)) {
+        const backupTs = new Date().toISOString().replace(/[:.]/g, '-');
+        const preRestoreBackup = dbPath + '.pre-restore-' + backupTs;
+        require('fs').copyFileSync(dbPath, preRestoreBackup);
+        db.close();
+        require('fs').copyFileSync(marker.backup_file, dbPath);
+        require('fs').unlinkSync(markerPath);
+        logger.info('Database restored from backup', { backup: marker.backup_file, pre_restore: preRestoreBackup });
+        // Re-open by re-requiring — the singleton pattern in database.js will need a restart
+        // The copy is done; on next require the new DB file will be used
+      } else {
+        require('fs').unlinkSync(markerPath);
+        logger.warn('Pending restore marker found but backup file missing — skipped');
+      }
+    }
+  } catch (e) { logger.error('Pending restore check failed', { error: e.message }); }
+})();
 
 // ═══ Global error handler ═══
 app.use((err, req, res, _next) => {
