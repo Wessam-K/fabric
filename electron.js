@@ -107,6 +107,7 @@ function startBackend() {
       PORT: String(BACKEND_PORT),
       WK_DB_DIR: getDbDir(),
       NODE_ENV: isDev ? 'development' : 'production',
+      ELECTRON_APP: '1',
     };
 
     getLogger().info('Starting backend', { serverPath, port: BACKEND_PORT, dbDir: getDbDir() });

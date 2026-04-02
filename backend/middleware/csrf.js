@@ -17,7 +17,7 @@ function setCSRFCookie(res) {
   const token = crypto.randomBytes(32).toString('hex');
   res.cookie(CSRF_COOKIE, token, {
     httpOnly: false, // JS must read this to include in headers
-    secure: false,   // Electron runs on localhost
+    secure: process.env.NODE_ENV === 'production' && process.env.ELECTRON_APP !== '1',
     sameSite: 'strict',
     maxAge: 24 * 60 * 60 * 1000,
     path: '/',

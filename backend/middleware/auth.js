@@ -63,7 +63,7 @@ const COOKIE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h — matches JWT_EXPIRES
 function setAuthCookie(res, token) {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: false, // Electron app runs on localhost — no HTTPS
+    secure: process.env.NODE_ENV === 'production' && process.env.ELECTRON_APP !== '1',
     sameSite: 'lax',
     maxAge: COOKIE_MAX_AGE,
     path: '/',
