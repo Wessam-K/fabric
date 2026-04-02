@@ -484,6 +484,8 @@ app.delete('/api/webhooks/:id', requireAuth, (req, res) => {
 
 // Phase 3.1: API versioning — mount under both /api and /api/v1 for forward compatibility
 const apiRouter = express.Router();
+const { validateQueryParams } = require('./utils/validators');
+apiRouter.use(validateQueryParams);
 apiRouter.use('/users', usersRouter);
 apiRouter.use('/hr', hrRouter);
 apiRouter.use('/audit-log', auditRouter);

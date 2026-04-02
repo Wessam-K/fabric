@@ -83,4 +83,21 @@ function validatePassword(password) {
   return null;
 }
 
-module.exports = { required, isNumber, isPositive, isDate, isEnum, maxLength, check, validatePassword };
+/**
+ * Middleware: validate common query parameters (page, limit, date_from, date_to).
+ * Returns 400 with error if invalid, otherwise calls next().
+ */
+function validateQueryParams(req, res, next) {
+  const { page, limit, date_from, date_to } = req.query;
+  if (page && page !== '' && isNaN(parseInt(page))) {
+    return res.status(400).json({ error: 'رقم الصفحة غير صالح' });
+  }
+  if (limit && limit !== '' && isNaN(parseInt(limit))) {
+    return res.status(400).json({ error: 'حد النتائج غير صالح' });
+  }
+  const dateErr = isDate(date_from, 'تاريخ البداية') || isDate(date_to, 'تاريخ النهاية');
+  if (dateErr) return res.status(400).json({ error: dateErr });
+  next();
+}
+
+module.exports = { required, isNumber, isPositive, isDate, isEnum, maxLength, check, validatePassword, validateQueryParams };
