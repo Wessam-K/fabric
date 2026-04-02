@@ -104,7 +104,10 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   hsts: { maxAge: 31536000, includeSubDomains: true },
 }));
-if (process.env.NODE_ENV !== 'test') app.use(morgan('short'));
+if (process.env.NODE_ENV !== 'test') {
+  morgan.token('request-id', (req) => req.requestId || '-');
+  app.use(morgan(':method :url :status :res[content-length] - :response-time ms [:request-id]'));
+}
 const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
   : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:9173', 'http://localhost:9174', `http://localhost:${PORT}`, 'app://.'];
