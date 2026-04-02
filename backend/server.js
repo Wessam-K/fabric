@@ -92,7 +92,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: isElectron
         ? ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
-        : (req, res) => ["'self'", `'nonce-${req.cspNonce}'`],
+        : ["'self'", (req, res) => `'nonce-${req.cspNonce}'`],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "blob:"],
       connectSrc: ["'self'", "ws:", "wss:"],
