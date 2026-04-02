@@ -7,8 +7,9 @@ const { generateNextNumber } = require('../utils/numberGenerator');
 // GET /api/samples
 router.get('/', requirePermission('samples', 'view'), (req, res) => {
   try {
-    const { status, customer_id, search, page = 1, limit = 25 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { status, customer_id, search, page = 1, limit: rawLimit = 25 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 25, 1), 500);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     let where = '1=1'; const params = [];
     if (status) { where += ' AND s.status=?'; params.push(status); }
     if (customer_id) { where += ' AND s.customer_id=?'; params.push(customer_id); }
@@ -17,9 +18,9 @@ router.get('/', requirePermission('samples', 'view'), (req, res) => {
     const total = db.prepare(`SELECT COUNT(*) as c FROM samples s WHERE ${where}`).get(...params).c;
     const rows = db.prepare(`SELECT s.*, c.name as customer_name, u.full_name as created_by_name
       FROM samples s LEFT JOIN customers c ON c.id=s.customer_id LEFT JOIN users u ON u.id=s.created_by
-      WHERE ${where} ORDER BY s.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
+      WHERE ${where} ORDER BY s.created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
 
-    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

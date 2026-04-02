@@ -30,8 +30,9 @@ const upload = multer({
 // GET /api/documents
 router.get('/', requirePermission('documents', 'view'), (req, res) => {
   try {
-    const { entity_type, entity_id, category, search, page = 1, limit = 25 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { entity_type, entity_id, category, search, page = 1, limit: rawLimit = 25 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 25, 1), 500);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     let where = 'd.deleted_at IS NULL'; const params = [];
     if (entity_type) { where += ' AND d.entity_type=?'; params.push(entity_type); }
     if (entity_id) { where += ' AND d.entity_id=?'; params.push(entity_id); }
@@ -41,9 +42,9 @@ router.get('/', requirePermission('documents', 'view'), (req, res) => {
     const total = db.prepare(`SELECT COUNT(*) as c FROM documents d WHERE ${where}`).get(...params).c;
     const rows = db.prepare(`SELECT d.*, u.full_name as uploaded_by_name
       FROM documents d LEFT JOIN users u ON u.id=d.uploaded_by
-      WHERE ${where} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
+      WHERE ${where} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
 
-    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

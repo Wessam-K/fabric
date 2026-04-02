@@ -57,7 +57,8 @@ router.get('/export', requirePermission('expenses', 'view'), (req, res) => {
 // ═══════════════════════════════════════════════
 router.get('/', requirePermission('expenses', 'view'), (req, res) => {
   try {
-    const { type, status, date_from, date_to, search, page = 1, limit = 50 } = req.query;
+    const { type, status, date_from, date_to, search, page = 1, limit: rawLimit = 50 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 50, 1), 500);
     let where = 'WHERE e.is_deleted = 0';
     const params = [];
     if (type) { where += ' AND e.expense_type = ?'; params.push(type); }
@@ -67,16 +68,16 @@ router.get('/', requirePermission('expenses', 'view'), (req, res) => {
     if (search) { where += ' AND (e.description LIKE ? OR e.expense_type LIKE ? OR e.notes LIKE ?)'; const s = `%${search}%`; params.push(s, s, s); }
 
     const total = db.prepare(`SELECT COUNT(*) as c FROM expenses e ${where}`).get(...params).c;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     const data = db.prepare(`
       SELECT e.*, u1.full_name as created_by_name, u2.full_name as approved_by_name
       FROM expenses e
       LEFT JOIN users u1 ON u1.id = e.created_by
       LEFT JOIN users u2 ON u2.id = e.approved_by
       ${where} ORDER BY e.expense_date DESC LIMIT ? OFFSET ?
-    `).all(...params, parseInt(limit), offset);
+    `).all(...params, limit, offset);
 
-    res.json({ data, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+    res.json({ data, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

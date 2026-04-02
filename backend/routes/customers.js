@@ -10,7 +10,8 @@ const { fireWebhook } = require('../utils/webhooks');
 // ═══════════════════════════════════════════════
 router.get('/', requirePermission('customers', 'view'), (req, res) => {
   try {
-    const { search, status, page = 1, limit = 50 } = req.query;
+    const { search, status, page = 1, limit: rawLimit = 50 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 50, 1), 500);
     let where = `WHERE 1=1`;
     const params = [];
     if (status) { where += ` AND status = ?`; params.push(status); }
@@ -20,8 +21,8 @@ router.get('/', requirePermission('customers', 'view'), (req, res) => {
       params.push(s, s, s);
     }
     const total = db.prepare(`SELECT COUNT(*) as c FROM customers ${where}`).get(...params).c;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-    const rows = db.prepare(`SELECT * FROM customers ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
+    const rows = db.prepare(`SELECT * FROM customers ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
     res.json({ customers: rows, total });
   } catch (err) {
     console.error('Customers list error:', err);

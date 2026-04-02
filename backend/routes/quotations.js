@@ -12,8 +12,9 @@ const { round2, safeMultiply, safeAdd, safeSubtract } = require('../utils/money'
 // GET /api/quotations
 router.get('/', requirePermission('quotations', 'view'), (req, res) => {
   try {
-    const { status, customer_id, search, page = 1, limit = 25 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { status, customer_id, search, page = 1, limit: rawLimit = 25 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 25, 1), 500);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     let where = '1=1'; const params = [];
     if (status) { where += ' AND q.status=?'; params.push(status); }
     if (customer_id) { where += ' AND q.customer_id=?'; params.push(customer_id); }
@@ -22,9 +23,9 @@ router.get('/', requirePermission('quotations', 'view'), (req, res) => {
     const total = db.prepare(`SELECT COUNT(*) as c FROM quotations q LEFT JOIN customers c ON c.id=q.customer_id WHERE ${where}`).get(...params).c;
     const rows = db.prepare(`SELECT q.*, c.name as customer_name, u.full_name as created_by_name
       FROM quotations q LEFT JOIN customers c ON c.id=q.customer_id LEFT JOIN users u ON u.id=q.created_by
-      WHERE ${where} ORDER BY q.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
+      WHERE ${where} ORDER BY q.created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
 
-    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -175,8 +176,9 @@ router.delete('/:id', requirePermission('quotations', 'delete'), (req, res) => {
 // GET /api/quotations/sales-orders
 router.get('/sales-orders/list', requirePermission('sales_orders', 'view'), (req, res) => {
   try {
-    const { status, customer_id, page = 1, limit = 25 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { status, customer_id, page = 1, limit: rawLimit = 25 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 25, 1), 500);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     let where = '1=1'; const params = [];
     if (status) { where += ' AND so.status=?'; params.push(status); }
     if (customer_id) { where += ' AND so.customer_id=?'; params.push(customer_id); }
@@ -184,9 +186,9 @@ router.get('/sales-orders/list', requirePermission('sales_orders', 'view'), (req
     const total = db.prepare(`SELECT COUNT(*) as c FROM sales_orders so WHERE ${where}`).get(...params).c;
     const rows = db.prepare(`SELECT so.*, c.name as customer_name
       FROM sales_orders so LEFT JOIN customers c ON c.id=so.customer_id
-      WHERE ${where} ORDER BY so.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
+      WHERE ${where} ORDER BY so.created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
 
-    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

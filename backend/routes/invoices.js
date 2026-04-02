@@ -9,7 +9,8 @@ const { round2, safeMultiply, safeAdd, safeSubtract } = require('../utils/money'
 // GET /api/invoices — list with search, status filter, date range
 router.get('/', requirePermission('invoices', 'view'), (req, res) => {
   try {
-    const { search, status, date_from, date_to, customer_id, page = 1, limit = 50 } = req.query;
+    const { search, status, date_from, date_to, customer_id, page = 1, limit: rawLimit = 50 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 50, 1), 500);
     let q = `SELECT i.*, c.name as customer_name_linked FROM invoices i LEFT JOIN customers c ON c.id=i.customer_id WHERE 1=1`;
     const p = [];
 
@@ -24,9 +25,9 @@ router.get('/', requirePermission('invoices', 'view'), (req, res) => {
     if (date_to) { q += ' AND i.created_at <= ?'; p.push(date_to + 'T23:59:59'); }
 
     q += ' ORDER BY created_at DESC';
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     q += ' LIMIT ? OFFSET ?';
-    p.push(parseInt(limit), offset);
+    p.push(limit, offset);
 
     const invoices = db.prepare(q).all(...p);
 

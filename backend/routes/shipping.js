@@ -7,7 +7,8 @@ const { generateNextNumber } = require('../utils/numberGenerator');
 // GET /api/shipping — list shipments
 router.get('/', requirePermission('shipping', 'view'), (req, res) => {
   try {
-    const { status, type, search, page = 1, limit = 50 } = req.query;
+    const { status, type, search, page = 1, limit: rawLimit = 50 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 50, 1), 500);
     let where = '1=1';
     const params = [];
     if (status) { where += ' AND s.status=?'; params.push(status); }
@@ -15,8 +16,8 @@ router.get('/', requirePermission('shipping', 'view'), (req, res) => {
     if (search) { where += ' AND (s.shipment_number LIKE ? OR s.tracking_number LIKE ? OR c.name LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
 
     const total = db.prepare(`SELECT COUNT(*) as c FROM shipments s LEFT JOIN customers c ON c.id=s.customer_id WHERE ${where}`).get(...params).c;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-    params.push(parseInt(limit), offset);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
+    params.push(limit, offset);
     const data = db.prepare(`
       SELECT s.*, c.name as customer_name, sup.name as supplier_name, wo.wo_number,
         (SELECT COUNT(*) FROM shipment_items WHERE shipment_id=s.id) as item_count

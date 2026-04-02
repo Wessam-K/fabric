@@ -225,9 +225,9 @@ router.get('/', requirePermission('reports', 'view'), (req, res) => {
     if (date_from) { q += ' AND cs.snapshot_date >= ?'; p.push(date_from); }
     if (date_to) { q += ' AND cs.snapshot_date <= ?'; p.push(date_to + 'T23:59:59'); }
     q += ' ORDER BY cs.snapshot_date DESC';
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * Math.min(Math.max(parseInt(limit) || 50, 1), 500);
     q += ` LIMIT ? OFFSET ?`;
-    p.push(parseInt(limit), offset);
+    p.push(Math.min(Math.max(parseInt(limit) || 50, 1), 500), offset);
     res.json(db.prepare(q).all(...p));
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

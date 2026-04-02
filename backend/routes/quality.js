@@ -120,8 +120,9 @@ router.post('/defect-codes', requirePermission('quality', 'create'), (req, res) 
 // GET /api/quality/inspections
 router.get('/inspections', requirePermission('quality', 'view'), (req, res) => {
   try {
-    const { status, work_order_id, page = 1, limit = 25 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { status, work_order_id, page = 1, limit: rawLimit = 25 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 25, 1), 500);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     let where = '1=1';
     const params = [];
     if (status) { where += ' AND qi.result=?'; params.push(status); }
@@ -133,9 +134,9 @@ router.get('/inspections', requirePermission('quality', 'view'), (req, res) => {
       LEFT JOIN work_orders wo ON wo.id=qi.work_order_id
       LEFT JOIN qc_templates qt ON qt.id=qi.template_id
       LEFT JOIN users u ON u.id=qi.inspector_id
-      WHERE ${where} ORDER BY qi.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
+      WHERE ${where} ORDER BY qi.created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
 
-    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -208,15 +209,16 @@ router.patch('/inspections/:id/complete', requirePermission('quality', 'edit'), 
 // GET /api/quality/ncr
 router.get('/ncr', requirePermission('quality', 'view'), (req, res) => {
   try {
-    const { status, page = 1, limit = 25 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { status, page = 1, limit: rawLimit = 25 } = req.query;
+    const limit = Math.min(Math.max(parseInt(rawLimit) || 25, 1), 500);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     let where = '1=1'; const params = [];
     if (status) { where += ' AND n.status=?'; params.push(status); }
     const total = db.prepare(`SELECT COUNT(*) as c FROM qc_ncr n WHERE ${where}`).get(...params).c;
     const rows = db.prepare(`SELECT n.*, wo.wo_number, u.full_name as created_by_name 
       FROM qc_ncr n LEFT JOIN work_orders wo ON wo.id=n.work_order_id LEFT JOIN users u ON u.id=n.created_by
-      WHERE ${where} ORDER BY n.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), offset);
-    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+      WHERE ${where} ORDER BY n.created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+    res.json({ data: rows, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
