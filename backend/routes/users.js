@@ -1,12 +1,30 @@
 ﻿const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 const inviteRouter = express.Router();
 const db = require('../database');
 const { requireRole, logAudit } = require('../middleware/auth');
 const { validatePassword } = require('../utils/validators');
 const { requireUserLimit } = require('../middleware/licenseGuard');
+
+// Avatar upload setup
+const avatarDir = path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), 'uploads', 'avatars');
+if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir, { recursive: true });
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, avatarDir),
+  filename: (req, file, cb) => {
+    const ext = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' }[file.mimetype] || '.jpg';
+    cb(null, `avatar-${req.params.id}-${Date.now()}${ext}`);
+  }
+});
+const avatarUpload = multer({ storage: avatarStorage, limits: { fileSize: 2 * 1024 * 1024 }, fileFilter: (req, file, cb) => {
+  if (/image\/(jpeg|jpg|png|webp)/.test(file.mimetype)) cb(null, true);
+  else cb(new Error('Only images allowed'));
+}});
 
 // ═══ Phase 2.1: User Invitations (MUST be before /:id routes) ═══
 
@@ -156,7 +174,7 @@ inviteRouter.post('/accept', (req, res) => {
 router.get('/', requireRole('superadmin'), (req, res) => {
   try {
     const users = db.prepare(`
-      SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at
+      SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, locked_until, failed_login_attempts
       FROM users ORDER BY created_at DESC
     `).all();
     res.json(users);
@@ -234,6 +252,100 @@ router.patch('/:id/reset-password', requireRole('superadmin'), (req, res) => {
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1, failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(hash, user.id);
     logAudit(req, 'UPDATE', 'user', user.id, user.full_name + ' (reset-password)');
     res.json({ message: 'تم إعادة تعيين كلمة المرور بنجاح' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/users/import — import users from CSV/XLSX (superadmin only)
+router.post('/import', requireRole('superadmin'), avatarUpload.single('file'), async (req, res) => {
+  try {
+    let rows = [];
+    if (req.body.users) {
+      rows = JSON.parse(req.body.users);
+    } else if (req.file) {
+      const ExcelJS = require('exceljs');
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.readFile(req.file.path);
+      const ws = wb.worksheets[0];
+      const headers = [];
+      ws.getRow(1).eachCell((cell, i) => { headers[i] = String(cell.value).trim().toLowerCase(); });
+      ws.eachRow((row, i) => {
+        if (i === 1) return;
+        const obj = {};
+        row.eachCell((cell, ci) => { if (headers[ci]) obj[headers[ci]] = String(cell.value || '').trim(); });
+        if (obj.username) rows.push(obj);
+      });
+      const fs = require('fs'); try { fs.unlinkSync(req.file.path); } catch {}
+    }
+    if (!rows.length) return res.status(400).json({ error: 'لا توجد بيانات للاستيراد' });
+    const created = [];
+    const errors = [];
+    for (const row of rows) {
+      const { username, full_name, email, role, department, password } = row;
+      if (!username || !full_name) { errors.push({ username, error: 'الاسم واسم المستخدم مطلوبين' }); continue; }
+      const exists = db.prepare('SELECT id FROM users WHERE username=?').get(username);
+      if (exists) { errors.push({ username, error: 'موجود مسبقاً' }); continue; }
+      const hash = bcrypt.hashSync(password || 'Change@123', 10);
+      const validRole = ROLES_LIST.includes(role) ? role : 'viewer';
+      db.prepare('INSERT INTO users (username, full_name, email, role, department, password_hash, must_change_password) VALUES (?,?,?,?,?,?,1)')
+        .run(username, full_name, email || '', validRole, department || '', hash);
+      created.push(username);
+    }
+    logAudit(req, 'IMPORT', 'user', null, `imported ${created.length} users`);
+    res.json({ created: created.length, errors });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+const ROLES_LIST = ['superadmin', 'manager', 'accountant', 'production', 'hr', 'viewer'];
+
+// POST /api/users/bulk — bulk operations (superadmin only)
+router.post('/bulk', requireRole('superadmin'), (req, res) => {
+  try {
+    const { ids, action, role } = req.body;
+    if (!Array.isArray(ids) || !ids.length || !action) return res.status(400).json({ error: 'بيانات غير صالحة' });
+    const validActions = ['activate', 'deactivate', 'change_role'];
+    if (!validActions.includes(action)) return res.status(400).json({ error: 'عملية غير صالحة' });
+    // Prevent self-deactivation
+    if (action === 'deactivate' && ids.includes(req.user.id)) return res.status(400).json({ error: 'لا يمكنك تعطيل حسابك' });
+    const placeholders = ids.map(() => '?').join(',');
+    if (action === 'activate') {
+      db.prepare(`UPDATE users SET status='active' WHERE id IN (${placeholders})`).run(...ids);
+    } else if (action === 'deactivate') {
+      db.prepare(`UPDATE users SET status='inactive' WHERE id IN (${placeholders})`).run(...ids);
+    } else if (action === 'change_role') {
+      if (!role) return res.status(400).json({ error: 'الدور مطلوب' });
+      db.prepare(`UPDATE users SET role=? WHERE id IN (${placeholders})`).run(role, ...ids);
+    }
+    logAudit(req, 'BULK_UPDATE', 'user', null, `${action} ${ids.length} users`);
+    res.json({ success: true, count: ids.length });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/users/:id/avatar — upload avatar image
+router.post('/:id/avatar', avatarUpload.single('avatar'), (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    if (req.user.id !== userId && req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+    if (!req.file) return res.status(400).json({ error: 'يرجى اختيار صورة' });
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    // Remove old avatar file if exists
+    const old = db.prepare('SELECT avatar_url FROM users WHERE id=?').get(userId);
+    if (old?.avatar_url) {
+      const oldPath = path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), old.avatar_url);
+      try { fs.unlinkSync(oldPath); } catch {}
+    }
+    db.prepare('UPDATE users SET avatar_url=? WHERE id=?').run(avatarUrl, userId);
+    res.json({ avatar_url: avatarUrl });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/users/:id/unlock — unlock a locked account (superadmin only)
+router.post('/:id/unlock', requireRole('superadmin'), (req, res) => {
+  try {
+    const user = db.prepare('SELECT id, full_name, locked_until FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+    db.prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
+    logAudit(req, 'UPDATE', 'user', user.id, user.full_name + ' (unlock)');
+    res.json({ message: 'تم فك قفل الحساب بنجاح' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

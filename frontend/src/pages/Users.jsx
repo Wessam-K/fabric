@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Plus, Search, Edit2, Key, X, UserX, Check, Lock, Eye } from 'lucide-react';
+import { Shield, Plus, Search, Edit2, Key, X, UserX, Check, Lock, Eye, Unlock, CheckSquare } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
@@ -52,6 +52,7 @@ export default function UsersPage() {
   const [userPermsTarget, setUserPermsTarget] = useState(null); // user for override editor
   const [userOverrides, setUserOverrides] = useState({});
   const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState(new Set());
 
   useEffect(() => { load(); loadPermissions(); }, []);
 
@@ -107,6 +108,32 @@ export default function UsersPage() {
     if (!ok) return;
     try { await api.delete(`/users/${u.id}`); load(); } catch (err) { toast.error(err.response?.data?.error || 'حدث خطأ'); }
   }
+
+  async function handleUnlock(u) {
+    try { await api.post(`/users/${u.id}/unlock`); toast.success('تم فك قفل الحساب'); load(); } catch (err) { toast.error(err.response?.data?.error || 'حدث خطأ'); }
+  }
+
+  async function handleBulkAction(action) {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const labels = { activate: 'تفعيل', deactivate: 'تعطيل', change_role: 'تغيير الدور' };
+    if (action === 'change_role') {
+      const role = prompt('اختر الدور الجديد:\nsuperadmin, manager, accountant, production, hr, viewer');
+      if (!role || !ROLES.find(r => r.value === role)) return;
+      const ok = await confirm({ title: 'تغيير الدور', message: `تغيير دور ${ids.length} مستخدم إلى ${ROLES.find(r => r.value === role)?.label}؟` });
+      if (!ok) return;
+      try { await api.post('/users/bulk', { ids, action, role }); toast.success('تم التحديث'); setSelected(new Set()); load(); }
+      catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
+    } else {
+      const ok = await confirm({ title: labels[action], message: `${labels[action]} ${ids.length} مستخدم؟`, variant: action === 'deactivate' ? 'danger' : 'default' });
+      if (!ok) return;
+      try { await api.post('/users/bulk', { ids, action }); toast.success('تم التحديث'); setSelected(new Set()); load(); }
+      catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
+    }
+  }
+
+  function toggleSelect(id) { setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; }); }
+  function toggleSelectAll() { selected.size === filtered.length ? setSelected(new Set()) : setSelected(new Set(filtered.map(u => u.id))); }
 
   // Start editing role permissions
   function startRoleEdit(roleName) {
@@ -242,11 +269,23 @@ export default function UsersPage() {
               className="w-full pr-10 pl-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#c9a84c]/30 focus:border-[#c9a84c] bg-white" />
           </div>
 
+          {/* Bulk Actions Bar */}
+          {selected.size > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+              <span className="text-sm font-medium text-blue-700">{selected.size} محدد</span>
+              <button onClick={() => handleBulkAction('activate')} className="btn btn-sm bg-emerald-100 text-emerald-700 hover:bg-emerald-200">تفعيل</button>
+              <button onClick={() => handleBulkAction('deactivate')} className="btn btn-sm bg-red-100 text-red-700 hover:bg-red-200">تعطيل</button>
+              <button onClick={() => handleBulkAction('change_role')} className="btn btn-sm bg-amber-100 text-amber-700 hover:bg-amber-200">تغيير الدور</button>
+              <button onClick={() => setSelected(new Set())} className="mr-auto text-xs text-gray-500 hover:text-gray-700">إلغاء التحديد</button>
+            </div>
+          )}
+
           {/* Table */}
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-gray-50/80">
                 <tr>
+                  <th className="px-3 py-3 w-10"><input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0} onChange={toggleSelectAll} className="rounded" /></th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-700">المستخدم</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-700">الدور</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-700">القسم</th>
@@ -257,7 +296,8 @@ export default function UsersPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.map(u => (
-                  <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
+                  <tr key={u.id} className={`hover:bg-gray-50/50 transition-colors ${selected.has(u.id) ? 'bg-blue-50/30' : ''}`}>
+                    <td className="px-3 py-3"><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggleSelect(u.id)} className="rounded" /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-[#1a1a2e] flex items-center justify-center text-[#c9a84c] font-bold text-sm">
@@ -280,19 +320,25 @@ export default function UsersPage() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
                         {u.status === 'active' ? 'نشط' : 'معطل'}
                       </span>
+                      {u.locked_until && new Date(u.locked_until) > new Date() && (
+                        <span className="mr-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700">مقفل</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="تعديل"><Edit2 size={14} className="text-gray-500" /></button>
                         <button onClick={() => openUserPerms(u)} className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title="صلاحيات خاصة"><Lock size={14} className="text-blue-500" /></button>
                         <button onClick={() => setResetPass({ show: true, userId: u.id, password: '' })} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="إعادة تعيين كلمة المرور"><Key size={14} className="text-gray-500" /></button>
+                        {u.locked_until && new Date(u.locked_until) > new Date() && (
+                          <button onClick={() => handleUnlock(u)} className="p-1.5 hover:bg-orange-50 rounded-lg transition-colors" title="فك القفل"><Unlock size={14} className="text-orange-500" /></button>
+                        )}
                         <button onClick={() => handleDeactivate(u)} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title="تعطيل"><UserX size={14} className="text-red-400" /></button>
                       </div>
                     </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400">لا يوجد مستخدمين</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">لا يوجد مستخدمين</td></tr>
                 )}
               </tbody>
             </table>

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
-import { User, Mail, Building, Clock, Shield, Key, CalendarDays, Monitor, Trash2, LogOut } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { User, Mail, Building, Clock, Shield, Key, CalendarDays, Monitor, Trash2, LogOut, Camera } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, LoadingState } from '../components/ui';
+import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
 
 const ACTION_LABELS = {
@@ -17,6 +18,8 @@ const ACTION_LABELS = {
 export default function Profile() {
   const { ROLE_LABELS, ROLE_COLORS } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
+  const avatarRef = useRef(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState([]);
@@ -51,8 +54,28 @@ export default function Profile() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User Card */}
         <div className="bg-white rounded-2xl shadow-sm p-6 text-center">
-          <div className="w-20 h-20 rounded-full bg-[#1a1a2e] flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl font-bold text-[#c9a84c]">{profile.full_name?.charAt(0)}</span>
+          <div className="relative w-20 h-20 mx-auto mb-4 group cursor-pointer" onClick={() => avatarRef.current?.click()}>
+            {profile.avatar_url ? (
+              <img src={profile.avatar_url} alt="" className="w-20 h-20 rounded-full object-cover" />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-[#1a1a2e] flex items-center justify-center">
+                <span className="text-2xl font-bold text-[#c9a84c]">{profile.full_name?.charAt(0)}</span>
+              </div>
+            )}
+            <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Camera size={20} className="text-white" />
+            </div>
+            <input ref={avatarRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const fd = new FormData();
+              fd.append('avatar', file);
+              try {
+                const { data } = await api.post(`/users/${profile.id}/avatar`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+                setProfile(p => ({ ...p, avatar_url: data.avatar_url }));
+                toast.success('تم تحديث الصورة');
+              } catch { toast.error('فشل رفع الصورة'); }
+            }} />
           </div>
           <h2 className="text-lg font-bold text-[#1a1a2e]">{profile.full_name}</h2>
           <p className="text-xs text-gray-400 font-mono">@{profile.username}</p>

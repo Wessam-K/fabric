@@ -252,4 +252,23 @@ router.post('/:id/receipt', requirePermission('expenses', 'edit'), receiptUpload
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// GET /api/expenses/deleted — list soft-deleted expenses (admin)
+router.get('/deleted', requirePermission('expenses', 'delete'), (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM expenses WHERE is_deleted=1 ORDER BY updated_at DESC').all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/expenses/:id/restore — restore soft-deleted expense
+router.post('/:id/restore', requirePermission('expenses', 'delete'), (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM expenses WHERE id=? AND is_deleted=1').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'المصروف غير موجود في المحذوفات' });
+    db.prepare('UPDATE expenses SET is_deleted=0 WHERE id=?').run(req.params.id);
+    logAudit(req, 'RESTORE', 'expenses', row.id, row.description);
+    res.json({ message: 'تم استعادة المصروف بنجاح' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 module.exports = router;

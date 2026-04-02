@@ -117,14 +117,33 @@ router.post('/:id/convert-to-wo', requirePermission('work_orders', 'create'), (r
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
-// DELETE /api/samples/:id
+// DELETE /api/samples/:id — soft delete
 router.delete('/:id', requirePermission('samples', 'delete'), (req, res) => {
   try {
-    const sample = db.prepare('SELECT id FROM samples WHERE id=?').get(req.params.id);
+    const sample = db.prepare('SELECT id, sample_number FROM samples WHERE id=? AND (is_deleted=0 OR is_deleted IS NULL)').get(req.params.id);
     if (!sample) return res.status(404).json({ error: 'العينة غير موجودة' });
-    db.prepare('DELETE FROM samples WHERE id=?').run(req.params.id);
-    logAudit(req, 'DELETE', 'sample', req.params.id);
+    db.prepare("UPDATE samples SET is_deleted=1, deleted_at=datetime('now'), deleted_by=? WHERE id=?").run(req.user.id, req.params.id);
+    logAudit(req, 'DELETE', 'sample', req.params.id, sample.sample_number);
     res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// GET /api/samples/deleted — list soft-deleted samples
+router.get('/deleted', requirePermission('samples', 'delete'), (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM samples WHERE is_deleted=1 ORDER BY deleted_at DESC').all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/samples/:id/restore
+router.post('/:id/restore', requirePermission('samples', 'delete'), (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM samples WHERE id=? AND is_deleted=1').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'العينة غير موجودة في المحذوفات' });
+    db.prepare('UPDATE samples SET is_deleted=0, deleted_at=NULL, deleted_by=NULL WHERE id=?').run(req.params.id);
+    logAudit(req, 'RESTORE', 'sample', row.id, row.sample_number);
+    res.json({ message: 'تم استعادة العينة بنجاح' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

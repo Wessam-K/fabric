@@ -36,6 +36,21 @@ try {
   logger.error('Migration failed', { error: err.message });
 }
 
+// Phase 9.1: Environment validation — warn about missing/insecure settings
+{
+  const warnings = [];
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev-secret-change-me') warnings.push('JWT_SECRET is not set or using default — set a strong secret for production');
+  if (!process.env.SMTP_HOST) warnings.push('SMTP_HOST not configured — email features (password reset, invitations) will be disabled');
+  if (!process.env.SENTRY_DSN) warnings.push('SENTRY_DSN not set — error tracking is disabled');
+  if (process.env.NODE_ENV !== 'production') warnings.push('NODE_ENV is not "production" — performance optimizations are disabled');
+  if (!process.env.BACKUP_DIR) warnings.push('BACKUP_DIR not set — backups will use default location');
+  if (process.env.CORS_ORIGIN === '*') warnings.push('CORS_ORIGIN is set to * — restrict to your domain in production');
+  if (warnings.length) {
+    logger.warn('Production environment warnings', { count: warnings.length });
+    warnings.forEach(w => logger.warn(`  ⚠ ${w}`));
+  }
+}
+
 // Phase 5.1: Initialize license manager
 const licenseManager = new LicenseManager(db);
 const authRouter = require('./routes/auth');
@@ -72,6 +87,7 @@ const documentsRouter = require('./routes/documents');
 const backupsRouter = require('./routes/backups');
 const autojournalRouter = require('./routes/autojournal');
 const exportsRouter = require('./routes/exports');
+const reportSchedulesRouter = require('./routes/report-schedules');
 
 const app = express();
 const PORT = process.env.PORT || 9002;
@@ -482,7 +498,7 @@ app.post('/api/setup/create-admin', (req, res) => {
 const { requireFeature, requireTier } = require('./middleware/licenseGuard');
 
 // Phase 3.6: Webhook management endpoints (superadmin only, requires professional+)
-const { createWebhook, listWebhooks, deleteWebhook, getWebhookLogs } = require('./utils/webhooks');
+const { createWebhook, updateWebhook, listWebhooks, deleteWebhook, getWebhookLogs } = require('./utils/webhooks');
 app.get('/api/webhooks', requireAuth, (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
   res.json(listWebhooks());
@@ -493,6 +509,12 @@ app.post('/api/webhooks', requireAuth, requireFeature('webhooks'), (req, res) =>
   if (!name || !url || !events?.length) return res.status(400).json({ error: 'الاسم والرابط والأحداث مطلوبة' });
   const id = createWebhook(name, url, events, secret, req.user.id);
   res.status(201).json({ id });
+});
+app.put('/api/webhooks/:id', requireAuth, (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
+  const result = updateWebhook(parseInt(req.params.id), req.body);
+  if (!result) return res.status(404).json({ error: 'غير موجود' });
+  res.json({ success: true });
 });
 app.get('/api/webhooks/:id/logs', requireAuth, (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
@@ -541,6 +563,7 @@ apiRouter.use('/documents', documentsRouter);
 apiRouter.use('/backups', backupsRouter);
 apiRouter.use('/auto-journal', autojournalRouter);
 apiRouter.use('/exports', exportsRouter);
+apiRouter.use('/report-schedules', reportSchedulesRouter);
 
 // Public invite endpoints (no auth required — must be before requireAuth router)
 app.use('/api/users/invite', require('./routes/users').inviteRouter || express.Router());

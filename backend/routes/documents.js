@@ -232,4 +232,23 @@ router.get('/template/payslip/:periodId/:employeeId', requirePermission('hr', 'v
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// GET /api/documents/deleted — list soft-deleted documents
+router.get('/deleted', requirePermission('documents', 'delete'), (req, res) => {
+  try {
+    const rows = db.prepare("SELECT * FROM documents WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/documents/:id/restore
+router.post('/:id/restore', requirePermission('documents', 'delete'), (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM documents WHERE id=? AND deleted_at IS NOT NULL').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'المستند غير موجود في المحذوفات' });
+    db.prepare('UPDATE documents SET deleted_at=NULL WHERE id=?').run(req.params.id);
+    logAudit(req, 'RESTORE', 'documents', row.id, row.title || row.file_name);
+    res.json({ message: 'تم استعادة المستند بنجاح' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 module.exports = router;

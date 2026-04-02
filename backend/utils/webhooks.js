@@ -171,8 +171,17 @@ function deleteWebhook(id) {
   return db.prepare('DELETE FROM webhooks WHERE id=?').run(id);
 }
 
+function updateWebhook(id, { name, url, events, secret, status }) {
+  const existing = db.prepare('SELECT * FROM webhooks WHERE id=?').get(id);
+  if (!existing) return null;
+  const encryptedSecret = secret ? encryptSecret(secret) : existing.secret;
+  db.prepare('UPDATE webhooks SET name=?, url=?, events=?, secret=?, status=? WHERE id=?')
+    .run(name || existing.name, url || existing.url, JSON.stringify(events || JSON.parse(existing.events)), encryptedSecret, status || existing.status, id);
+  return true;
+}
+
 function getWebhookLogs(webhookId, limit = 50) {
   return db.prepare('SELECT * FROM webhook_logs WHERE webhook_id=? ORDER BY created_at DESC LIMIT ?').all(webhookId, limit);
 }
 
-module.exports = { fireWebhook, createWebhook, listWebhooks, deleteWebhook, getWebhookLogs };
+module.exports = { fireWebhook, createWebhook, updateWebhook, listWebhooks, deleteWebhook, getWebhookLogs };

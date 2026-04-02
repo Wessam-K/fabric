@@ -212,4 +212,23 @@ router.post('/import', requirePermission('maintenance', 'create'), (req, res) =>
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// GET /api/maintenance/deleted — list soft-deleted maintenance orders
+router.get('/deleted', requirePermission('maintenance', 'delete'), (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM maintenance_orders WHERE is_deleted=1 ORDER BY updated_at DESC').all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// POST /api/maintenance/:id/restore
+router.post('/:id/restore', requirePermission('maintenance', 'delete'), (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM maintenance_orders WHERE id=? AND is_deleted=1').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'العنصر غير موجود في المحذوفات' });
+    db.prepare('UPDATE maintenance_orders SET is_deleted=0 WHERE id=?').run(req.params.id);
+    logAudit(req, 'RESTORE', 'maintenance_orders', row.id, row.title || row.id);
+    res.json({ message: 'تم استعادة العنصر بنجاح' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 module.exports = router;

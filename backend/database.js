@@ -2757,6 +2757,85 @@ function runMigrations() {
     }
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (43)`);
   }
+
+  // ═══ V44: FTS5 full-text search + additional indexes ═══
+  if (currentVersion < 44) {
+    try { db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS customers_fts USING fts5(name, phone, email, address, content='customers', content_rowid='id')`); } catch {}
+    try { db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS work_orders_fts USING fts5(wo_number, notes, content='work_orders', content_rowid='id')`); } catch {}
+
+    // Populate FTS from existing data
+    try { db.exec("INSERT OR IGNORE INTO customers_fts(rowid, name, phone, email, address) SELECT id, COALESCE(name,''), COALESCE(phone,''), COALESCE(email,''), COALESCE(address,'') FROM customers"); } catch {}
+    try { db.exec("INSERT OR IGNORE INTO work_orders_fts(rowid, wo_number, notes) SELECT id, COALESCE(wo_number,''), COALESCE(notes,'') FROM work_orders"); } catch {}
+
+    // FTS sync triggers — drop old triggers first in case column names changed
+    try { db.exec('DROP TRIGGER IF EXISTS work_orders_fts_ai'); } catch {}
+    try { db.exec('DROP TRIGGER IF EXISTS work_orders_fts_ad'); } catch {}
+    try { db.exec('DROP TRIGGER IF EXISTS work_orders_fts_au'); } catch {}
+    // Recreate the FTS table with correct column names
+    try { db.exec('DROP TABLE IF EXISTS work_orders_fts'); } catch {}
+    try { db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS work_orders_fts USING fts5(wo_number, notes, content='work_orders', content_rowid='id')`); } catch {}
+    try { db.exec("INSERT OR IGNORE INTO work_orders_fts(rowid, wo_number, notes) SELECT id, COALESCE(wo_number,''), COALESCE(notes,'') FROM work_orders"); } catch {}
+
+    try { db.exec(`CREATE TRIGGER IF NOT EXISTS work_orders_fts_ai AFTER INSERT ON work_orders BEGIN INSERT INTO work_orders_fts(rowid, wo_number, notes) VALUES (new.id, COALESCE(new.wo_number,''), COALESCE(new.notes,'')); END`); } catch {}
+    try { db.exec(`CREATE TRIGGER IF NOT EXISTS work_orders_fts_ad AFTER DELETE ON work_orders BEGIN INSERT INTO work_orders_fts(work_orders_fts, rowid, wo_number, notes) VALUES ('delete', old.id, COALESCE(old.wo_number,''), COALESCE(old.notes,'')); END`); } catch {}
+    try { db.exec(`CREATE TRIGGER IF NOT EXISTS work_orders_fts_au AFTER UPDATE ON work_orders BEGIN INSERT INTO work_orders_fts(work_orders_fts, rowid, wo_number, notes) VALUES ('delete', old.id, COALESCE(old.wo_number,''), COALESCE(old.notes,'')); INSERT INTO work_orders_fts(rowid, wo_number, notes) VALUES (new.id, COALESCE(new.wo_number,''), COALESCE(new.notes,'')); END`); } catch {}
+
+    // Additional performance indexes
+    const v44indexes = [
+      'CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id)',
+      'CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read)',
+      'CREATE INDEX IF NOT EXISTS idx_invoices_customer ON invoices(customer_id)',
+      'CREATE INDEX IF NOT EXISTS idx_work_orders_customer ON work_orders(customer_id)',
+      'CREATE INDEX IF NOT EXISTS idx_work_orders_created ON work_orders(created_at)',
+    ];
+    for (const sql of v44indexes) { try { db.exec(sql); } catch {} }
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (44)`);
+  }
+
+  // ═══ V45: Scheduled reports table ═══
+  if (currentVersion < 45) {
+    db.exec(`CREATE TABLE IF NOT EXISTS report_schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      report_type TEXT NOT NULL,
+      frequency TEXT NOT NULL DEFAULT 'weekly' CHECK(frequency IN ('daily','weekly','monthly')),
+      day_of_week INTEGER DEFAULT 0,
+      day_of_month INTEGER DEFAULT 1,
+      hour INTEGER DEFAULT 8,
+      recipients TEXT NOT NULL DEFAULT '[]',
+      filters TEXT DEFAULT '{}',
+      format TEXT DEFAULT 'xlsx' CHECK(format IN ('xlsx','csv')),
+      enabled INTEGER DEFAULT 1,
+      last_run_at TEXT,
+      next_run_at TEXT,
+      created_by INTEGER,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )`);
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (45)`);
+  }
+
+  // ═══ V46: Avatar column on users ═══
+  if (currentVersion < 46) {
+    try { db.exec(`ALTER TABLE users ADD COLUMN avatar_url TEXT`); } catch {}
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (46)`);
+  }
+
+  // ═══ V47: Fix work_orders_fts column name (wo_number not order_number) ═══
+  if (currentVersion < 47) {
+    try { db.exec('DROP TRIGGER IF EXISTS work_orders_fts_ai'); } catch {}
+    try { db.exec('DROP TRIGGER IF EXISTS work_orders_fts_ad'); } catch {}
+    try { db.exec('DROP TRIGGER IF EXISTS work_orders_fts_au'); } catch {}
+    try { db.exec('DROP TABLE IF EXISTS work_orders_fts'); } catch {}
+    try { db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS work_orders_fts USING fts5(wo_number, notes, content='work_orders', content_rowid='id')`); } catch {}
+    try { db.exec("INSERT INTO work_orders_fts(rowid, wo_number, notes) SELECT id, COALESCE(wo_number,''), COALESCE(notes,'') FROM work_orders"); } catch {}
+    try { db.exec(`CREATE TRIGGER work_orders_fts_ai AFTER INSERT ON work_orders BEGIN INSERT INTO work_orders_fts(rowid, wo_number, notes) VALUES (new.id, COALESCE(new.wo_number,''), COALESCE(new.notes,'')); END`); } catch {}
+    try { db.exec(`CREATE TRIGGER work_orders_fts_ad AFTER DELETE ON work_orders BEGIN INSERT INTO work_orders_fts(work_orders_fts, rowid, wo_number, notes) VALUES ('delete', old.id, COALESCE(old.wo_number,''), COALESCE(old.notes,'')); END`); } catch {}
+    try { db.exec(`CREATE TRIGGER work_orders_fts_au AFTER UPDATE ON work_orders BEGIN INSERT INTO work_orders_fts(work_orders_fts, rowid, wo_number, notes) VALUES ('delete', old.id, COALESCE(old.wo_number,''), COALESCE(old.notes,'')); INSERT INTO work_orders_fts(rowid, wo_number, notes) VALUES (new.id, COALESCE(new.wo_number,''), COALESCE(new.notes,'')); END`); } catch {}
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (47)`);
+  }
 }
 
 initializeDatabase();

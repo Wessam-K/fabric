@@ -63,6 +63,8 @@ const Samples = lazy(() => import('./pages/Samples'));
 const Returns = lazy(() => import('./pages/Returns'));
 const Documents = lazy(() => import('./pages/Documents'));
 const Backups = lazy(() => import('./pages/Backups'));
+const Webhooks = lazy(() => import('./pages/Webhooks'));
+const ReportSchedules = lazy(() => import('./pages/ReportSchedules'));
 const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 const AcceptInvite = lazy(() => import('./pages/AcceptInvite'));
 import QuickActions from './components/QuickActions';
@@ -275,6 +277,8 @@ function AppLayout() {
         { path: '/notifications', label: 'الإشعارات', icon: Bell, hide: () => false },
         { path: '/documents', label: 'المستندات', icon: FolderOpen, hide: () => !can('documents', 'view') },
         { path: '/backups', label: 'النسخ الاحتياطية', icon: Database, hide: () => !can('backups', 'view') },
+        { path: '/webhooks', label: 'الويب هوكس', icon: Send, hide: () => user?.role !== 'superadmin' },
+        { path: '/report-schedules', label: 'التقارير المجدولة', icon: CalendarClock, hide: () => !can('reports', 'view') },
         { path: '/settings', label: 'الإعدادات', icon: Settings, hide: () => !can('settings', 'view') },
       ],
     },
@@ -477,6 +481,8 @@ function AppLayout() {
           <Route path="/returns" element={<ProtectedRoute perm={['returns','view']}><Returns /></ProtectedRoute>} />
           <Route path="/documents" element={<ProtectedRoute perm={['documents','view']}><Documents /></ProtectedRoute>} />
           <Route path="/backups" element={<ProtectedRoute perm={['backups','view']}><Backups /></ProtectedRoute>} />
+          <Route path="/webhooks" element={<ProtectedRoute perm={['settings','view']}><Webhooks /></ProtectedRoute>} />
+          <Route path="/report-schedules" element={<ProtectedRoute perm={['reports','view']}><ReportSchedules /></ProtectedRoute>} />
           <Route path="/knowledge-base" element={<KnowledgeBase />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/change-password" element={<ChangePassword />} />
