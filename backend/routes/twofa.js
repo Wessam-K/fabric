@@ -13,8 +13,8 @@ try {
   const otplib = require('otplib');
   authenticator = otplib.authenticator;
   totp = otplib.totp;
-} catch {
-  // otplib not installed — 2FA endpoints will return 501
+} catch (e) {
+  console.error('FATAL: otplib not available — 2FA will be disabled:', e.message);
 }
 
 let QRCode;

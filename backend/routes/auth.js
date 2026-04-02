@@ -53,7 +53,10 @@ router.post('/login', (req, res) => {
       try {
         const { authenticator } = require('otplib');
         totpValid = authenticator.check(totp_code, user.totp_secret);
-      } catch { /* otplib not installed — skip */ }
+      } catch (e) {
+        logger.error('otplib not available for 2FA verification', { error: e.message });
+        return res.status(500).json({ error: 'خطأ في نظام المصادقة الثنائية' });
+      }
       if (!totpValid) {
         // Check backup codes
         const backups = JSON.parse(user.totp_backup_codes || '[]');
