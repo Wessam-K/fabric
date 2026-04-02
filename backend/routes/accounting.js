@@ -66,7 +66,7 @@ router.get('/journal', requirePermission('accounting', 'view'), (req, res) => {
     if (from) { sql += ' AND je.entry_date >= ?'; params.push(from); }
     if (to) { sql += ' AND je.entry_date <= ?'; params.push(to); }
 
-    const countSql = sql.replace(/SELECT je\.\*.*?FROM/, 'SELECT COUNT(*) as c FROM');
+    const countSql = sql.replace(/SELECT je\.\*.*?FROM/, 'SELECT COUNT(DISTINCT je.id) as c FROM');
     const total = db.prepare(countSql).get(...params)?.c || 0;
 
     sql += ' ORDER BY je.entry_date DESC, je.id DESC';
