@@ -76,11 +76,23 @@ const exportsRouter = require('./routes/exports');
 const app = express();
 const PORT = process.env.PORT || 9002;
 
+const isElectron = process.env.ELECTRON_APP === '1';
+
+app.use((req, res, next) => {
+  if (!isElectron) {
+    // Generate per-request nonce for CSP
+    req.cspNonce = crypto.randomBytes(16).toString('base64');
+  }
+  next();
+});
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      scriptSrc: isElectron
+        ? ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
+        : (req, res) => ["'self'", `'nonce-${req.cspNonce}'`],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "blob:"],
       connectSrc: ["'self'", "ws:", "wss:"],
@@ -948,6 +960,13 @@ if (fs.existsSync(frontendDist)) {
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
       return next();
+    }
+    // Inject CSP nonce into script tags for non-Electron deployments
+    if (req.cspNonce) {
+      const indexPath = path.join(frontendDist, 'index.html');
+      let html = fs.readFileSync(indexPath, 'utf8');
+      html = html.replace(/<script/g, `<script nonce="${req.cspNonce}"`);
+      return res.send(html);
     }
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
