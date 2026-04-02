@@ -7,6 +7,43 @@ const crypto = require('crypto');
 const db = require('../database');
 const logger = require('./logger');
 
+// ── AES-256-GCM helpers for webhook secret encryption ──
+function _getEncryptionKey() {
+  const { JWT_SECRET } = require('../middleware/auth');
+  return crypto.createHash('sha256').update(JWT_SECRET).digest();
+}
+
+function encryptSecret(secret) {
+  if (!secret) return null;
+  const key = _getEncryptionKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  let encrypted = cipher.update(secret, 'utf8', 'base64');
+  encrypted += cipher.final('base64');
+  const authTag = cipher.getAuthTag().toString('base64');
+  return `${iv.toString('base64')}:${authTag}:${encrypted}`;
+}
+
+function decryptSecret(stored) {
+  if (!stored) return null;
+  // Plaintext secrets don't contain ':' — return as-is for backward compat
+  if (!stored.includes(':')) return stored;
+  try {
+    const [ivB64, tagB64, dataB64] = stored.split(':');
+    const key = _getEncryptionKey();
+    const iv = Buffer.from(ivB64, 'base64');
+    const authTag = Buffer.from(tagB64, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+    let decrypted = decipher.update(dataB64, 'base64', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch {
+    // If decryption fails, assume plaintext (migration not yet run)
+    return stored;
+  }
+}
+
 // Retry config: max 3 attempts with exponential backoff
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000; // 1s, 2s, 4s
@@ -92,7 +129,8 @@ async function fireWebhook(event, payload) {
 
       // HMAC signing if secret is set
       if (hook.secret) {
-        const sig = crypto.createHmac('sha256', hook.secret).update(body).digest('hex');
+        const plainSecret = decryptSecret(hook.secret);
+        const sig = crypto.createHmac('sha256', plainSecret).update(body).digest('hex');
         headers['X-Webhook-Signature'] = `sha256=${sig}`;
       }
 
@@ -118,8 +156,9 @@ async function fireWebhook(event, payload) {
  * CRUD helpers for webhook management
  */
 function createWebhook(name, url, events, secret, createdBy) {
+  const encryptedSecret = encryptSecret(secret);
   const result = db.prepare('INSERT INTO webhooks (name, url, events, secret, created_by) VALUES (?,?,?,?,?)')
-    .run(name, url, JSON.stringify(events), secret || null, createdBy);
+    .run(name, url, JSON.stringify(events), encryptedSecret, createdBy);
   return result.lastInsertRowid;
 }
 
