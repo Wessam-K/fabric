@@ -141,6 +141,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// ═══ Response caching — safe Cache-Control for GET endpoints ═══
+app.use((req, res, next) => {
+  if (req.method === 'GET') {
+    // Default short cache (private, 60s) — individual routes can override
+    res.setHeader('Cache-Control', 'private, max-age=60');
+  } else {
+    res.setHeader('Cache-Control', 'no-store');
+  }
+  next();
+});
+
 // ═══ D4: Input field length limits — prevent excessively long text fields ═══
 const MAX_FIELD_LENGTH = 10000;
 app.use((req, res, next) => {
@@ -247,6 +258,7 @@ app.use('/api', contentTypeEnforcement);
 
 // ═══ Health check (public, no auth) ═══
 app.get('/api/health', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
   let dbStatus = 'ok';
   try {
     db.prepare('SELECT 1').get();
@@ -256,6 +268,7 @@ app.get('/api/health', (req, res) => {
 
 // ═══ Readiness check (public, no auth) ═══
 app.get('/api/readiness', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
   const checks = { database: false, tables: false };
   try {
     db.prepare('SELECT 1').get();
