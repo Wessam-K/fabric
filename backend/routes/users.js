@@ -33,8 +33,14 @@ router.post('/invite', requireRole('superadmin'), (req, res) => {
     }
 
     logAudit(req, 'INVITE', 'user', null, email);
+
+    // Send invitation email (falls back to logger if SMTP not configured)
+    const mailer = require('../utils/mailer');
+    mailer.sendInvitation(email, rawToken, role || 'viewer').catch(() => {});
+
     const response = { message: 'تم إرسال الدعوة بنجاح', email };
-    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+    // Expose token only in automated test mode (never in dev/production)
+    if (process.env.NODE_ENV === 'test') {
       response.invite_token = rawToken;
     }
     res.status(201).json(response);

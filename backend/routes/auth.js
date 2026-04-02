@@ -202,14 +202,18 @@ router.post('/forgot-password', (req, res) => {
       return res.json({ message: 'إذا كان الحساب موجودًا، سيتم إرسال رابط إعادة التعيين' });
     }
 
-    // In production, send email with reset link containing rawToken
-    // For now, log it and return token in dev mode
-    const logger = require('../utils/logger');
-    logger.info('Password reset token generated', { userId: user.id });
+    // Send reset email (falls back to logger if SMTP not configured)
+    const mailer = require('../utils/mailer');
+    if (user.email) {
+      mailer.sendPasswordReset(user.email, rawToken).catch(() => {});
+    } else {
+      logger.info('Password reset token generated (no email on file)', { userId: user.id });
+    }
 
     const response = { message: 'إذا كان الحساب موجودًا، سيتم إرسال رابط إعادة التعيين' };
-    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-      response.reset_token = rawToken; // Only expose in dev/test
+    // Expose token only in automated test mode (never in dev/production)
+    if (process.env.NODE_ENV === 'test') {
+      response.reset_token = rawToken;
     }
     res.json(response);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
