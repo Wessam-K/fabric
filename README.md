@@ -1,13 +1,13 @@
-# WK-Factory v3.0 — نظام إدارة المصنع الشامل 🏭
+# WK-Factory v3.7 — نظام إدارة المصنع الشامل 🏭
 
 نظام ERP متكامل لإدارة مصانع الملابس — مبني بـ Node.js + Express + SQLite (backend) و React 19 + Vite + Tailwind CSS 4 (frontend) + Electron 41 (desktop).
 
-## v3.2 — Enterprise Edition
+## v3.7 — Production Hardened
 
 | المرحلة | المحتوى |
 |---------|---------|
 | Core | المصادقة + الإنتاج + المحاسبة + التقارير + الإشعارات + الأمان |
-| Schema V38 | 96+ جدول، 240+ إذن، 15 إعداد نظام |
+| Schema V43 | 96+ جدول، 240+ إذن، 15 إعداد نظام |
 | Backend | 34 ملف راوتر — MRP, Scheduling, Quality, Quotations, Samples, Shipping, Returns, Documents, Backups, Exports |
 | Frontend | 56+ صفحة + 31 مكون — واجهات كاملة مع Dark Mode ولوحة تحكم قابلة للتخصيص |
 | Electron | Electron 41 — تطبيق سطح مكتب مستقل مع أمان مشدد + Auto-updater |
@@ -26,7 +26,7 @@
 | نقاط API | **290+ نقطة** |
 | ملفات الراوتر | **34 ملف** |
 | أدوار المستخدمين | **7 أدوار** مع 240+ إذن |
-| اختبارات API | **93 اختبار** (100% pass) |
+| اختبارات API | **1464 اختبار** (100% pass) |
 | اختبارات E2E | **27 اختبار** (100% pass) |
 | إجمالي الكود | **~45,000 سطر** عبر 170+ ملف |
 
@@ -73,6 +73,58 @@ cd frontend && npm install && npm run dev
 ```
 
 > **أول تشغيل**: ستظهر صفحة إعداد لإنشاء حساب المسؤول الأعلى (superadmin).
+
+## Production Deployment
+
+### Docker (recommended)
+
+```bash
+cp .env.example .env         # set JWT_SECRET, SMTP_*, CORS_ORIGIN
+mkdir -p certs                # place server.crt + server.key
+docker compose up -d --build  # builds frontend + backend, starts nginx
+```
+
+See [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) for full details.
+
+### Manual Production
+
+```bash
+# 1. Build frontend
+cd frontend && npm ci && npm run build && cd ..
+
+# 2. Install backend deps
+cd backend && npm ci --omit=dev && cd ..
+
+# 3. Configure environment
+cp .env.example .env
+# Required: JWT_SECRET (64+ chars), NODE_ENV=production
+# Optional: SMTP_*, LICENSE_HMAC_SECRET, SENTRY_DSN
+
+# 4. Start
+NODE_ENV=production PORT=9002 node backend/server.js
+```
+
+### Electron Desktop
+
+```bash
+npm run build          # builds frontend + electron
+# Output: dist-electron/WK-Factory Setup X.Y.Z.exe
+```
+
+### Health Checks
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/health` | Liveness — returns `{status:"ok"}` |
+| `GET /api/readiness` | Readiness — verifies DB + tables |
+
+### Tests
+
+```bash
+cd backend
+NODE_ENV=test PORT=9002 node --test --test-timeout 300000 tests/comprehensive.test.js
+# 1464 tests, 100% pass rate
+```
 
 ## هيكل المشروع
 
