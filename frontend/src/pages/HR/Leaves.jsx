@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Calendar, Download } from 'lucide-react';
+import { Plus, Calendar, Download, BarChart2 } from 'lucide-react';
 import api from '../../utils/api';
 import { useToast } from '../../components/Toast';
 import HelpButton from '../../components/HelpButton';
@@ -16,6 +16,8 @@ export default function Leaves() {
   const [tab, setTab] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ employee_id: '', leave_type: 'annual', start_date: '', end_date: '', reason: '' });
+  const [balances, setBalances] = useState([]);
+  const [showBalances, setShowBalances] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -26,6 +28,8 @@ export default function Leaves() {
       ]);
       setLeaves(lRes.data);
       setEmployees(Array.isArray(eRes.data) ? eRes.data : eRes.data.employees || []);
+      // Load leave balances
+      try { const bRes = await api.get('/hr/leave-balances'); setBalances(bRes.data || []); } catch {}
     } catch { toast.error('فشل تحميل البيانات'); }
     finally { setLoading(false); }
   };
@@ -75,7 +79,28 @@ export default function Leaves() {
   return (
     <div className="page">
       <PageHeader title="الإجازات" subtitle="إدارة طلبات الإجازات"
-        action={<div className="flex items-center gap-2"><HelpButton pageKey="leaves" /><button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير</button><button onClick={() => setShowForm(true)} className="btn btn-gold"><Plus size={16} /> طلب إجازة</button></div>} />
+        action={<div className="flex items-center gap-2"><HelpButton pageKey="leaves" /><button onClick={() => setShowBalances(!showBalances)} className="btn btn-outline"><BarChart2 size={16} /> الأرصدة</button><button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير</button><button onClick={() => setShowForm(true)} className="btn btn-gold"><Plus size={16} /> طلب إجازة</button></div>} />
+
+      {showBalances && balances.length > 0 && (
+        <div className="mb-4">
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead><tr><th>الموظف</th><th>المستحق</th><th>المستخدم</th><th>المتبقي</th><th>مرحّل</th></tr></thead>
+              <tbody>
+                {balances.map((b, i) => (
+                  <tr key={i}>
+                    <td className="text-xs font-semibold">{b.employee_name || b.name || `#${b.employee_id}`}</td>
+                    <td className="font-mono text-xs">{b.entitled ?? b.total_entitled ?? '—'}</td>
+                    <td className="font-mono text-xs text-red-600">{b.used ?? b.total_used ?? '—'}</td>
+                    <td className="font-mono text-xs text-green-600 font-bold">{b.remaining ?? (b.entitled - b.used) ?? '—'}</td>
+                    <td className="font-mono text-xs">{b.carried_over ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <Tabs tabs={[
         { value: 'all', label: 'الكل', count: leaves.length },

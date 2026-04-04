@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Phone, Mail, MapPin, DollarSign, FileText, CreditCard, Clock } from 'lucide-react';
+import { ArrowRight, Phone, Mail, MapPin, DollarSign, FileText, CreditCard, Clock, Plus, Trash2, User, MessageSquare, Activity } from 'lucide-react';
 import { PageHeader, LoadingState, Tabs } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -15,6 +15,12 @@ export default function CustomerDetail() {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
+  const [timeline, setTimeline] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [newContact, setNewContact] = useState({ name: '', title: '', phone: '', email: '', is_primary: 0 });
+  const [newNote, setNewNote] = useState('');
+  const [showContactForm, setShowContactForm] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -32,6 +38,53 @@ export default function CustomerDetail() {
     };
     load();
   }, [id]);
+
+  const loadTimeline = useCallback(async () => {
+    try { const { data } = await api.get(`/customers/${id}/timeline`); setTimeline(data || []); } catch {}
+  }, [id]);
+
+  const loadContacts = useCallback(async () => {
+    try { const { data } = await api.get(`/customers/${id}/contacts`); setContacts(data || []); } catch {}
+  }, [id]);
+
+  const loadNotes = useCallback(async () => {
+    try { const { data } = await api.get(`/customers/${id}/notes`); setNotes(data || []); } catch {}
+  }, [id]);
+
+  useEffect(() => {
+    if (tab === 'timeline') loadTimeline();
+    if (tab === 'contacts') loadContacts();
+    if (tab === 'notes') loadNotes();
+  }, [tab, loadTimeline, loadContacts, loadNotes]);
+
+  const addContact = async () => {
+    if (!newContact.name.trim()) { toast.error('اسم جهة الاتصال مطلوب'); return; }
+    try {
+      await api.post(`/customers/${id}/contacts`, newContact);
+      toast.success('تمت إضافة جهة الاتصال');
+      setNewContact({ name: '', title: '', phone: '', email: '', is_primary: 0 });
+      setShowContactForm(false);
+      loadContacts();
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
+
+  const deleteContact = async (contactId) => {
+    try {
+      await api.delete(`/customers/${id}/contacts/${contactId}`);
+      toast.success('تم حذف جهة الاتصال');
+      loadContacts();
+    } catch { toast.error('فشل الحذف'); }
+  };
+
+  const addNote = async () => {
+    if (!newNote.trim()) return;
+    try {
+      await api.post(`/customers/${id}/notes`, { note: newNote });
+      toast.success('تمت إضافة الملاحظة');
+      setNewNote('');
+      loadNotes();
+    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
+  };
 
   const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString('ar-EG') : '—';
@@ -85,6 +138,9 @@ export default function CustomerDetail() {
         { value: 'invoices', label: 'الفواتير', count: invoices.length },
         { value: 'payments', label: 'المدفوعات', count: payments.length },
         { value: 'aging', label: 'أعمار الديون' },
+        { value: 'timeline', label: 'السجل' },
+        { value: 'contacts', label: 'جهات الاتصال' },
+        { value: 'notes', label: 'الملاحظات' },
       ]} active={tab} onChange={setTab} />
 
       {tab === 'overview' && (
@@ -179,6 +235,116 @@ export default function CustomerDetail() {
                 <p className="text-lg font-bold font-mono">{fmt(ageBuckets[b.key] || 0)} ج</p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'timeline' && (
+        <div className="card">
+          <div className="card-body">
+            {timeline.length === 0 ? (
+              <div className="text-center py-8 text-gray-400"><Activity size={32} className="mx-auto mb-2 text-gray-300" />لا يوجد سجل نشاط</div>
+            ) : (
+              <div className="space-y-3">
+                {timeline.map((ev, i) => (
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                      ev.type === 'invoice' ? 'bg-blue-50 text-blue-600' :
+                      ev.type === 'payment' ? 'bg-green-50 text-green-600' :
+                      ev.type === 'work_order' ? 'bg-amber-50 text-amber-600' :
+                      ev.type === 'note' ? 'bg-purple-50 text-purple-600' :
+                      'bg-gray-50 text-gray-600'
+                    }`}>
+                      {ev.type === 'invoice' ? <FileText size={14} /> : ev.type === 'payment' ? <CreditCard size={14} /> : <Activity size={14} />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800">{ev.description || ev.title || ev.type}</p>
+                      {ev.amount != null && <p className="text-xs font-mono text-gray-500">{fmt(ev.amount)} ج</p>}
+                      <p className="text-[10px] text-gray-400 mt-0.5">{fmtDate(ev.date || ev.created_at)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'contacts' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => setShowContactForm(!showContactForm)} className="btn btn-gold btn-sm"><Plus size={14} /> جهة اتصال</button>
+          </div>
+          {showContactForm && (
+            <div className="card">
+              <div className="card-body grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input value={newContact.name} onChange={e => setNewContact(c => ({ ...c, name: e.target.value }))} placeholder="الاسم *" className="border rounded-lg px-3 py-2 text-sm" />
+                <input value={newContact.title} onChange={e => setNewContact(c => ({ ...c, title: e.target.value }))} placeholder="المسمى الوظيفي" className="border rounded-lg px-3 py-2 text-sm" />
+                <input value={newContact.phone} onChange={e => setNewContact(c => ({ ...c, phone: e.target.value }))} placeholder="الهاتف" className="border rounded-lg px-3 py-2 text-sm" />
+                <input value={newContact.email} onChange={e => setNewContact(c => ({ ...c, email: e.target.value }))} placeholder="البريد الإلكتروني" className="border rounded-lg px-3 py-2 text-sm" />
+                <label className="flex items-center gap-2 text-sm col-span-full">
+                  <input type="checkbox" checked={newContact.is_primary === 1} onChange={e => setNewContact(c => ({ ...c, is_primary: e.target.checked ? 1 : 0 }))} />
+                  جهة اتصال رئيسية
+                </label>
+                <div className="col-span-full flex justify-end gap-2">
+                  <button onClick={() => setShowContactForm(false)} className="btn btn-outline btn-sm">إلغاء</button>
+                  <button onClick={addContact} className="btn btn-gold btn-sm">حفظ</button>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="card">
+            <div className="card-body" style={{ padding: 0 }}>
+              {contacts.length === 0 ? (
+                <div className="text-center py-8 text-gray-400"><User size={32} className="mx-auto mb-2 text-gray-300" />لا توجد جهات اتصال</div>
+              ) : (
+                <table className="data-table">
+                  <thead><tr><th>الاسم</th><th>المسمى</th><th>الهاتف</th><th>البريد</th><th>رئيسي</th><th></th></tr></thead>
+                  <tbody>
+                    {contacts.map(c => (
+                      <tr key={c.id}>
+                        <td className="text-sm font-semibold">{c.name}</td>
+                        <td className="text-xs text-gray-500">{c.title || '—'}</td>
+                        <td className="text-xs font-mono">{c.phone || '—'}</td>
+                        <td className="text-xs">{c.email || '—'}</td>
+                        <td>{c.is_primary ? <span className="text-[10px] bg-green-100 text-green-700 rounded-full px-2 py-0.5">رئيسي</span> : '—'}</td>
+                        <td><button onClick={() => deleteContact(c.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'notes' && (
+        <div className="space-y-4">
+          <div className="card">
+            <div className="card-body">
+              <div className="flex gap-2">
+                <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="أضف ملاحظة..."
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm" rows={2} />
+                <button onClick={addNote} className="btn btn-gold btn-sm self-end"><Plus size={14} /> إضافة</button>
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-body">
+              {notes.length === 0 ? (
+                <div className="text-center py-8 text-gray-400"><MessageSquare size={32} className="mx-auto mb-2 text-gray-300" />لا توجد ملاحظات</div>
+              ) : (
+                <div className="space-y-3">
+                  {notes.map(n => (
+                    <div key={n.id} className="p-3 rounded-lg bg-gray-50">
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{n.note}</p>
+                      <p className="text-[10px] text-gray-400 mt-1">{n.created_by_name || '—'} · {fmtDate(n.created_at)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { User, Mail, Building, Clock, Shield, Key, CalendarDays, Monitor, Trash2, LogOut, Camera } from 'lucide-react';
+import { User, Mail, Building, Clock, Shield, Key, CalendarDays, Monitor, Trash2, LogOut, Camera, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
@@ -24,10 +24,19 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [prefs, setPrefs] = useState({ language: 'ar', notifications_enabled: 'true', items_per_page: '25' });
 
   useEffect(() => {
     api.get('/auth/profile').then(r => setProfile(r.data)).catch(() => {}).finally(() => setLoading(false));
     api.get('/sessions').then(r => setSessions(r.data)).catch(() => {}).finally(() => setSessionsLoading(false));
+    // Load preferences
+    Promise.all(['language', 'notifications_enabled', 'items_per_page'].map(k =>
+      api.get(`/users/preferences/${k}`).then(r => [k, r.data.value]).catch(() => [k, null])
+    )).then(results => {
+      const loaded = {};
+      results.forEach(([k, v]) => { if (v != null) loaded[k] = v; });
+      setPrefs(p => ({ ...p, ...loaded }));
+    });
   }, []);
 
   const revokeSession = (id) => {
@@ -38,9 +47,10 @@ export default function Profile() {
     api.delete('/sessions').then(() => setSessions([])).catch(() => {});
   };
 
-  useEffect(() => {
-    api.get('/auth/profile').then(r => setProfile(r.data)).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  const savePref = async (key, value) => {
+    setPrefs(p => ({ ...p, [key]: value }));
+    try { await api.put(`/users/preferences/${key}`, { value }); } catch { toast.error('فشل حفظ التفضيل'); }
+  };
 
   if (loading) return <LoadingState />;
   if (!profile) return <div className="text-center py-20 text-gray-400">خطأ في تحميل الملف الشخصي</div>;
@@ -183,6 +193,41 @@ export default function Profile() {
               </div>
             ))
           )}
+        </div>
+      </div>
+
+      {/* Preferences */}
+      <div className="mt-6 bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="p-5 border-b flex items-center gap-2">
+          <Settings size={16} className="text-gray-400" />
+          <h3 className="text-sm font-bold text-[#1a1a2e]">التفضيلات</h3>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-gray-700">اللغة</label>
+            <select value={prefs.language} onChange={e => savePref('language', e.target.value)}
+              className="border rounded-lg px-3 py-1.5 text-sm">
+              <option value="ar">العربية</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-gray-700">الإشعارات</label>
+            <button onClick={() => savePref('notifications_enabled', prefs.notifications_enabled === 'true' ? 'false' : 'true')}
+              className={`w-10 h-5 rounded-full transition-colors relative ${prefs.notifications_enabled === 'true' ? 'bg-green-500' : 'bg-gray-300'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${prefs.notifications_enabled === 'true' ? 'right-0.5' : 'left-0.5'}`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-gray-700">عناصر لكل صفحة</label>
+            <select value={prefs.items_per_page} onChange={e => savePref('items_per_page', e.target.value)}
+              className="border rounded-lg px-3 py-1.5 text-sm">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>

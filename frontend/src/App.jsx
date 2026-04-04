@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useState, lazy, Suspense } from 'react';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench, Calculator, Send, CalendarClock, CheckSquare, FileSpreadsheet, ShoppingBag, Beaker, RotateCcw, FolderOpen, Database, Download, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench, Calculator, Send, CalendarClock, CheckSquare, FileSpreadsheet, ShoppingBag, Beaker, RotateCcw, FolderOpen, Database, Download, Upload, Sun, Moon } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import './i18n'; // Phase 4.2: i18n initialization
@@ -67,6 +67,7 @@ const Webhooks = lazy(() => import('./pages/Webhooks'));
 const ReportSchedules = lazy(() => import('./pages/ReportSchedules'));
 const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 const AcceptInvite = lazy(() => import('./pages/AcceptInvite'));
+const ImportWizard = lazy(() => import('./pages/ImportWizard'));
 import QuickActions from './components/QuickActions';
 import HelpButton from './components/HelpButton';
 import OnboardingTour from './components/OnboardingTour'; // Phase 4.8
@@ -263,6 +264,7 @@ function AppLayout() {
       items: [
         { path: '/reports', label: 'التقارير', icon: BarChart2, hide: () => !can('reports', 'view') },
         { path: '/exports', label: 'مركز التصدير', icon: Download, hide: () => !can('reports', 'view') },
+        { path: '/import', label: 'استيراد البيانات', icon: Upload, hide: () => !can('settings', 'view') },
       ],
     },
     {
@@ -280,6 +282,7 @@ function AppLayout() {
         { path: '/webhooks', label: 'الويب هوكس', icon: Send, hide: () => user?.role !== 'superadmin' },
         { path: '/report-schedules', label: 'التقارير المجدولة', icon: CalendarClock, hide: () => !can('reports', 'view') },
         { path: '/settings', label: 'الإعدادات', icon: Settings, hide: () => !can('settings', 'view') },
+        { path: '/knowledge-base', label: 'قاعدة المعرفة', icon: BookOpen, hide: () => false },
       ],
     },
   ];
@@ -453,6 +456,7 @@ function AppLayout() {
           <Route path="/purchase-orders" element={<ProtectedRoute perm={['purchase_orders','view']}><PurchaseOrders /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute perm={['reports','view']}><Reports /></ProtectedRoute>} />
           <Route path="/exports" element={<ProtectedRoute perm={['reports','view']}><ExportsCenter /></ProtectedRoute>} />
+          <Route path="/import" element={<ProtectedRoute perm={['settings','view']}><ImportWizard /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute perm={['invoices','view']}><Invoices /></ProtectedRoute>} />
           <Route path="/accounting/coa" element={<ProtectedRoute perm={['accounting','view']}><ChartOfAccounts /></ProtectedRoute>} />
           <Route path="/accounting/journal" element={<ProtectedRoute perm={['accounting','view']}><JournalEntries /></ProtectedRoute>} />
@@ -526,8 +530,8 @@ function AuthRouter() {
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/setup" element={needsSetup ? <Setup /> : <Navigate to="/login" replace />} />
       <Route path="/accept-invite" element={<AcceptInvite />} />
-      <Route path="/models/:code/print" element={user ? <ProtectedRoute module="models" action="view"><PrintView /></ProtectedRoute> : <Navigate to="/login" replace />} />
-      <Route path="/models/:code/invoice" element={user ? <ProtectedRoute module="models" action="view"><InvoicePrint /></ProtectedRoute> : <Navigate to="/login" replace />} />
+      <Route path="/models/:code/print" element={user ? <ProtectedRoute perm={['models','view']}><PrintView /></ProtectedRoute> : <Navigate to="/login" replace />} />
+      <Route path="/models/:code/invoice" element={user ? <ProtectedRoute perm={['models','view']}><InvoicePrint /></ProtectedRoute> : <Navigate to="/login" replace />} />
       <Route path="/invoices/:id/view" element={user ? <InvoiceView /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={user ? <AppLayout /> : <Navigate to="/login" replace />} />
     </Routes>

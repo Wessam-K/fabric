@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Calendar, Layers, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Calendar, Layers, X, ChevronLeft, ChevronRight, Edit2, Trash2 } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -24,6 +24,7 @@ export default function Scheduling() {
   const [workOrders, setWorkOrders] = useState([]);
   const [showLineModal, setShowLineModal] = useState(false);
   const [lineForm, setLineForm] = useState({ name: '', capacity_per_day: 100, shift_count: 1 });
+  const [editingId, setEditingId] = useState(null);
 
   const weekDays = useMemo(() => {
     const days = [];
@@ -63,11 +64,40 @@ export default function Scheduling() {
 
   const save = async () => {
     try {
-      await api.post('/scheduling', form);
-      toast.success('تمت إضافة الجدولة');
+      if (editingId) {
+        await api.put(`/scheduling/${editingId}`, form);
+        toast.success('تم تحديث الجدولة');
+      } else {
+        await api.post('/scheduling', form);
+        toast.success('تمت إضافة الجدولة');
+      }
       setShowModal(false);
+      setEditingId(null);
       load();
     } catch (err) { toast.error(err.response?.data?.error || 'فشل الحفظ'); }
+  };
+
+  const editEntry = (e) => {
+    setForm({
+      production_line_id: e.production_line_id || '',
+      work_order_id: e.work_order_id || '',
+      start_date: e.start_date || '',
+      end_date: e.end_date || '',
+      shift: e.shift || 'morning',
+      priority: e.priority || 3,
+      notes: e.notes || '',
+      status: e.status || 'scheduled',
+    });
+    setEditingId(e.id);
+    setShowModal(true);
+  };
+
+  const deleteEntry = async (entryId) => {
+    try {
+      await api.delete(`/scheduling/${entryId}`);
+      toast.success('تم إلغاء الجدولة');
+      load();
+    } catch (err) { toast.error(err.response?.data?.error || 'فشل الحذف'); }
   };
 
   const saveLine = async () => {
@@ -93,7 +123,7 @@ export default function Scheduling() {
           <button onClick={nextWeek} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft size={18} /></button>
         </div>
         <PermissionGuard module="scheduling" action="create">
-          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-[#c9a84c] text-[#1a1a2e] px-4 py-2 rounded-lg font-bold hover:bg-[#b8973f]">
+          <button onClick={() => { setEditingId(null); setForm({ production_line_id: '', work_order_id: '', start_date: '', end_date: '', shift: 'morning', priority: 3, notes: '' }); setShowModal(true); }} className="flex items-center gap-2 bg-[#c9a84c] text-[#1a1a2e] px-4 py-2 rounded-lg font-bold hover:bg-[#b8973f]">
             <Plus size={18} /> جدولة جديدة
           </button>
           <button onClick={() => setShowLineModal(true)} className="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg text-sm hover:bg-gray-50">
@@ -147,10 +177,18 @@ export default function Scheduling() {
                       return (
                         <td key={d.date} className="p-1 border-l align-top min-h-[60px]">
                           {dayEntries.map(e => (
-                            <div key={e.id} className="text-xs mb-1 px-2 py-1 rounded text-white truncate cursor-default"
+                            <div key={e.id} className="text-xs mb-1 px-2 py-1 rounded text-white truncate cursor-pointer group relative"
                               style={{ backgroundColor: STATUS_COLORS[e.status] || '#94a3b8' }}
-                              title={`${e.wo_number || ''} — ${e.notes || ''}`}>
+                              title={`${e.wo_number || ''} — ${e.notes || ''}`}
+                              onClick={() => can('scheduling', 'edit') && editEntry(e)}>
                               {e.wo_number || `#${e.work_order_id}`}
+                              {can('scheduling', 'delete') && (
+                                <button onClick={(ev) => { ev.stopPropagation(); deleteEntry(e.id); }}
+                                  className="absolute left-0.5 top-0.5 opacity-0 group-hover:opacity-100 bg-red-600 rounded p-0.5"
+                                  title="إلغاء">
+                                  <Trash2 size={10} />
+                                </button>
+                              )}
                             </div>
                           ))}
                         </td>
@@ -169,8 +207,8 @@ export default function Scheduling() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-5 border-b bg-gray-50">
-              <h2 className="text-lg font-bold">جدولة جديدة</h2>
-              <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-gray-200 rounded-lg"><X size={20} /></button>
+              <h2 className="text-lg font-bold">{editingId ? 'تعديل الجدولة' : 'جدولة جديدة'}</h2>
+              <button onClick={() => { setShowModal(false); setEditingId(null); }} className="p-1.5 hover:bg-gray-200 rounded-lg"><X size={20} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div>
@@ -217,6 +255,15 @@ export default function Scheduling() {
                     className="w-full border rounded-lg px-3 py-2 text-sm" />
                 </div>
               </div>
+              {editingId && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">الحالة</label>
+                  <select value={form.status || 'scheduled'} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm">
+                    {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium mb-1">ملاحظات</label>
                 <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
@@ -224,8 +271,8 @@ export default function Scheduling() {
               </div>
             </div>
             <div className="flex justify-end gap-3 p-5 border-t">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">إلغاء</button>
-              <button onClick={save} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#1a1a2e] rounded-lg font-bold hover:bg-[#b8973f]">حفظ</button>
+              <button onClick={() => { setShowModal(false); setEditingId(null); }} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">إلغاء</button>
+              <button onClick={save} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#1a1a2e] rounded-lg font-bold hover:bg-[#b8973f]">{editingId ? 'تحديث' : 'حفظ'}</button>
             </div>
           </div>
         </div>
