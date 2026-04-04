@@ -12,10 +12,13 @@ api.interceptors.request.use(config => {
   return config;
 });
 
+let isRedirecting = false;
+
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401 && !window.location.hash?.includes('login') && !window.location.pathname?.endsWith('/login')) {
+    if (err.response?.status === 401 && !isRedirecting && !window.location.hash?.includes('login') && !window.location.pathname?.endsWith('/login')) {
+      isRedirecting = true;
       localStorage.removeItem('wk_user');
       window.location.href = '/login';
     }

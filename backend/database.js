@@ -2064,6 +2064,9 @@ function runMigrations() {
         customer_feedback TEXT,
         work_order_id INTEGER REFERENCES work_orders(id),
         created_by INTEGER REFERENCES users(id),
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        deleted_by INTEGER,
         created_at TEXT DEFAULT (datetime('now','localtime')),
         updated_at TEXT DEFAULT (datetime('now','localtime'))
       );
@@ -2871,6 +2874,26 @@ function runMigrations() {
     idxSafe('idx_packing_lists_ship', 'packing_lists', 'shipment_id');
     idxSafe('idx_att_imports_by', 'attendance_imports', 'imported_by');
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (48)`);
+  }
+
+  // ═══ V49: Add soft-delete columns to samples table ═══
+  const v49 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 49').get();
+  if (!v49) {
+    const cols = db.prepare("PRAGMA table_info(samples)").all().map(c => c.name);
+    if (!cols.includes('is_deleted')) db.exec("ALTER TABLE samples ADD COLUMN is_deleted INTEGER DEFAULT 0");
+    if (!cols.includes('deleted_at')) db.exec("ALTER TABLE samples ADD COLUMN deleted_at TEXT");
+    if (!cols.includes('deleted_by')) db.exec("ALTER TABLE samples ADD COLUMN deleted_by INTEGER");
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (49)`);
+  }
+
+  // ═══ V50: Add updated_at to expenses and maintenance_orders ═══
+  const v50 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 50').get();
+  if (!v50) {
+    const expCols = db.prepare("PRAGMA table_info(expenses)").all().map(c => c.name);
+    if (!expCols.includes('updated_at')) db.exec("ALTER TABLE expenses ADD COLUMN updated_at TEXT");
+    const maintCols = db.prepare("PRAGMA table_info(maintenance_orders)").all().map(c => c.name);
+    if (!maintCols.includes('updated_at')) db.exec("ALTER TABLE maintenance_orders ADD COLUMN updated_at TEXT");
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (50)`);
   }
 }
 

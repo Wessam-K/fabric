@@ -17,6 +17,9 @@ export default function PaySlip() {
     const content = printRef.current;
     if (!content) return;
     const win = window.open('', '_blank');
+    const sanitized = content.cloneNode(true);
+    // Strip any script tags or event handlers from cloned content
+    sanitized.querySelectorAll('script').forEach(s => s.remove());
     win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
       <title>كشف راتب</title>
       <style>
@@ -40,7 +43,7 @@ export default function PaySlip() {
         .signature div { text-align: center; }
         .signature .line { width: 150px; border-top: 1px solid #333; margin-top: 40px; }
       </style>
-    </head><body>${content.innerHTML}</body></html>`);
+    </head><body>${sanitized.innerHTML}</body></html>`);
     win.document.close();
     win.print();
   }

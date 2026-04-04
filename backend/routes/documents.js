@@ -97,6 +97,14 @@ router.post('/upload', requirePermission('documents', 'create'), upload.single('
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// GET /api/documents/deleted — list soft-deleted documents (must be before /:id)
+router.get('/deleted', requirePermission('documents', 'delete'), (req, res) => {
+  try {
+    const rows = db.prepare("SELECT * FROM documents WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 // GET /api/documents/:id
 router.get('/:id', requirePermission('documents', 'view'), (req, res) => {
   try {
@@ -229,14 +237,6 @@ router.get('/template/payslip/:periodId/:employeeId', requirePermission('hr', 'v
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
-});
-
-// GET /api/documents/deleted — list soft-deleted documents
-router.get('/deleted', requirePermission('documents', 'delete'), (req, res) => {
-  try {
-    const rows = db.prepare("SELECT * FROM documents WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all();
-    res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

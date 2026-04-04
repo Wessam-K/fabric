@@ -225,9 +225,9 @@ router.post('/:id/payments', requirePermission('purchase_orders', 'edit'), (req,
 
     db.transaction(() => {
       db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,reference,notes) VALUES (?,?,?,?,?,?)`)
-        .run(po.supplier_id, poId, parseFloat(amount), payment_method || 'cash', reference || null, notes || null);
+        .run(po.supplier_id, poId, round2(parseFloat(amount)), payment_method || 'cash', reference || null, notes || null);
       const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE po_id=?').get(poId).v;
-      db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(totalPaid, poId);
+      db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(round2(totalPaid), poId);
     })();
 
     const updated = db.prepare('SELECT * FROM purchase_orders WHERE id=?').get(poId);
@@ -243,6 +243,7 @@ router.patch('/:id/receive', requirePermission('purchase_orders', 'edit'), (req,
     const poId = parseInt(req.params.id);
     const po = db.prepare(`SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id WHERE po.id=?`).get(poId);
     if (!po) return res.status(404).json({ error: 'أمر الشراء غير موجود' });
+    if (['cancelled', 'draft'].includes(po.status)) return res.status(400).json({ error: 'لا يمكن استلام أصناف لأمر شراء في حالة ' + po.status });
 
     const { items, received_date } = req.body;
     if (!items?.length) return res.status(400).json({ error: 'العناصر مطلوبة' });

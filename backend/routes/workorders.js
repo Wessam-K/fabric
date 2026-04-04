@@ -5,6 +5,7 @@ const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
 const notificationEmitter = require('../lib/notificationEmitter');
 const { fireWebhook } = require('../utils/webhooks');
+const { round2 } = require('../utils/money');
 
 // ═══════════════════════════════════════════════
 // COST CALCULATION (used by multiple endpoints)
@@ -80,7 +81,6 @@ function calculateWOCost(woId) {
   const wholesaleDiscountPct = parseFloat((db.prepare("SELECT value FROM settings WHERE key='wholesale_discount_pct'").get() || {}).value || '22');
   const suggested_wholesale = suggested_consumer * (1 - wholesaleDiscountPct / 100);
 
-  const round2 = v => Math.round((v || 0) * 100) / 100;
   return {
     total_pieces: totalPieces,
     grand_total_pieces: totalPieces,
@@ -459,7 +459,6 @@ router.get('/export', requirePermission('work_orders', 'view'), (req, res) => {
 // GET /api/work-orders/:id
 router.get('/:id', requirePermission('work_orders', 'view'), (req, res) => {
   try {
-    if (req.params.id === 'next-number' || req.params.id === 'by-stage') return;
     const wo = getFullWO(parseInt(req.params.id));
     if (!wo) return res.status(404).json({ error: 'غير موجود' });
     res.json(wo);

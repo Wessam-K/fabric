@@ -129,7 +129,7 @@ router.post('/invite/accept', (req, res) => {
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) return res.status(400).json({ error: 'اسم المستخدم مستخدم بالفعل' });
 
-    const hash = bcrypt.hashSync(password, 10);
+    const hash = bcrypt.hashSync(password, 12);
     const result = db.prepare(
       'INSERT INTO users (username, full_name, email, password_hash, role, department, status) VALUES (?,?,?,?,?,?,?)'
     ).run(username, full_name || username, invite.email, hash, invite.role, invite.department, 'active');
@@ -159,7 +159,7 @@ inviteRouter.post('/accept', (req, res) => {
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) return res.status(400).json({ error: 'اسم المستخدم مستخدم بالفعل' });
 
-    const hash = bcrypt.hashSync(password, 10);
+    const hash = bcrypt.hashSync(password, 12);
     const result = db.prepare(
       'INSERT INTO users (username, full_name, email, password_hash, role, department, status) VALUES (?,?,?,?,?,?,?)'
     ).run(username, full_name || username, invite.email, hash, invite.role, invite.department, 'active');
@@ -284,7 +284,7 @@ router.post('/import', requireRole('superadmin'), avatarUpload.single('file'), a
       if (!username || !full_name) { errors.push({ username, error: 'الاسم واسم المستخدم مطلوبين' }); continue; }
       const exists = db.prepare('SELECT id FROM users WHERE username=?').get(username);
       if (exists) { errors.push({ username, error: 'موجود مسبقاً' }); continue; }
-      const hash = bcrypt.hashSync(password || 'Change@123', 10);
+      const hash = bcrypt.hashSync(password || crypto.randomBytes(16).toString('hex'), 12);
       const validRole = ROLES_LIST.includes(role) ? role : 'viewer';
       db.prepare('INSERT INTO users (username, full_name, email, role, department, password_hash, must_change_password) VALUES (?,?,?,?,?,?,1)')
         .run(username, full_name, email || '', validRole, department || '', hash);
@@ -326,6 +326,20 @@ router.post('/:id/avatar', avatarUpload.single('avatar'), (req, res) => {
     const userId = parseInt(req.params.id);
     if (req.user.id !== userId && req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
     if (!req.file) return res.status(400).json({ error: 'يرجى اختيار صورة' });
+
+    // Magic byte validation — verify file content matches claimed image type
+    const filePath = req.file.path;
+    const buf = Buffer.alloc(8);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buf, 0, 8, 0);
+    fs.closeSync(fd);
+    const hex = buf.toString('hex').toLowerCase();
+    const validMagic = ['ffd8ff', '89504e47', '52494646']; // JPEG, PNG, WEBP(RIFF)
+    if (!validMagic.some(m => hex.startsWith(m))) {
+      fs.unlinkSync(filePath);
+      return res.status(400).json({ error: 'محتوى الملف لا يتطابق مع نوع صورة' });
+    }
+
     const avatarUrl = `/uploads/avatars/${req.file.filename}`;
     // Remove old avatar file if exists
     const old = db.prepare('SELECT avatar_url FROM users WHERE id=?').get(userId);

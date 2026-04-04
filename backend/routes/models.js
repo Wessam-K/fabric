@@ -270,8 +270,10 @@ router.post('/:code/bom-templates', requirePermission('models', 'edit'), (req, r
 // GET /api/models/:code/bom-templates/:templateId — full template
 router.get('/:code/bom-templates/:templateId', requirePermission('models', 'view'), (req, res) => {
   try {
+    const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
+    if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
     const tmpl = getFullTemplate(parseInt(req.params.templateId));
-    if (!tmpl) return res.status(404).json({ error: 'القالب غير موجود' });
+    if (!tmpl || tmpl.model_id !== model.id) return res.status(404).json({ error: 'القالب غير موجود' });
     res.json(tmpl);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -318,7 +320,15 @@ router.delete('/:code/bom-templates/:templateId', requirePermission('models', 'd
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
     const count = db.prepare('SELECT COUNT(*) as c FROM bom_templates WHERE model_id=?').get(model.id).c;
     if (count <= 1) return res.status(400).json({ error: 'لا يمكن حذف آخر وصفة' });
-    db.prepare('DELETE FROM bom_templates WHERE id=?').run(parseInt(req.params.templateId));
+    const tid = parseInt(req.params.templateId);
+    const tmpl = db.prepare('SELECT id, model_id FROM bom_templates WHERE id=?').get(tid);
+    if (!tmpl || tmpl.model_id !== model.id) return res.status(404).json({ error: 'القالب غير موجود' });
+    db.transaction(() => {
+      db.prepare('DELETE FROM bom_template_fabrics WHERE template_id=?').run(tid);
+      db.prepare('DELETE FROM bom_template_accessories WHERE template_id=?').run(tid);
+      db.prepare('DELETE FROM bom_template_sizes WHERE template_id=?').run(tid);
+      db.prepare('DELETE FROM bom_templates WHERE id=?').run(tid);
+    })();
     res.json({ message: 'تم الحذف' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -328,8 +338,11 @@ router.post('/:code/bom-templates/:templateId/set-default', requirePermission('m
   try {
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
+    const tid = parseInt(req.params.templateId);
+    const tmpl = db.prepare('SELECT model_id FROM bom_templates WHERE id=?').get(tid);
+    if (!tmpl || tmpl.model_id !== model.id) return res.status(404).json({ error: 'القالب غير موجود' });
     db.prepare('UPDATE bom_templates SET is_default=0 WHERE model_id=?').run(model.id);
-    db.prepare('UPDATE bom_templates SET is_default=1 WHERE id=?').run(parseInt(req.params.templateId));
+    db.prepare('UPDATE bom_templates SET is_default=1 WHERE id=?').run(tid);
     res.json({ message: 'تم التعيين كافتراضي' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

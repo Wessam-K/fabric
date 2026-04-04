@@ -34,7 +34,9 @@ router.get('/', requirePermission('shipping', 'view'), (req, res) => {
 
 // GET /api/shipping/next-number
 router.get('/next-number', requirePermission('shipping', 'view'), (req, res) => {
-  res.json({ number: generateNextNumber(db, 'shipment') });
+  try {
+    res.json({ number: generateNextNumber(db, 'shipment') });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // GET /api/shipping/:id

@@ -20,8 +20,10 @@ router.post('/lines', requirePermission('scheduling', 'create'), (req, res) => {
   try {
     const { name, description, capacity_per_day } = req.body;
     if (!name) return res.status(400).json({ error: 'الاسم مطلوب' });
+    const cap = parseFloat(capacity_per_day) || 0;
+    if (cap < 0) return res.status(400).json({ error: 'السعة لا يمكن أن تكون سالبة' });
     const result = db.prepare('INSERT INTO production_lines (name, description, capacity_per_day) VALUES (?,?,?)')
-      .run(name, description || null, parseFloat(capacity_per_day) || 0);
+      .run(name, description || null, cap);
     logAudit(req, 'create', 'production_line', result.lastInsertRowid, name);
     res.status(201).json(db.prepare('SELECT * FROM production_lines WHERE id=?').get(result.lastInsertRowid));
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -32,6 +34,7 @@ router.put('/lines/:id', requirePermission('scheduling', 'edit'), (req, res) => 
   try {
     const id = parseInt(req.params.id);
     const { name, description, capacity_per_day, status } = req.body;
+    if (capacity_per_day !== undefined && parseFloat(capacity_per_day) < 0) return res.status(400).json({ error: 'السعة لا يمكن أن تكون سالبة' });
     db.prepare('UPDATE production_lines SET name=COALESCE(?,name), description=COALESCE(?,description), capacity_per_day=COALESCE(?,capacity_per_day), status=COALESCE(?,status) WHERE id=?')
       .run(name, description, capacity_per_day !== undefined ? capacity_per_day : null, status, id);
     res.json(db.prepare('SELECT * FROM production_lines WHERE id=?').get(id));

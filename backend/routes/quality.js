@@ -106,6 +106,8 @@ router.post('/defect-codes', requirePermission('quality', 'create'), (req, res) 
   try {
     const { code, name_ar, severity, category } = req.body;
     if (!code || !name_ar) return res.status(400).json({ error: 'الكود والاسم مطلوبان' });
+    const validSeverities = ['minor', 'major', 'critical'];
+    if (severity && !validSeverities.includes(severity)) return res.status(400).json({ error: 'الخطورة يجب أن تكون minor أو major أو critical' });
     const result = db.prepare('INSERT INTO qc_defect_codes (code, name_ar, severity, category) VALUES (?,?,?,?)')
       .run(code, name_ar, severity || 'minor', category || null);
     logAudit(req, 'CREATE', 'qc_defect_code', result.lastInsertRowid, code);
@@ -192,6 +194,10 @@ router.patch('/inspections/:id/complete', requirePermission('quality', 'edit'), 
   try {
     const id = parseInt(req.params.id);
     const { passed_qty, failed_qty, result, notes } = req.body;
+    const validResults = ['pass', 'fail', 'conditional'];
+    if (result && !validResults.includes(result)) return res.status(400).json({ error: 'النتيجة يجب أن تكون pass أو fail أو conditional' });
+    const existing = db.prepare('SELECT id FROM qc_inspections WHERE id=?').get(id);
+    if (!existing) return res.status(404).json({ error: 'الفحص غير موجود' });
     
     db.prepare(`UPDATE qc_inspections SET result=?, passed=?, failed=?, 
       notes=COALESCE(?,notes) WHERE id=?`)
@@ -245,6 +251,10 @@ router.patch('/ncr/:id', requirePermission('quality', 'edit'), (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { status, root_cause, corrective_action, preventive_action, assigned_to } = req.body;
+    const existing = db.prepare('SELECT id FROM qc_ncr WHERE id=?').get(id);
+    if (!existing) return res.status(404).json({ error: 'تقرير عدم المطابقة غير موجود' });
+    const validStatuses = ['open', 'investigating', 'corrective_action', 'closed'];
+    if (status && !validStatuses.includes(status)) return res.status(400).json({ error: 'الحالة غير صالحة' });
 
     const sets = []; const vals = [];
     if (status) { sets.push('status=?'); vals.push(status); }

@@ -82,6 +82,16 @@ router.get('/', requirePermission('expenses', 'view'), (req, res) => {
 });
 
 // ═══════════════════════════════════════════════
+// GET /api/expenses/deleted — list soft-deleted (must be before /:id)
+// ═══════════════════════════════════════════════
+router.get('/deleted', requirePermission('expenses', 'delete'), (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM expenses WHERE is_deleted=1 ORDER BY created_at DESC').all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// ═══════════════════════════════════════════════
 // GET /api/expenses/:id
 // ═══════════════════════════════════════════════
 router.get('/:id', requirePermission('expenses', 'view'), (req, res) => {
@@ -249,14 +259,6 @@ router.post('/:id/receipt', requirePermission('expenses', 'edit'), receiptUpload
     db.prepare('UPDATE expenses SET receipt_url=? WHERE id=?').run(receiptUrl, id);
     logAudit(req, 'update', 'expenses', id, 'رفع إيصال', { receipt_url: expense.receipt_url }, { receipt_url: receiptUrl });
     res.json({ receipt_url: receiptUrl });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
-});
-
-// GET /api/expenses/deleted — list soft-deleted expenses (admin)
-router.get('/deleted', requirePermission('expenses', 'delete'), (req, res) => {
-  try {
-    const rows = db.prepare('SELECT * FROM expenses WHERE is_deleted=1 ORDER BY updated_at DESC').all();
-    res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

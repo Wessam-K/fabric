@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { round2, safeAdd, safeSubtract } = require('../utils/money');
 
 // GET /api/suppliers — list
 router.get('/', requirePermission('suppliers', 'view'), (req, res) => {
@@ -142,21 +143,21 @@ router.post('/:id/payments', requirePermission('suppliers', 'edit'), (req, res) 
 
     const payment = db.transaction(() => {
       const r = db.prepare(`INSERT INTO supplier_payments (supplier_id,po_id,amount,payment_method,payment_type,reference,notes) VALUES (?,?,?,?,?,?,?)`)
-        .run(parseInt(req.params.id), po_id || null, parseFloat(amount), payment_method || 'cash', payment_type || 'payment', reference || null, notes || null);
+        .run(parseInt(req.params.id), po_id || null, round2(parseFloat(amount)), payment_method || 'cash', payment_type || 'payment', reference || null, notes || null);
       // Update paid_amount on PO if po_id provided
       if (po_id) {
         const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE po_id=?').get(po_id).v;
-        db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(totalPaid, po_id);
+        db.prepare('UPDATE purchase_orders SET paid_amount=? WHERE id=?').run(round2(totalPaid), po_id);
         // Update total_outstanding on PO
         const po = db.prepare('SELECT total_amount, paid_amount FROM purchase_orders WHERE id=?').get(po_id);
         if (po) {
-          db.prepare('UPDATE purchase_orders SET total_outstanding=? WHERE id=?').run((po.total_amount || 0) - (po.paid_amount || 0), po_id);
+          db.prepare('UPDATE purchase_orders SET total_outstanding=? WHERE id=?').run(round2(safeSubtract(po.total_amount || 0, po.paid_amount || 0)), po_id);
         }
       }
       // Update total_paid on supplier
       const suppId = parseInt(req.params.id);
       const suppTotalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) as v FROM supplier_payments WHERE supplier_id=?').get(suppId).v;
-      db.prepare('UPDATE suppliers SET total_paid=? WHERE id=?').run(suppTotalPaid, suppId);
+      db.prepare('UPDATE suppliers SET total_paid=? WHERE id=?').run(round2(suppTotalPaid), suppId);
       return db.prepare('SELECT * FROM supplier_payments WHERE id=?').get(r.lastInsertRowid);
     })();
 

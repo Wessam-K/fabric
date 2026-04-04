@@ -80,6 +80,16 @@ router.get('/', requirePermission('maintenance', 'view'), (req, res) => {
 });
 
 // ═══════════════════════════════════════════════
+// GET /api/maintenance/deleted — list soft-deleted (must be before /:id)
+// ═══════════════════════════════════════════════
+router.get('/deleted', requirePermission('maintenance', 'delete'), (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM maintenance_orders WHERE is_deleted=1 ORDER BY created_at DESC').all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
+// ═══════════════════════════════════════════════
 // GET /api/maintenance/:id
 // ═══════════════════════════════════════════════
 router.get('/:id', requirePermission('maintenance', 'view'), (req, res) => {
@@ -209,14 +219,6 @@ router.post('/import', requirePermission('maintenance', 'create'), (req, res) =>
     })();
 
     res.json({ inserted, errors });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
-});
-
-// GET /api/maintenance/deleted — list soft-deleted maintenance orders
-router.get('/deleted', requirePermission('maintenance', 'delete'), (req, res) => {
-  try {
-    const rows = db.prepare('SELECT * FROM maintenance_orders WHERE is_deleted=1 ORDER BY updated_at DESC').all();
-    res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

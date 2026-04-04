@@ -163,9 +163,10 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
       total = round2(safeAdd(safeSubtract(subtotal, disc), taxAmt));
     } else if (tax_pct !== undefined || discount !== undefined) {
       subtotal = invoice.subtotal;
-      const disc = (parseFloat(discount) ?? invoice.discount) || 0;
+      const disc = discount !== undefined ? (parseFloat(discount) || 0) : (invoice.discount || 0);
       if (disc > subtotal) return res.status(400).json({ error: 'الخصم لا يمكن أن يتجاوز المجموع الفرعي' });
-      const taxAmt = round2(safeSubtract(subtotal, disc) * (((parseFloat(tax_pct) ?? invoice.tax_pct) || 0) / 100));
+      const tp = tax_pct !== undefined ? (parseFloat(tax_pct) || 0) : (invoice.tax_pct || 0);
+      const taxAmt = round2(safeSubtract(subtotal, disc) * (tp / 100));
       total = round2(safeAdd(safeSubtract(subtotal, disc), taxAmt));
     }
 
@@ -173,7 +174,9 @@ router.put('/:id', requirePermission('invoices', 'edit'), (req, res) => {
       db.prepare(`UPDATE invoices SET customer_name=?, customer_phone=?, customer_email=?, customer_id=?, notes=?, subtotal=?, tax_pct=?, discount=?, total=?, status=?, due_date=?, updated_at=datetime('now')
         WHERE id=?`).run(
         customer_name || invoice.customer_name, customer_phone ?? invoice.customer_phone, customer_email ?? invoice.customer_email,
-        customer_id !== undefined ? customer_id : invoice.customer_id, notes ?? invoice.notes, subtotal, parseFloat(tax_pct) ?? invoice.tax_pct, parseFloat(discount) ?? invoice.discount,
+        customer_id !== undefined ? customer_id : invoice.customer_id, notes ?? invoice.notes, subtotal,
+        tax_pct !== undefined ? (parseFloat(tax_pct) || 0) : invoice.tax_pct,
+        discount !== undefined ? (parseFloat(discount) || 0) : invoice.discount,
         total, status || invoice.status, due_date ?? invoice.due_date, invoice.id
       );
 

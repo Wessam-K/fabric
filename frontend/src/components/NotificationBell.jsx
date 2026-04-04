@@ -54,11 +54,16 @@ export default function NotificationBell() {
     }
   }, []);
 
+  const sseActiveRef = useRef(false);
+
   useEffect(() => {
     load();
     const startPolling = () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      intervalRef.current = setInterval(load, 30000);
+      // Only poll if SSE is not active
+      if (!sseActiveRef.current) {
+        intervalRef.current = setInterval(load, 30000);
+      }
     };
     const stopPolling = () => {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
@@ -72,8 +77,13 @@ export default function NotificationBell() {
     return () => { stopPolling(); document.removeEventListener('visibilitychange', handleVisibility); };
   }, [load]);
 
-  // SSE for real-time push notifications
+  // SSE for real-time push notifications — disables polling when active
   const handleSSE = useCallback((notification) => {
+    if (!sseActiveRef.current) {
+      sseActiveRef.current = true;
+      // Stop polling when SSE is active
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    }
     setNotifications(prev => [notification, ...prev.slice(0, 19)]);
     setUnreadCount(prev => prev + 1);
   }, []);

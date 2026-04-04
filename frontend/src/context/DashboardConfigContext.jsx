@@ -50,6 +50,24 @@ export function DashboardConfigProvider({ children }) {
     catch { return 60; }
   });
 
+  // Re-initialize config when user switches (storageKey changes)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      setWidgets(stored ? { ...DEFAULT_WIDGETS, ...JSON.parse(stored) } : { ...DEFAULT_WIDGETS });
+    } catch { setWidgets({ ...DEFAULT_WIDGETS }); }
+    try {
+      const stored = localStorage.getItem(`${storageKey}_order`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const missing = DEFAULT_ORDER.filter(k => !parsed.includes(k));
+        setWidgetOrder([...parsed, ...missing]);
+      } else { setWidgetOrder([...DEFAULT_ORDER]); }
+    } catch { setWidgetOrder([...DEFAULT_ORDER]); }
+    try { setRefreshInterval(parseInt(localStorage.getItem(`${storageKey}_interval`)) || 60); }
+    catch { setRefreshInterval(60); }
+  }, [storageKey]);
+
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(widgets));
   }, [widgets, storageKey]);
