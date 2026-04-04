@@ -161,6 +161,7 @@ router.post('/', requirePermission('customers', 'create'), (req, res) => {
     if (!name || !name.trim()) return res.status(400).json({ error: 'اسم العميل مطلوب' });
     if (phone && phone.length > 20) return res.status(400).json({ error: 'رقم الهاتف يجب ألا يتجاوز 20 حرف' });
     if (credit_limit !== undefined && credit_limit < 0) return res.status(400).json({ error: 'حد الائتمان يجب أن يكون صفر أو أكثر' });
+    if (code === null) return res.status(400).json({ error: 'كود العميل لا يمكن أن يكون فارغاً' });
 
     // Auto-generate code if not provided
     let customerCode = code;

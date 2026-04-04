@@ -2895,6 +2895,81 @@ function runMigrations() {
     if (!maintCols.includes('updated_at')) db.exec("ALTER TABLE maintenance_orders ADD COLUMN updated_at TEXT");
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (50)`);
   }
+
+  // ═══ V51: Create missing tables (import_jobs, user_preferences, user_invitations) ═══
+  const v51 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 51').get();
+  if (!v51) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS import_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        mode TEXT DEFAULT 'insert',
+        total_rows INTEGER DEFAULT 0,
+        processed_rows INTEGER DEFAULT 0,
+        success_count INTEGER DEFAULT 0,
+        error_count INTEGER DEFAULT 0,
+        errors TEXT,
+        created_by INTEGER,
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        completed_at TEXT,
+        FOREIGN KEY (created_by) REFERENCES users(id)
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        preference_key TEXT NOT NULL,
+        preference_value TEXT,
+        updated_at TEXT DEFAULT (datetime('now','localtime')),
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        UNIQUE(user_id, preference_key)
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_invitations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        role TEXT DEFAULT 'viewer',
+        department TEXT,
+        token_hash TEXT NOT NULL UNIQUE,
+        invited_by INTEGER NOT NULL,
+        accepted_at TEXT,
+        expires_at TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        FOREIGN KEY (invited_by) REFERENCES users(id)
+      );
+    `);
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (51)`);
+  }
+
+  // ═══ V52: Ensure 2FA columns exist on users table + attendance clock columns ═══
+  const v52 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 52').get();
+  if (!v52) {
+    const addCol = (table, col, def) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch {}
+    };
+    // 2FA columns on users
+    addCol('users', 'totp_enabled', 'INTEGER DEFAULT 0');
+    addCol('users', 'totp_secret', 'TEXT');
+    addCol('users', 'totp_backup_codes', 'TEXT');
+    // Attendance clock columns
+    addCol('attendance', 'check_in', 'TEXT');
+    addCol('attendance', 'check_out', 'TEXT');
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (52)`);
+  }
+
+  // ═══ V53: Ensure attendance check_in/check_out exist (may have been missed by V39/V52 collision) ═══
+  const v53 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 53').get();
+  if (!v53) {
+    const addCol53 = (table, col, def) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch {}
+    };
+    addCol53('attendance', 'check_in', 'TEXT');
+    addCol53('attendance', 'check_out', 'TEXT');
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (53)`);
+  }
 }
 
 initializeDatabase();
