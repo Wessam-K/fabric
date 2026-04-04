@@ -432,7 +432,7 @@ function AppLayout() {
         <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/models" element={<ProtectedRoute perm={['models','view']}><ModelsList /></ProtectedRoute>} />
           <Route path="/models/new" element={<ProtectedRoute perm={['models','create']}><ModelForm /></ProtectedRoute>} />
           <Route path="/models/:code/edit" element={<ProtectedRoute perm={['models','edit']}><ModelForm /></ProtectedRoute>} />
@@ -461,7 +461,7 @@ function AppLayout() {
           <Route path="/users" element={<ProtectedRoute perm={['users','manage']}><UsersPage /></ProtectedRoute>} />
           <Route path="/permissions" element={<ProtectedRoute perm={['users','manage']}><Permissions /></ProtectedRoute>} />
           <Route path="/audit-log" element={<ProtectedRoute perm={['audit','view']}><AuditLog /></ProtectedRoute>} />
-          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
           <Route path="/hr/employees" element={<ProtectedRoute perm={['hr','view']}><Employees /></ProtectedRoute>} />
           <Route path="/hr/attendance" element={<ProtectedRoute perm={['hr','view']}><Attendance /></ProtectedRoute>} />
           <Route path="/hr/payroll" element={<ProtectedRoute perm={['payroll','view']}><Payroll /></ProtectedRoute>} />
@@ -483,9 +483,9 @@ function AppLayout() {
           <Route path="/backups" element={<ProtectedRoute perm={['backups','view']}><Backups /></ProtectedRoute>} />
           <Route path="/webhooks" element={<ProtectedRoute perm={['settings','view']}><Webhooks /></ProtectedRoute>} />
           <Route path="/report-schedules" element={<ProtectedRoute perm={['reports','view']}><ReportSchedules /></ProtectedRoute>} />
-          <Route path="/knowledge-base" element={<KnowledgeBase />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/change-password" element={<ChangePassword />} />
+          <Route path="/knowledge-base" element={<ProtectedRoute><KnowledgeBase /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
           {/* Legacy redirects */}
           <Route path="/workorders" element={<Navigate to="/work-orders" replace />} />
           <Route path="/workorders/:id" element={<LegacyWORedirect />} />

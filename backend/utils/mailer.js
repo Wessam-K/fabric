@@ -63,7 +63,11 @@ async function sendPasswordReset(email, rawToken, baseUrl) {
 
   const transport = getTransporter();
   if (!transport) {
-    logger.info('Password reset token (SMTP not configured)', { email, token: rawToken });
+    if (process.env.NODE_ENV === 'production') {
+      logger.warn('Password reset requested but SMTP not configured', { email });
+    } else {
+      logger.info('Password reset token (SMTP not configured)', { email, token: rawToken });
+    }
     return;
   }
 
@@ -103,7 +107,11 @@ async function sendInvitation(email, rawToken, role, baseUrl) {
 
   const transport = getTransporter();
   if (!transport) {
-    logger.info('Invitation token (SMTP not configured)', { email, role, token: rawToken });
+    if (process.env.NODE_ENV === 'production') {
+      logger.warn('Invitation requested but SMTP not configured', { email, role });
+    } else {
+      logger.info('Invitation token (SMTP not configured)', { email, role, token: rawToken });
+    }
     return;
   }
 

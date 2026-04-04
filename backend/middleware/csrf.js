@@ -46,7 +46,18 @@ function csrfProtection(req, res, next) {
   const cookieToken = req.cookies?.[CSRF_COOKIE];
   const headerToken = req.headers[CSRF_HEADER];
 
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+  if (!cookieToken || !headerToken) {
+    return res.status(403).json({ error: 'CSRF token missing or invalid' });
+  }
+
+  // Use timing-safe comparison to prevent timing attacks
+  try {
+    const a = Buffer.from(cookieToken, 'utf8');
+    const b = Buffer.from(headerToken, 'utf8');
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(403).json({ error: 'CSRF token missing or invalid' });
+    }
+  } catch {
     return res.status(403).json({ error: 'CSRF token missing or invalid' });
   }
 

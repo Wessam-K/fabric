@@ -41,12 +41,13 @@ function safeAdd(...amounts) {
 
 /**
  * Safely multiply two values (e.g. quantity × unit_price).
+ * Converts to piasters to avoid floating-point drift.
  * @param {number} a
  * @param {number} b
  * @returns {number}
  */
 function safeMultiply(a, b) {
-  return Math.round((a || 0) * (b || 0) * 100) / 100;
+  return Math.round(toPiasters(a) * (b || 0)) / 100;
 }
 
 /**

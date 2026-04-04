@@ -33,6 +33,16 @@ function checkIPRate(ip) {
 function initWebSocket(server) {
   wss = new WebSocketServer({ server, path: '/ws' });
 
+  // Periodic cleanup of stale IP rate-limit entries (every 5 minutes)
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, entries] of ipConnections.entries()) {
+      const active = entries.filter(e => now - e.ts < RATE_WINDOW_MS);
+      if (active.length === 0) ipConnections.delete(ip);
+      else ipConnections.set(ip, active);
+    }
+  }, 5 * 60 * 1000);
+
   wss.on('connection', (ws, req) => {
     const ip = getClientIP(req);
 

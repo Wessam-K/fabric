@@ -31,6 +31,14 @@ router.get('/next-number', requirePermission('samples', 'view'), (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// GET /api/samples/deleted — list soft-deleted samples (must be before /:id)
+router.get('/deleted', requirePermission('samples', 'delete'), (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM samples WHERE is_deleted=1 ORDER BY deleted_at DESC').all();
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 // GET /api/samples/:id
 router.get('/:id', requirePermission('samples', 'view'), (req, res) => {
   try {
@@ -125,14 +133,6 @@ router.delete('/:id', requirePermission('samples', 'delete'), (req, res) => {
     db.prepare("UPDATE samples SET is_deleted=1, deleted_at=datetime('now'), deleted_by=? WHERE id=?").run(req.user.id, req.params.id);
     logAudit(req, 'DELETE', 'sample', req.params.id, sample.sample_number);
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
-});
-
-// GET /api/samples/deleted — list soft-deleted samples
-router.get('/deleted', requirePermission('samples', 'delete'), (req, res) => {
-  try {
-    const rows = db.prepare('SELECT * FROM samples WHERE is_deleted=1 ORDER BY deleted_at DESC').all();
-    res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

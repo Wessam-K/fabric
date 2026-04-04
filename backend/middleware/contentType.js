@@ -8,9 +8,9 @@ const UPLOAD_PATHS = ['/upload', '/import', '/restore'];
 function contentTypeEnforcement(req, res, next) {
   if (!ENFORCE_METHODS.has(req.method)) return next();
 
-  // Skip upload/multipart endpoints
-  const lowerPath = req.originalUrl.toLowerCase();
-  if (UPLOAD_PATHS.some(p => lowerPath.includes(p))) return next();
+  // Skip upload/multipart endpoints — match path segments, not substrings
+  const pathOnly = req.originalUrl.split('?')[0].toLowerCase();
+  if (UPLOAD_PATHS.some(p => pathOnly.includes('/' + p.slice(1)) || pathOnly.endsWith(p))) return next();
 
   const ct = req.headers['content-type'] || '';
   if (!ct.includes('application/json') && !ct.includes('multipart/form-data')) {

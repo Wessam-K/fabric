@@ -2836,6 +2836,42 @@ function runMigrations() {
     try { db.exec(`CREATE TRIGGER work_orders_fts_au AFTER UPDATE ON work_orders BEGIN INSERT INTO work_orders_fts(work_orders_fts, rowid, wo_number, notes) VALUES ('delete', old.id, COALESCE(old.wo_number,''), COALESCE(old.notes,'')); INSERT INTO work_orders_fts(rowid, wo_number, notes) VALUES (new.id, COALESCE(new.wo_number,''), COALESCE(new.notes,'')); END`); } catch {}
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (47)`);
   }
+
+  // V48: Add missing indexes on FK/join columns for query performance
+  const v48 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 48').get();
+  if (!v48) {
+    const idxSafe = (name, table, cols) => {
+      try { db.exec(`CREATE INDEX IF NOT EXISTS ${name} ON ${table} (${cols})`); } catch {}
+    };
+    idxSafe('idx_wo_accessories_detail_wo', 'wo_accessories_detail', 'wo_id');
+    idxSafe('idx_partial_invoices_wo', 'partial_invoices', 'wo_id');
+    idxSafe('idx_partial_invoices_inv', 'partial_invoices', 'invoice_id');
+    idxSafe('idx_wo_fabric_consumption_wo', 'wo_fabric_consumption', 'work_order_id');
+    idxSafe('idx_wo_accessory_consumption_wo', 'wo_accessory_consumption', 'work_order_id');
+    idxSafe('idx_wo_waste_wo', 'wo_waste', 'work_order_id');
+    idxSafe('idx_wo_invoices_wo', 'wo_invoices', 'work_order_id');
+    idxSafe('idx_wo_invoices_inv', 'wo_invoices', 'invoice_id');
+    idxSafe('idx_wo_stage_qc_wo', 'wo_stage_qc', 'wo_id');
+    idxSafe('idx_wo_stage_qc_stage', 'wo_stage_qc', 'stage_id');
+    idxSafe('idx_machine_maintenance_machine', 'machine_maintenance', 'machine_id');
+    idxSafe('idx_maintenance_orders_machine', 'maintenance_orders', 'machine_id');
+    idxSafe('idx_maintenance_parts_mo', 'maintenance_parts', 'mo_id');
+    idxSafe('idx_hr_adjustments_emp', 'hr_adjustments', 'employee_id');
+    idxSafe('idx_hr_adjustments_period', 'hr_adjustments', 'period_id');
+    idxSafe('idx_password_history_user', 'password_history', 'user_id');
+    idxSafe('idx_user_sessions_user', 'user_sessions', 'user_id');
+    idxSafe('idx_api_keys_user', 'api_keys', 'user_id');
+    idxSafe('idx_qc_ncr_wo', 'qc_ncr', 'work_order_id');
+    idxSafe('idx_quotation_items_q', 'quotation_items', 'quotation_id');
+    idxSafe('idx_so_items_so', 'sales_order_items', 'sales_order_id');
+    idxSafe('idx_sr_items_return', 'sales_return_items', 'return_id');
+    idxSafe('idx_pr_items_return', 'purchase_return_items', 'return_id');
+    idxSafe('idx_prod_schedule_wo', 'production_schedule', 'work_order_id');
+    idxSafe('idx_shipment_items_ship', 'shipment_items', 'shipment_id');
+    idxSafe('idx_packing_lists_ship', 'packing_lists', 'shipment_id');
+    idxSafe('idx_att_imports_by', 'attendance_imports', 'imported_by');
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (48)`);
+  }
 }
 
 initializeDatabase();
