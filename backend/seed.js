@@ -183,13 +183,13 @@ const WORK_ORDERS = [
   { num: 'WO-2026-004', cust: 'CUS-001', model: 'MOD-002', qty: 150,  status: 'in_progress', priority: 'high',   stages: [150,150,100,50,50,50],    startOff: 15, dueOff: 40  },
   { num: 'WO-2026-005', cust: 'CUS-004', model: 'MOD-005', qty: 250,  status: 'completed',   priority: 'normal', stages: [250,250,250,250,250,250], startOff: 3,  dueOff: 28  },
   { num: 'WO-2026-006', cust: 'CUS-005', model: 'MOD-001', qty: 100,  status: 'in_progress', priority: 'low',    stages: [100,50,0,0,0,0],          startOff: 20, dueOff: 50, pauseNote: 'مشكلة في ماكينة الخياطة' },
-  { num: 'WO-2026-007', cust: 'CUS-006', model: 'MOD-006', qty: 80,   status: 'in_progress', priority: 'high',   stages: [80,80,80,80,80,0],        startOff: 8,  dueOff: 32  },
-  { num: 'WO-2026-008', cust: 'CUS-002', model: 'MOD-001', qty: 400,  status: 'in_progress', priority: 'urgent', stages: [400,350,200,0,0,0],       startOff: 25, dueOff: 55  },
+  { num: 'WO-2026-007', cust: 'CUS-006', model: 'MOD-006', qty: 80,   status: 'in_progress', priority: 'high',   stages: [80,80,80,80,80,0],        startOff: 8,  dueOff: 32, subcontract: { name: 'ورشة البدر للخياطة', cost: 4800, notes: 'تعهيد خياطة الجاكيت — خياطة متقدمة' } },
+  { num: 'WO-2026-008', cust: 'CUS-002', model: 'MOD-001', qty: 400,  status: 'in_progress', priority: 'urgent', stages: [400,350,200,0,0,0],       startOff: 25, dueOff: 55, subcontract: { name: 'مصنع الأمل للملابس', cost: 12000, notes: 'تعهيد قص وخياطة — طلبية كبيرة' } },
   { num: 'WO-2026-009', cust: 'CUS-001', model: 'MOD-003', qty: 180,  status: 'pending',     priority: 'normal', stages: [0,0,0,0,0,0],             startOff: 60, dueOff: 80  },
   { num: 'WO-2026-010', cust: 'CUS-003', model: 'MOD-002', qty: 220,  status: 'in_progress', priority: 'normal', stages: [220,220,220,200,200,180], startOff: 12, dueOff: 38  },
   { num: 'WO-2026-011', cust: 'CUS-004', model: 'MOD-004', qty: 600,  status: 'completed',   priority: 'high',   stages: [600,600,500,400,400,400], startOff: 2,  dueOff: 30  },
   { num: 'WO-2026-012', cust: 'CUS-001', model: 'MOD-006', qty: 60,   status: 'completed',   priority: 'normal', stages: [60,60,60,60,60,60],       startOff: 18, dueOff: 42  },
-  { num: 'WO-2026-013', cust: 'CUS-006', model: 'MOD-005', qty: 300,  status: 'in_progress', priority: 'normal', stages: [300,200,0,0,0,0],         startOff: 30, dueOff: 60, pauseNote: 'انتظار وصول بطانة من المورد' },
+  { num: 'WO-2026-013', cust: 'CUS-006', model: 'MOD-005', qty: 300,  status: 'in_progress', priority: 'normal', stages: [300,200,0,0,0,0],         startOff: 30, dueOff: 60, pauseNote: 'انتظار وصول بطانة من المورد', subcontract: { name: 'ورشة النور للتطريز', cost: 9000, notes: 'تعهيد تطريز الفستان الكتان' } },
   { num: 'WO-2026-014', cust: 'CUS-005', model: 'MOD-003', qty: 120,  status: 'in_progress', priority: 'normal', stages: [120,120,120,120,100,0],   startOff: 22, dueOff: 48  },
   { num: 'WO-2026-015', cust: 'CUS-002', model: 'MOD-006', qty: 90,   status: 'pending',     priority: 'normal', stages: [0,0,0,0,0,0],             startOff: 65, dueOff: 85  },
   { num: 'WO-2026-016', cust: 'CUS-003', model: 'MOD-001', qty: 350,  status: 'in_progress', priority: 'high',   stages: [350,350,300,200,0,0],     startOff: 28, dueOff: 55  },
@@ -505,7 +505,7 @@ function seed() {
 
   // ─── 11. WORK ORDERS ──────────────────────────────
   console.log('  → Seeding work orders...');
-  const insWO = db.prepare(`INSERT OR IGNORE INTO work_orders (wo_number, model_id, template_id, status, priority, quantity, start_date, due_date, completed_date, masnaiya, masrouf, margin_pct, consumer_price, wholesale_price, customer_id, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insWO = db.prepare(`INSERT OR IGNORE INTO work_orders (wo_number, model_id, template_id, status, priority, quantity, start_date, due_date, completed_date, masnaiya, masrouf, margin_pct, consumer_price, wholesale_price, customer_id, notes, is_subcontracted, subcontractor_name, subcontract_cost, subcontract_notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   const insWOStage = db.prepare(`INSERT OR IGNORE INTO wo_stages (wo_id, stage_name, sort_order, status, quantity_in_stage, quantity_completed, quantity_rejected, started_at, completed_at, machine_id, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
   const insWOFabBatch = db.prepare(`INSERT OR IGNORE INTO wo_fabric_batches (wo_id, batch_id, fabric_code, role, planned_meters_per_piece, planned_total_meters, waste_pct, actual_total_meters, actual_meters_per_piece, waste_meters, waste_cost, price_per_meter, planned_cost, actual_cost, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   const insWOAccDetail = db.prepare(`INSERT OR IGNORE INTO wo_accessories_detail (wo_id, accessory_code, accessory_name, quantity_per_piece, unit_price, planned_total_cost, actual_quantity, actual_cost, notes) VALUES (?,?,?,?,?,?,?,?,?)`);
@@ -535,9 +535,12 @@ function seed() {
     const notes = wo.pauseNote || null;
     const created = dt(startDate);
 
+    const sub = wo.subcontract || null;
     insWO.run(wo.num, mm.id, mm.tmplId, wo.status, wo.priority, wo.qty,
       dd(startDate), dd(dueDate), completedDate ? dd(completedDate) : null,
-      masnaiya, masrouf, marginPct, cp, wp, custRow.id, notes, created, created);
+      masnaiya, masrouf, marginPct, cp, wp, custRow.id, notes,
+      sub ? 1 : 0, sub ? sub.name : null, sub ? sub.cost : 0, sub ? sub.notes : null,
+      created, created);
 
     const woRow = db.prepare('SELECT id FROM work_orders WHERE wo_number=?').get(wo.num);
     if (!woRow) continue;
@@ -1069,7 +1072,7 @@ function seed() {
   console.log('  → Seeding permissions...');
   try {
     const insPerm = db.prepare(`INSERT OR IGNORE INTO role_permissions (role, module, action) VALUES (?,?,?)`);
-    const modules = ['fabrics', 'accessories', 'customers', 'suppliers', 'models', 'workorders', 'invoices', 'purchaseorders', 'hr', 'machines', 'expenses', 'reports', 'exports', 'quality', 'settings', 'users', 'auditlog'];
+    const modules = ['fabrics', 'accessories', 'customers', 'suppliers', 'models', 'workorders', 'invoices', 'purchaseorders', 'hr', 'machines', 'expenses', 'reports', 'exports', 'quality', 'settings', 'users', 'auditlog', 'dashboard', 'notifications', 'shipments', 'accounting'];
     const actions = ['view', 'create', 'edit', 'delete', 'export'];
     // superadmin/manager get all
     for (const role of ['superadmin', 'manager']) {
@@ -1087,7 +1090,48 @@ function seed() {
     console.log(`    ✓ Permissions seeded`);
   } catch (e) { console.log('    ⚠ Skipping permissions:', e.message); }
 
-  // ─── 16. CURRENT-MONTH DATA ─────────────────────────
+  // ─── 19. NOTIFICATIONS ─────────────────────────────
+  console.log('  → Seeding notifications...');
+  try {
+    const insNotif = db.prepare(`INSERT OR IGNORE INTO notifications (user_id, type, title, body, reference_type, reference_id, is_read, created_at) VALUES (?,?,?,?,?,?,?,?)`);
+    // Low stock alerts
+    const lowFabs = db.prepare("SELECT code, name, available_meters FROM fabrics WHERE available_meters < 50 AND status='active'").all();
+    for (const f of lowFabs) {
+      insNotif.run(userIds[0], 'stock_alert', `تنبيه مخزون منخفض — ${f.name}`, `المتوفر: ${f.available_meters} متر فقط`, 'fabric', null, 0, dt(addDays(SEED_END, -5)));
+    }
+    // Overdue WO alerts
+    const overdueWOs = db.prepare("SELECT id, wo_number FROM work_orders WHERE due_date < date('now') AND status NOT IN ('completed','cancelled')").all();
+    for (const w of overdueWOs) {
+      insNotif.run(userIds[0], 'overdue_wo', `أمر شغل متأخر — ${w.wo_number}`, `تجاوز الموعد المحدد`, 'work_order', w.id, 0, dt(addDays(SEED_END, -3)));
+    }
+    // Machine maintenance alert
+    if (mach4) {
+      insNotif.run(userIds[0], 'maintenance', 'تنبيه صيانة ماكينة', 'ماكينة القص الكهربائية تحت الصيانة — MACH-004', 'machine', mach4.id, 0, dt(addDays(SEED_END, -2)));
+    }
+    // Invoice payment due
+    const dueInvoices = db.prepare("SELECT id, invoice_number FROM invoices WHERE status IN ('sent','partially_paid') AND due_date <= date('now')").all();
+    for (const inv of dueInvoices) {
+      insNotif.run(userIds[0], 'payment_due', `فاتورة مستحقة — ${inv.invoice_number}`, `يرجى متابعة التحصيل`, 'invoice', inv.id, 0, dt(addDays(SEED_END, -1)));
+    }
+    // System notification
+    insNotif.run(userIds[0], 'system', 'تم تحديث النظام', 'تم تحديث نظام WK-Hub إلى الإصدار الأخير', null, null, 1, dt(addDays(SEED_START, 10)));
+    insNotif.run(userIds[1] || userIds[0], 'system', 'مرحباً بك في WK-Hub', 'نظام إدارة المصنع جاهز للاستخدام', null, null, 1, dt(addDays(SEED_START, 1)));
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM notifications').get().c} notifications`);
+  } catch (e) { console.log('    ⚠ Skipping notifications:', e.message); }
+
+  // ─── 20. SUPPLIER PAYMENTS ─────────────────────────
+  console.log('  → Seeding supplier payments...');
+  try {
+    const insSupPay = db.prepare(`INSERT OR IGNORE INTO supplier_payments (supplier_id, po_id, amount, payment_date, payment_method, reference, notes) VALUES (?,?,?,?,?,?,?)`);
+    const paidPOs = db.prepare("SELECT id, supplier_id, total_amount, paid_amount, po_number, order_date FROM purchase_orders WHERE paid_amount > 0").all();
+    for (const po of paidPOs) {
+      const payDate = addDays(new Date(po.order_date), randInt(10, 30));
+      insSupPay.run(po.supplier_id, po.id, po.paid_amount, dd(payDate), pick(['bank','check']), `PAY-${po.po_number}`, null);
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM supplier_payments').get().c} supplier payments`);
+  } catch (e) { console.log('    ⚠ Skipping supplier payments:', e.message); }
+
+  // ─── CURRENT-MONTH DATA ─────────────────────────
   // Move some completed WOs and paid invoices into the current month
   // so dashboard KPIs (monthly_revenue, completed_this_month) show real data
   console.log('  → Adjusting dates for current-month dashboard visibility...');
@@ -1106,11 +1150,18 @@ function seed() {
   db.prepare("UPDATE invoices SET created_at=?, updated_at=? WHERE invoice_number='INV-2026-003'").run(recentDt1, recentDt1);
   db.prepare("UPDATE invoices SET created_at=?, updated_at=? WHERE invoice_number='INV-2026-004'").run(recentDt2, recentDt2);
 
+  // Also move the partially_paid invoice (INV-2026-006) into current month
+  const recentDate3 = dd(addDays(thisMonth1, 6));
+  const recentDt3 = dt(addDays(thisMonth1, 6));
+  db.prepare("UPDATE invoices SET created_at=?, updated_at=? WHERE invoice_number='INV-2026-006'").run(recentDt3, recentDt3);
+
   // Move payment dates for those invoices too
   const inv3Row = db.prepare("SELECT id FROM invoices WHERE invoice_number='INV-2026-003'").get();
   const inv4Row = db.prepare("SELECT id FROM invoices WHERE invoice_number='INV-2026-004'").get();
+  const inv6Row = db.prepare("SELECT id FROM invoices WHERE invoice_number='INV-2026-006'").get();
   if (inv3Row) db.prepare("UPDATE customer_payments SET payment_date=? WHERE invoice_id=?").run(recentDate1, inv3Row.id);
   if (inv4Row) db.prepare("UPDATE customer_payments SET payment_date=? WHERE invoice_id=?").run(recentDate2, inv4Row.id);
+  if (inv6Row) db.prepare("UPDATE customer_payments SET payment_date=? WHERE invoice_id=?").run(recentDate3, inv6Row.id);
 
   // Move some expenses into current month for total_expenses_this_month
   const recentExpDate = dd(addDays(thisMonth1, 1));
@@ -1169,6 +1220,9 @@ function seed() {
     payroll_periods: db.prepare('SELECT COUNT(*) as c FROM payroll_periods').get().c,
     payroll_records: db.prepare('SELECT COUNT(*) as c FROM payroll_records').get().c,
     shipments: db.prepare('SELECT COUNT(*) as c FROM shipments').get().c,
+    notifications: db.prepare('SELECT COUNT(*) as c FROM notifications').get().c,
+    subcontracted_wos: db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE is_subcontracted=1").get().c,
+    supplier_payments: (() => { try { return db.prepare('SELECT COUNT(*) as c FROM supplier_payments').get().c; } catch(e) { return 0; } })(),
   };
 
   console.log('\n✅ SEED SUMMARY:\n', JSON.stringify(summary, null, 2));

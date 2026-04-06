@@ -619,11 +619,11 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
     const recentModels = db.prepare(`SELECT model_code, model_name, model_image, category, created_at FROM models WHERE status='active' ORDER BY created_at DESC LIMIT ?`).all(dashboardListLimit);
 
     // V9 — monthly financials
-    const monthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status='paid' AND created_at >= date('now','start of month')`).get().r;
+    const monthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status IN ('paid','partially_paid') AND created_at >= date('now','start of month')`).get().r;
     const monthlyCost = db.prepare(`SELECT COALESCE(SUM(total_production_cost),0) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month')`).get().c;
 
     // V9b — previous month financials (for KPI trends)
-    const prevMonthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status='paid' AND created_at >= date('now','start of month','-1 month') AND created_at < date('now','start of month')`).get().r;
+    const prevMonthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status IN ('paid','partially_paid') AND created_at >= date('now','start of month','-1 month') AND created_at < date('now','start of month')`).get().r;
     const prevCompleted = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month','-1 month') AND completed_date < date('now','start of month')`).get().c;
     const prevActiveWO = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE status IN ('in_progress','pending') AND created_at < date('now','start of month')`).get().c;
     let prevQualityRate = 100;
@@ -739,7 +739,7 @@ app.get('/api/dashboard/chart/revenue-trend', requireAuth, requirePermission('da
   try {
     const rows = db.prepare(`
       SELECT strftime('%Y-%m', created_at) as month,
-        COALESCE(SUM(CASE WHEN status='paid' THEN total ELSE 0 END),0) as revenue,
+        COALESCE(SUM(CASE WHEN status IN ('paid','partially_paid') THEN total ELSE 0 END),0) as revenue,
         COUNT(*) as invoice_count
       FROM invoices WHERE created_at >= date('now','-12 months')
       GROUP BY month ORDER BY month
@@ -799,8 +799,8 @@ app.get('/api/dashboard/kpis/production', requireAuth, requirePermission('dashbo
 // GET /api/dashboard/kpis/finance — financial KPIs
 app.get('/api/dashboard/kpis/finance', requireAuth, requirePermission('dashboard', 'view'), (req, res) => {
   try {
-    const revenueThisMonth = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='paid' AND created_at >= date('now','start of month')").get().v;
-    const revenueSameMonthLastYear = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='paid' AND strftime('%m', created_at) = strftime('%m','now') AND strftime('%Y', created_at) = CAST(CAST(strftime('%Y','now') AS INTEGER) - 1 AS TEXT)").get().v;
+    const revenueThisMonth = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status IN ('paid','partially_paid') AND created_at >= date('now','start of month')").get().v;
+    const revenueSameMonthLastYear = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status IN ('paid','partially_paid') AND strftime('%m', created_at) = strftime('%m','now') AND strftime('%Y', created_at) = CAST(CAST(strftime('%Y','now') AS INTEGER) - 1 AS TEXT)").get().v;
     const arOverdue = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='overdue'").get().v;
     // AR aging
     const ar030 = db.prepare("SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status NOT IN ('paid','cancelled','draft') AND due_date >= date('now','-30 days')").get().v;
@@ -851,7 +851,7 @@ app.get('/api/dashboard/kpis/hr', requireAuth, requirePermission('dashboard', 'v
 app.get('/api/reports/executive-summary', requireAuth, (req, res) => {
   try {
     const thisMonth = new Date().toISOString().slice(0, 7);
-    const revenue = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status = 'paid' AND created_at LIKE ?").get(`${thisMonth}%`).v;
+    const revenue = db.prepare("SELECT COALESCE(SUM(total), 0) as v FROM invoices WHERE status IN ('paid','partially_paid') AND created_at LIKE ?").get(`${thisMonth}%`).v;
     const expenses = db.prepare("SELECT COALESCE(SUM(amount), 0) as v FROM expenses WHERE is_deleted = 0 AND expense_date LIKE ?").get(`${thisMonth}%`).v;
     const activeWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status NOT IN ('completed','cancelled')").get().v;
     const completedWOs = db.prepare("SELECT COUNT(*) as v FROM work_orders WHERE status = 'completed' AND completed_date LIKE ?").get(`${thisMonth}%`).v;
