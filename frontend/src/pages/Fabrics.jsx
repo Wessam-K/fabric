@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, X, Camera } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Camera, Upload } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader } from '../components/ui';
@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import ImportCSV from '../components/ImportCSV';
 import { useAuth } from '../context/AuthContext';
 
 const TYPES = [
@@ -40,6 +41,7 @@ export default function Fabrics() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [imageFile, setImageFile] = useState(null);
+  const [showImport, setShowImport] = useState(false);
 
   // Blob URL with cleanup to prevent memory leak
   const imagePreview = useMemo(() => imageFile ? URL.createObjectURL(imageFile) : null, [imageFile]);
@@ -107,9 +109,15 @@ export default function Fabrics() {
     setConfirmDel(null);
     try {
       await api.delete(`/fabrics/${code}`);
-      toast.success('تم إلغاء التفعيل');
+      toast.success('تم التعطيل بنجاح');
       fetchFabrics();
-    } catch { toast.error('فشل'); }
+    } catch (err) {
+      if (err.response?.status === 409) {
+        toast.error(`لا يمكن تعطيل هذا القماش: مرتبط بـ ${err.response.data.blocking_count} سجل نشط`);
+      } else {
+        toast.error(err.response?.data?.error || 'فشل التعطيل');
+      }
+    }
   };
 
   return (
@@ -117,8 +125,8 @@ export default function Fabrics() {
       {confirmDel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="card card-body max-w-sm w-full mx-4">
-            <h3 className="section-title mb-2">تأكيد الحذف</h3>
-            <p className="text-sm text-[var(--color-muted)] mb-5">إلغاء تفعيل هذا القماش؟</p>
+            <h3 className="section-title mb-2">تأكيد التعطيل</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-5">هل أنت متأكد من تعطيل هذا القماش؟ لا يمكن حذفه نهائياً — يمكن إعادة تفعيله لاحقاً.</p>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setConfirmDel(null)} className="btn btn-ghost">إلغاء</button>
               <button onClick={doDelete} className="btn btn-danger">تأكيد</button>
@@ -129,12 +137,19 @@ export default function Fabrics() {
       <PageHeader title="سجل الأقمشة" subtitle={`${total} قماش مسجل`}
         actions={<div className="flex items-center gap-2">
           <HelpButton pageKey="fabrics" />
-          <ExportButton data={fabrics} filename="fabrics" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'fabric_type',label:'النوع'},{key:'price_per_m',label:'سعر المتر'},{key:'supplier',label:'المورد'},{key:'color',label:'اللون'}]} />
+          <button onClick={() => setShowImport(true)} className="btn btn-outline btn-sm flex items-center gap-1.5"><Upload size={14} /> استيراد</button>
+          <ExportButton data={fabrics} filename="fabrics" backendEndpoint="/fabrics/export" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'fabric_type',label:'النوع'},{key:'price_per_m',label:'سعر المتر'},{key:'supplier',label:'المورد'},{key:'color',label:'اللون'}]} />
           <PermissionGuard module="fabrics" action="create">
             <button onClick={openNew} className="btn btn-gold"><Plus size={16} /> إضافة قماش</button>
           </PermissionGuard>
         </div>}
       />
+
+      <ImportCSV isOpen={showImport} onClose={() => setShowImport(false)}
+        endpoint="/fabrics/import" entityName="الأقمشة"
+        templateColumns={['code','name','fabric_type','price_per_m','supplier','color','notes']}
+        helpText="الأعمدة المطلوبة: code, name, price_per_m. الأعمدة الاختيارية: fabric_type (main/lining/both), supplier, color, notes"
+        onSuccess={() => fetchFabrics()} />
 
       {/* Filters bar */}
       <div className="flex gap-3 flex-wrap items-center">

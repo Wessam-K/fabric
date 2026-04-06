@@ -2,6 +2,8 @@
 
 > Phase 4 deliverable — phased plan: A (Stability) → B (Reliability) → C (Performance) → D (Maintainability)  
 > Baseline commit: `19ddc8b`
+>
+> **Update (Phase R, 2026-04-06)**: Items A9 (invoice hard delete → soft-delete) resolved for all 7 entity types. CSV formula injection fixed. Avatar upload auth fixed. Comprehensive E2E test suite rewritten (16 phases). Full seed data rewrite covering all entities.
 
 ---
 

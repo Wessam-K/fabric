@@ -31,13 +31,19 @@ export default function ModelsList() {
   useEffect(() => { fetchModels(); }, [search]);
 
   const handleDelete = async (code) => {
-    const ok = await confirm({ title: 'إلغاء تفعيل الموديل', message: 'هل تريد إلغاء تفعيل هذا الموديل؟', variant: 'warning' });
+    const ok = await confirm({ title: 'تعطيل الموديل', message: 'هل أنت متأكد من تعطيل هذا الموديل؟ لا يمكن حذفه نهائياً — يمكن إعادة تفعيله لاحقاً.', variant: 'warning' });
     if (!ok) return;
     try {
       await api.delete(`/models/${code}`);
-      toast.success('تم إلغاء تفعيل الموديل');
+      toast.success('تم تعطيل الموديل بنجاح');
       fetchModels();
-    } catch { toast.error('فشل الحذف'); }
+    } catch (err) {
+      if (err.response?.status === 409) {
+        toast.error(`لا يمكن تعطيل هذا الموديل: مرتبط بـ ${err.response.data.blocking_count} أمر عمل نشط`);
+      } else {
+        toast.error(err.response?.data?.error || 'فشل التعطيل');
+      }
+    }
   };
 
   return (

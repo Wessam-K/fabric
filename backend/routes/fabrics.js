@@ -143,9 +143,16 @@ router.delete('/:code', requirePermission('fabrics', 'delete'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM fabrics WHERE code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
-    db.prepare("UPDATE fabrics SET status='inactive' WHERE code=?").run(req.params.code);
-    logAudit(req, 'DELETE', 'fabric', req.params.code, existing.name);
-    res.json({ message: 'تم التعطيل', code: req.params.code });
+    if (existing.status === 'inactive') return res.status(400).json({ error: 'هذا القماش معطل بالفعل' });
+    // Check for active work orders using this fabric
+    const activeWO = db.prepare("SELECT COUNT(*) as c FROM wo_fabric_batches wfb JOIN work_orders wo ON wo.id = wfb.wo_id WHERE wfb.fabric_code=? AND wo.status IN ('pending','in_progress','paused')").get(req.params.code).c;
+    if (activeWO > 0) return res.status(409).json({ error: 'لا يمكن تعطيل هذا القماش لأنه مرتبط بأوامر عمل نشطة', blocking_count: activeWO });
+    // Check for open PO items
+    const openPO = db.prepare("SELECT COUNT(*) as c FROM po_items pi JOIN purchase_orders po ON po.id = pi.po_id WHERE pi.item_code=? AND po.status IN ('ordered','partial')").get(req.params.code).c;
+    if (openPO > 0) return res.status(409).json({ error: 'لا يمكن تعطيل هذا القماش لأنه مرتبط بطلبات شراء مفتوحة', blocking_count: openPO });
+    db.prepare("UPDATE fabrics SET status='inactive', updated_at=datetime('now') WHERE code=?").run(req.params.code);
+    logAudit(req, 'DEACTIVATE', 'fabric', req.params.code, existing.name);
+    res.json({ message: 'تم التعطيل بنجاح — لا يمكن الحذف النهائي من النظام', code: req.params.code });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

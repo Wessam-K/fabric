@@ -109,9 +109,13 @@ router.delete('/:code', requirePermission('models', 'delete'), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM models WHERE model_code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
+    if (existing.status === 'inactive') return res.status(400).json({ error: 'هذا الموديل معطل بالفعل' });
+    // Check for active work orders using this model
+    const activeWO = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE model_id=? AND status IN ('pending','in_progress','paused')").get(existing.id).c;
+    if (activeWO > 0) return res.status(409).json({ error: 'لا يمكن تعطيل هذا الموديل لأنه مرتبط بأوامر عمل نشطة', blocking_count: activeWO });
     db.prepare("UPDATE models SET status='inactive',updated_at=datetime('now') WHERE model_code=?").run(req.params.code);
-    logAudit(req, 'DELETE', 'model', req.params.code, existing.model_name || existing.model_code);
-    res.json({ message: 'تم التعطيل' });
+    logAudit(req, 'DEACTIVATE', 'model', req.params.code, existing.model_name || existing.model_code);
+    res.json({ message: 'تم التعطيل بنجاح — لا يمكن الحذف النهائي من النظام' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

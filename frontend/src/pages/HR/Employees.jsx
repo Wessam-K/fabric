@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, X, Trash2, Download } from 'lucide-react';
+import { Plus, Search, Edit2, X, Trash2, Download, Upload } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
 import HelpButton from '../../components/HelpButton';
 import PermissionGuard from '../../components/PermissionGuard';
+import ImportCSV from '../../components/ImportCSV';
 import api from '../../utils/api';
 import { exportToExcel } from '../../utils/exportExcel';
 import { useConfirm } from '../../components/ConfirmDialog';
@@ -26,6 +27,7 @@ export default function Employees() {
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState({});
   const [error, setError] = useState('');
+  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => { load(); }, [search, filterDept, filterType]);
 
@@ -98,11 +100,18 @@ export default function Employees() {
       <PageHeader title="الموظفون" subtitle="إدارة بيانات الموظفين"
         action={<div className="flex gap-2">
           <HelpButton pageKey="hr" />
+          <button onClick={() => setShowImport(true)} className="btn btn-outline btn-sm flex items-center gap-1.5"><Upload size={14} /> استيراد</button>
           <button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير</button>
           <PermissionGuard module="hr" action="create">
             <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> موظف جديد</button>
           </PermissionGuard>
         </div>} />
+
+      <ImportCSV isOpen={showImport} onClose={() => setShowImport(false)}
+        endpoint="/hr/employees/import" entityName="الموظفين"
+        templateColumns={['emp_code','full_name','national_id','department','job_title','employment_type','salary_type','base_salary','phone','hire_date']}
+        helpText="الأعمدة المطلوبة: emp_code, full_name. الأعمدة الاختيارية: national_id, department, job_title, employment_type (full_time/daily/piece_work), salary_type (monthly/daily/hourly), base_salary, phone, hire_date"
+        onSuccess={() => load()} />
 
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">

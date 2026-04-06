@@ -10,7 +10,7 @@
 | Field | Value |
 |-------|-------|
 | Name | **WK-Hub** (نظام إدارة المصنع) |
-| Version | 2.0.0 (`package.json`) — schema V33 |
+| Version | 2.0.0 (`package.json`) — schema V35+ |
 | App ID | `com.wkhub.factory` |
 | Description | Factory ERP for garment/textile manufacturing |
 | Repository | `https://github.com/Wessam-K/fabric.git` |
@@ -30,7 +30,7 @@
 | Security | Helmet 8.1.0, CORS 2.8.5 |
 | Logging | Morgan 1.10.1 + Winston 3.19.0 (Electron) |
 | File Upload | Multer 1.4.5-lts.1 |
-| Excel | xlsx 0.18.5 |
+| Excel | exceljs 4.x (backend), xlsx 0.18.5 (frontend) |
 | Config | dotenv 16.4.7 |
 
 ### Frontend
@@ -63,8 +63,8 @@
 │           │                                          │
 │  ┌────────▼─────────┐                                │
 │  │    wk-hub.db      │                               │
-│  │  87 tables + 1 view│                              │
-│  │  Schema V23       │                               │
+│  │  94 tables + 1 view│                              │
+│  │  Schema V35+      │                               │
 │  └──────────────────┘                                │
 └─────────────────────────────────────────────────────┘
 ```
@@ -77,7 +77,7 @@
 
 ---
 
-## 4. Database Schema Summary (V23, 87 tables + 1 view)
+## 4. Database Schema Summary (V35+, 94 tables + 1 view)
 
 ### Table Groups
 

@@ -4,7 +4,7 @@ import api from '../utils/api';
 import { useToast } from './Toast';
 
 /**
- * ImportCSV - Reusable CSV import modal component
+ * ImportCSV - Reusable CSV / XLSX import modal component
  * 
  * Props:
  * - isOpen: boolean - controls modal visibility
@@ -78,27 +78,58 @@ export default function ImportCSV({
     return rows;
   };
 
-  const handleFileChange = (e) => {
+  const parseXLSX = async (buffer) => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.worksheets[0];
+    if (!ws || ws.rowCount < 2) return [];
+
+    const headers = [];
+    ws.getRow(1).eachCell((cell, col) => { headers[col - 1] = String(cell.value || '').trim(); });
+
+    const rows = [];
+    for (let r = 2; r <= ws.rowCount; r++) {
+      const row = {};
+      const wsRow = ws.getRow(r);
+      let hasData = false;
+      headers.forEach((h, idx) => {
+        const val = wsRow.getCell(idx + 1).value;
+        row[h] = val != null ? String(val) : '';
+        if (row[h]) hasData = true;
+      });
+      if (hasData) rows.push(row);
+    }
+    return rows;
+  };
+
+  const handleFileChange = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
     
-    if (!f.name.endsWith('.csv')) {
-      toast.error('يرجى اختيار ملف CSV');
+    const isCSV = f.name.endsWith('.csv');
+    const isXLSX = f.name.endsWith('.xlsx');
+    if (!isCSV && !isXLSX) {
+      toast.error('يرجى اختيار ملف CSV أو XLSX');
       return;
     }
     
     setFile(f);
     setResult(null);
     
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result;
-      if (typeof text === 'string') {
+    try {
+      if (isCSV) {
+        const text = await f.text();
         const rows = parseCSV(text);
-        setPreview(rows.slice(0, 5)); // Show first 5 rows
+        setPreview(rows.slice(0, 5));
+      } else {
+        const buffer = await f.arrayBuffer();
+        const rows = await parseXLSX(buffer);
+        setPreview(rows.slice(0, 5));
       }
-    };
-    reader.readAsText(f, 'utf-8');
+    } catch {
+      toast.error('فشل قراءة الملف');
+    }
   };
 
   const handleImport = async () => {
@@ -106,33 +137,29 @@ export default function ImportCSV({
     
     setLoading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const text = event.target?.result;
-        if (typeof text !== 'string') return;
-        
-        const rows = parseCSV(text);
-        if (rows.length === 0) {
-          toast.error('الملف فارغ أو بتنسيق خاطئ');
-          setLoading(false);
-          return;
-        }
-        
-        try {
-          const { data } = await api.post(endpoint, rows);
-          setResult(data);
-          toast.success(`تم استيراد ${data.inserted || 0} سجل بنجاح`);
-          onSuccess?.(data);
-        } catch (err) {
-          toast.error(err.response?.data?.error || 'فشل الاستيراد');
-          setResult({ inserted: 0, errors: [{ row: 0, error: err.response?.data?.error || 'خطأ غير معروف' }] });
-        } finally {
-          setLoading(false);
-        }
-      };
-      reader.readAsText(file, 'utf-8');
+      let rows;
+      if (file.name.endsWith('.xlsx')) {
+        const buffer = await file.arrayBuffer();
+        rows = await parseXLSX(buffer);
+      } else {
+        const text = await file.text();
+        rows = parseCSV(text);
+      }
+
+      if (rows.length === 0) {
+        toast.error('الملف فارغ أو بتنسيق خاطئ');
+        setLoading(false);
+        return;
+      }
+
+      const { data } = await api.post(endpoint, rows);
+      setResult(data);
+      toast.success(`تم استيراد ${data.inserted || data.imported || 0} سجل بنجاح`);
+      onSuccess?.(data);
     } catch (err) {
-      toast.error('فشل قراءة الملف');
+      toast.error(err.response?.data?.error || 'فشل الاستيراد');
+      setResult({ inserted: 0, errors: [{ row: 0, error: err.response?.data?.error || 'خطأ غير معروف' }] });
+    } finally {
       setLoading(false);
     }
   };
@@ -159,7 +186,7 @@ export default function ImportCSV({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-bold text-lg" style={{ color: 'var(--color-navy)' }}>
-            استيراد {entityName} من CSV
+            استيراد {entityName}
           </h3>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
             <X size={20} />
@@ -197,13 +224,13 @@ export default function ImportCSV({
             <input
               ref={fileRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx"
               onChange={handleFileChange}
               className="hidden"
             />
             <Upload size={32} className="mx-auto mb-2 text-gray-400" />
             <p className="text-sm text-gray-500">
-              {file ? file.name : 'اضغط لاختيار ملف CSV أو اسحبه هنا'}
+              {file ? file.name : 'اضغط لاختيار ملف CSV أو XLSX'}
             </p>
           </div>
 

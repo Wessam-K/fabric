@@ -51,9 +51,16 @@ router.put('/:id', requirePermission('settings', 'edit'), (req, res) => {
 // DELETE /api/stage-templates/:id
 router.delete('/:id', requirePermission('settings', 'delete'), (req, res) => {
   try {
-    db.prepare('DELETE FROM stage_templates WHERE id=?').run(parseInt(req.params.id));
-    logAudit(req, 'DELETE', 'stage_template', req.params.id, 'template#' + req.params.id);
-    res.json({ success: true });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'معرف غير صالح' });
+    const tmpl = db.prepare('SELECT * FROM stage_templates WHERE id=?').get(id);
+    if (!tmpl) return res.status(404).json({ error: 'القالب غير موجود' });
+    // Check if any work orders use this template
+    const usedInWO = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE stage_template_id=?").get(id).c;
+    if (usedInWO > 0) return res.status(409).json({ error: 'لا يمكن حذف هذا القالب لأنه مستخدم في أوامر عمل', blocking_count: usedInWO });
+    db.prepare('DELETE FROM stage_templates WHERE id=?').run(id);
+    logAudit(req, 'DELETE', 'stage_template', id, tmpl.name || 'template#' + id);
+    res.json({ success: true, message: 'تم حذف القالب' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

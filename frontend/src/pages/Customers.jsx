@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, DollarSign, X, FileText, Users } from 'lucide-react';
+import { Plus, Search, DollarSign, X, FileText, Users, Upload } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -8,6 +8,7 @@ import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import ImportCSV from '../components/ImportCSV';
 import { useAuth } from '../context/AuthContext';
 
 export default function Customers() {
@@ -24,6 +25,7 @@ export default function Customers() {
   const [editId, setEditId] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerInvoices, setCustomerInvoices] = useState([]);
+  const [showImport, setShowImport] = useState(false);
 
   const emptyForm = { name: '', phone: '', email: '', address: '', city: '', tax_number: '', credit_limit: '', notes: '', customer_type: 'retail', contact_name: '', payment_terms: '' };
   const [form, setForm] = useState(emptyForm);
@@ -89,11 +91,18 @@ export default function Customers() {
       <PageHeader title="العملاء" subtitle="إدارة العملاء والمستحقات"
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="customers" />
-          <ExportButton data={customers} filename="customers" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'customer_type',label:'النوع'},{key:'city',label:'المدينة'},{key:'phone',label:'الهاتف'},{key:'balance',label:'الرصيد'}]} />
+          <button onClick={() => setShowImport(true)} className="btn btn-outline btn-sm flex items-center gap-1.5"><Upload size={14} /> استيراد</button>
+          <ExportButton data={customers} filename="customers" backendEndpoint="/customers/export" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'customer_type',label:'النوع'},{key:'city',label:'المدينة'},{key:'phone',label:'الهاتف'},{key:'balance',label:'الرصيد'}]} />
           <PermissionGuard module="customers" action="create">
             <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> عميل جديد</button>
           </PermissionGuard>
         </div>} />
+
+      <ImportCSV isOpen={showImport} onClose={() => setShowImport(false)}
+        endpoint="/customers/import" entityName="العملاء"
+        templateColumns={['name','phone','email','address','city','tax_number','customer_type','notes']}
+        helpText="الأعمدة المطلوبة: name (إجباري). الأعمدة الاختيارية: phone, email, address, city, tax_number, customer_type (retail/wholesale), notes"
+        onSuccess={() => load()} />
 
       {/* KPI */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">

@@ -43,6 +43,10 @@ function csrfProtection(req, res, next) {
   // Skip in test mode to allow automated testing
   if (process.env.NODE_ENV === 'test') return next();
 
+  // Login & setup endpoints are exempt (no token exists yet)
+  // When mounted via app.use('/api', csrfProtection), req.path has the prefix stripped
+  if (req.path === '/auth/login' || req.path.startsWith('/setup')) return next();
+
   const cookieToken = req.cookies?.[CSRF_COOKIE];
   const headerToken = req.headers[CSRF_HEADER];
 

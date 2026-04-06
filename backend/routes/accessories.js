@@ -136,9 +136,13 @@ router.delete('/:code', requirePermission('accessories', 'delete'), (req, res) =
   try {
     const existing = db.prepare('SELECT * FROM accessories WHERE code=?').get(req.params.code);
     if (!existing) return res.status(404).json({ error: 'غير موجود' });
-    db.prepare("UPDATE accessories SET status='inactive' WHERE code=?").run(req.params.code);
-    logAudit(req, 'DELETE', 'accessory', req.params.code, existing.name);
-    res.json({ message: 'تم التعطيل', code: req.params.code });
+    if (existing.status === 'inactive') return res.status(400).json({ error: 'هذا الإكسسوار معطل بالفعل' });
+    // Check for active work orders using this accessory
+    const activeWO = db.prepare("SELECT COUNT(*) as c FROM wo_accessories wa JOIN work_orders wo ON wo.id = wa.wo_id WHERE wa.accessory_code=? AND wo.status IN ('pending','in_progress','paused')").get(req.params.code).c;
+    if (activeWO > 0) return res.status(409).json({ error: 'لا يمكن تعطيل هذا الإكسسوار لأنه مرتبط بأوامر عمل نشطة', blocking_count: activeWO });
+    db.prepare("UPDATE accessories SET status='inactive', updated_at=datetime('now') WHERE code=?").run(req.params.code);
+    logAudit(req, 'DEACTIVATE', 'accessory', req.params.code, existing.name);
+    res.json({ message: 'تم التعطيل بنجاح — لا يمكن الحذف النهائي من النظام', code: req.params.code });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

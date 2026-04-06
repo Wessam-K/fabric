@@ -2,6 +2,12 @@
 
 > Phase 3 deliverable — all findings consolidated, prioritized by severity × impact × risk  
 > Baseline commit: `19ddc8b`
+>
+> **Update (Phase R, 2026-04-06)**: The following items have been fully resolved:
+> - **T1-09 (H-1)**: Invoice hard delete → All DELETE routes now use soft-deactivation with dependency checks (fabrics, accessories, customers, suppliers, models, HR, stage templates)
+> - **CSV formula injection**: `escCSV()` now prefixes `=+\-@\t` cells with `'` to prevent Excel formula injection
+> - **Avatar upload auth**: Missing authentication on the avatar upload endpoint has been fixed
+> - **Seed data integrity**: Comprehensive seed rewrite ensures no negative stock, no orphaned records, all completed WOs have dates
 
 ---
 

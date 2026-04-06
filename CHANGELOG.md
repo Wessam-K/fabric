@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **Dependency-aware deactivation**: DELETE endpoints for fabrics, accessories, customers, suppliers, models, HR, and stage templates now check for active work orders, open POs, and pending invoices before deactivating; return 409 with `blocking_count` on conflict
+- **Frontend deactivation UX**: Fabrics, Accessories, and Models pages updated to use "تعطيل" (deactivate) wording and handle 409 dependency errors with user-friendly messages
+- **Comprehensive seed data**: New `seed.js` with 4 users, 8 suppliers, 12 fabrics, 15 accessories, 6 customers, 6 models with BOM, 12 POs, 18 WOs, 10 invoices, 26 journal entries, 22 QC checks, 384 attendance records, 36 expenses, and audit log
+- **E2E test rewrite**: 16 test phases (A–P) covering auth, dashboard, all entity pages, API smoke tests, and unauthenticated request rejection
+- **CSV formula injection protection**: `escCSV` in exports.js now prefixes values starting with `=`, `+`, `-`, `@`, or tab with `'` to prevent formula injection in Excel
+
+### Fixed
+- PO-2026-012 seed failure: `status: 'ordered'` changed to `status: 'sent'` to match `purchase_orders` CHECK constraint
+- HR delete handler referenced `work_order_stages` instead of `wo_stages` table
+- `journal_entry_lines` seed used wrong column names (`journal_entry_id`/`account_code` → `entry_id`/`account_id`)
+
+### Security
+- Avatar upload route now has explicit `requireRole` middleware for defense-in-depth (was already protected by global `requireAuth`)
+- Gitignore hardened: added `playwright-report/`, `e2e-screenshots/`, `*.mp4`
+- Playwright viewport reduced from 1440 to 1280px
+
 ## [3.4.0] — 2026-03-31
 
 ### Added

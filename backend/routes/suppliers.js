@@ -202,9 +202,15 @@ router.get('/:id/ledger', requirePermission('suppliers', 'view'), (req, res) => 
 // DELETE /api/suppliers/:id
 router.delete('/:id', requirePermission('suppliers', 'delete'), (req, res) => {
   try {
-    db.prepare("UPDATE suppliers SET status='inactive' WHERE id=?").run(parseInt(req.params.id));
-    logAudit(req, 'DELETE', 'supplier', req.params.id, `supplier#${req.params.id}`);
-    res.json({ success: true });
+    const supplier = db.prepare('SELECT * FROM suppliers WHERE id=?').get(parseInt(req.params.id));
+    if (!supplier) return res.status(404).json({ error: 'المورد غير موجود' });
+    if (supplier.status === 'inactive') return res.status(400).json({ error: 'هذا المورد معطل بالفعل' });
+    // Check for open purchase orders
+    const openPO = db.prepare("SELECT COUNT(*) as c FROM purchase_orders WHERE supplier_id=? AND status IN ('ordered','partial')").get(supplier.id).c;
+    if (openPO > 0) return res.status(409).json({ error: 'لا يمكن تعطيل هذا المورد لأنه مرتبط بطلبات شراء مفتوحة', blocking_count: openPO });
+    db.prepare("UPDATE suppliers SET status='inactive', updated_at=datetime('now') WHERE id=?").run(supplier.id);
+    logAudit(req, 'DEACTIVATE', 'supplier', supplier.id, supplier.name);
+    res.json({ message: 'تم تعطيل المورد بنجاح — لا يمكن الحذف النهائي من النظام', id: supplier.id });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

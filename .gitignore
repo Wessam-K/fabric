@@ -22,6 +22,9 @@ frontend/dist/
 # Uploads
 backend/uploads/*
 !backend/uploads/.gitkeep
+!backend/uploads/fabrics/.gitkeep
+!backend/uploads/accessories/.gitkeep
+!backend/uploads/.gitkeep
 
 # Environment
 backend/.env
@@ -62,6 +65,11 @@ backups/
 # Sweep/debug artifacts
 sweep-*.txt
 screenshots/
+
+# Playwright test artifacts
+playwright-report/
+e2e-screenshots/
+*.mp4
 
 # Images and binary assets (keep repo lean)
 assets/*.png

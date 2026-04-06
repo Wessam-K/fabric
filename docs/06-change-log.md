@@ -5,6 +5,50 @@
 
 ---
 
+## Phase R — Comprehensive Audit v4.0 (2026-04-06)
+
+### Step 0: Repository Hygiene
+- **.gitignore**: Hardened — added `playwright-report/`, `e2e-screenshots/`, `*.mp4`, `*.backup`, secrets
+- **playwright.config.js**: Viewport fixed from 1440 → 1280×900 to stay under 2000px
+- **.gitkeep**: Added to `test-results/` and `screenshots/` to preserve empty dirs
+
+### Step 1: Soft-Delete with Dependency Checks
+- **routes/fabrics.js**: DELETE checks `wo_fabric_batches` + `purchase_order_items` before deactivation → 409 + `blocking_count`
+- **routes/accessories.js**: DELETE checks `wo_accessories` → 409 + `blocking_count`
+- **routes/customers.js**: DELETE checks open invoices + active WOs → 409 + `blocking_count`
+- **routes/suppliers.js**: DELETE checks open POs → 409 + `blocking_count`
+- **routes/models.js**: DELETE checks active WOs → 409 + `blocking_count`
+- **routes/hr.js**: DELETE checks `wo_stages` for active assignments → 409 + `blocking_count`
+- **routes/stagetemplates.js**: DELETE checks WO usage → 409 + `blocking_count`
+- **frontend Fabrics.jsx, Accessories.jsx, ModelsList.jsx**: Delete buttons → "تعطيل", 409 handling with Arabic messages
+
+### Step 2: Comprehensive Seed Rewrite
+- **backend/seed.js**: Full rewrite (~970 lines) — 4 users, 8 suppliers, 12 fabrics, 15 accessories, 6 customers, 6 models, 12 POs, 18 WOs, 10 invoices, 26 journal entries, 6 employees, 4 machines, 22 QC checks, 36 expenses, 384 attendance records
+- Date range: 2026-01-05 → 2026-04-05 (Egypt Fri+Sat weekend)
+- Fixed PO-2026-012 status from 'ordered' → 'sent'
+
+### Step 3: Export Reports Verification
+- **routes/exports.js**: Fixed `escCSV()` — formula injection protection for `=+\-@\t` prefixed cells
+- Verified 19 main export endpoints + 11 inline entity exports
+- All CSV exports include UTF-8 BOM
+
+### Step 4: E2E Test Rewrite
+- **e2e/screenshots.spec.js**: Full rewrite (521 lines, 16 phases A–P)
+- Phases: Login → Suppliers → Fabrics → Accessories → Customers → Models → POs → WOs → Stages → QC → Invoices → Accounting → HR → Machines → Dashboard/Exports → Logout
+
+### Step 5: Security Audit
+- **routes/users.js**: Added auth check on avatar upload endpoint
+- Verified: Helmet, CORS, CSRF, rate limiting, JWT secret management, file upload validation, parameterized SQL
+
+### Step 6: Documentation
+- **ARCHITECTURE.md**: Updated to v8 — added sections 9-12 (soft-delete policy, seed data profile, export system, security posture), fixed xlsx → exceljs note
+- **CHANGELOG.md**: Updated with [Unreleased] section
+- **.github/copilot-instructions.md**: Created comprehensive AI agent instructions
+- **AGENT_PROMPT.md**: Created full reference prompt for AI agents
+- **docs/06-change-log.md**: This entry
+
+---
+
 ## Phase Q — Enterprise Hardening v3.5 (2026-04-01)
 
 ### License Tier Enforcement

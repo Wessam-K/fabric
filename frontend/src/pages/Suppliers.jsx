@@ -7,8 +7,9 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import ImportCSV from '../components/ImportCSV';
 import { useAuth } from '../context/AuthContext';
-import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
+import { exportFromBackend } from '../utils/exportUtils';
 
 const TYPE_MAP = { fabric: 'أقمشة', accessory: 'اكسسوارات', both: 'أقمشة واكسسوارات', other: 'أخرى' };
 
@@ -26,6 +27,7 @@ export default function Suppliers() {
   const [editId, setEditId] = useState(null);
   const [showPayment, setShowPayment] = useState(null);
   const [paymentForm, setPaymentForm] = useState({ amount: '', payment_method: 'cash', reference: '', notes: '' });
+  const [showImport, setShowImport] = useState(false);
 
   const emptyForm = { code: '', name: '', contact_name: '', phone: '', email: '', address: '', supplier_type: 'fabric', payment_terms: '', rating: 3, notes: '' };
   const [form, setForm] = useState(emptyForm);
@@ -83,13 +85,6 @@ export default function Suppliers() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
-  const handleImport = async () => {
-    try {
-      const result = await importFromCSV('/suppliers/import');
-      if (result) { toast.success(`تم استيراد ${result.imported || 0} مورد`); load(); }
-    } catch (err) { toast.error(err.message || 'فشل الاستيراد'); }
-  };
-
   const handleExport = async () => {
     try { await exportFromBackend('/suppliers/export', 'suppliers'); toast.success('تم التصدير'); }
     catch { toast.error('فشل التصدير'); }
@@ -104,12 +99,18 @@ export default function Suppliers() {
       <PageHeader title="الموردين" subtitle="إدارة الموردين والمدفوعات"
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="suppliers" />
-          <button onClick={handleImport} className="btn btn-secondary text-xs"><Upload size={14} /> استيراد</button>
+          <button onClick={() => setShowImport(true)} className="btn btn-secondary text-xs"><Upload size={14} /> استيراد</button>
           <button onClick={handleExport} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
           <PermissionGuard module="suppliers" action="create">
             <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> مورد جديد</button>
           </PermissionGuard>
         </div>} />
+
+      <ImportCSV isOpen={showImport} onClose={() => setShowImport(false)}
+        endpoint="/suppliers/import" entityName="الموردين"
+        templateColumns={['code','name','contact_name','phone','email','address','supplier_type','payment_terms','notes']}
+        helpText="الأعمدة المطلوبة: code, name. الأعمدة الاختيارية: contact_name, phone, email, address, supplier_type (fabric/accessory/both/other), payment_terms, notes"
+        onSuccess={() => load()} />
 
       {/* KPI */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

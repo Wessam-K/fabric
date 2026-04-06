@@ -244,13 +244,19 @@ router.delete('/:id', requirePermission('customers', 'delete'), (req, res) => {
   try {
     const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
     if (!customer) return res.status(404).json({ error: 'العميل غير موجود' });
-
+    if (customer.status === 'inactive') return res.status(400).json({ error: 'هذا العميل معطل بالفعل' });
+    // Check for open invoices
+    const openInv = db.prepare("SELECT COUNT(*) as c FROM invoices WHERE customer_id=? AND status NOT IN ('paid','cancelled')").get(req.params.id).c;
+    if (openInv > 0) return res.status(409).json({ error: 'لا يمكن تعطيل هذا العميل لأنه مرتبط بفواتير غير مسددة', blocking_count: openInv });
+    // Check for active work orders
+    const activeWO = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE customer_id=? AND status IN ('pending','in_progress','paused')").get(req.params.id).c;
+    if (activeWO > 0) return res.status(409).json({ error: 'لا يمكن تعطيل هذا العميل لأنه مرتبط بأوامر عمل نشطة', blocking_count: activeWO });
     db.prepare("UPDATE customers SET status = 'inactive', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
-    logAudit(req, 'DELETE', 'customer', customer.id, customer.name);
-    res.json({ message: 'تم تعطيل العميل بنجاح', id: customer.id });
+    logAudit(req, 'DEACTIVATE', 'customer', customer.id, customer.name);
+    res.json({ message: 'تم تعطيل العميل بنجاح — لا يمكن الحذف النهائي من النظام', id: customer.id });
   } catch (err) {
-    console.error('Customer delete error:', err);
-    res.status(500).json({ error: 'حدث خطأ أثناء حذف العميل' });
+    console.error('Customer deactivate error:', err);
+    res.status(500).json({ error: 'حدث خطأ أثناء تعطيل العميل' });
   }
 });
 

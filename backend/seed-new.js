@@ -257,27 +257,6 @@ function seed() {
   }
   console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM users').get().c} users`);
 
-  // ─── 1b. SETTINGS ──────────────────────────────────
-  console.log('  → Seeding settings...');
-  const insSetting = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)');
-  const settingsData = {
-    company_name: 'مصنع النيل للملابس',
-    company_name_en: 'Nile Garments Factory',
-    tax_rate: '14',
-    currency: 'EGP',
-    low_stock_threshold: '50',
-    default_page_size: '25',
-    aging_bucket_1: '30',
-    aging_bucket_2: '60',
-    aging_bucket_3: '90',
-    dashboard_list_limit: '10',
-    cost_history_limit: '20',
-    quality_history_limit: '50',
-    report_default_limit: '100',
-  };
-  for (const [k, v] of Object.entries(settingsData)) { insSetting.run(k, v); }
-  console.log(`    ✓ ${Object.keys(settingsData).length} settings`);
-
   // ─── 2. STAGE TEMPLATES ──────────────────────────
   console.log('  → Seeding stage templates...');
   const insStage = db.prepare(`INSERT OR IGNORE INTO stage_templates (name, color, sort_order, is_default) VALUES (?,?,?,1)`);
@@ -509,8 +488,6 @@ function seed() {
   const insWOStage = db.prepare(`INSERT OR IGNORE INTO wo_stages (wo_id, stage_name, sort_order, status, quantity_in_stage, quantity_completed, quantity_rejected, started_at, completed_at, machine_id, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
   const insWOFabBatch = db.prepare(`INSERT OR IGNORE INTO wo_fabric_batches (wo_id, batch_id, fabric_code, role, planned_meters_per_piece, planned_total_meters, waste_pct, actual_total_meters, actual_meters_per_piece, waste_meters, waste_cost, price_per_meter, planned_cost, actual_cost, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   const insWOAccDetail = db.prepare(`INSERT OR IGNORE INTO wo_accessories_detail (wo_id, accessory_code, accessory_name, quantity_per_piece, unit_price, planned_total_cost, actual_quantity, actual_cost, notes) VALUES (?,?,?,?,?,?,?,?,?)`);
-  const insWOFab = db.prepare(`INSERT OR IGNORE INTO wo_fabrics (wo_id, fabric_code, role, meters_per_piece, waste_pct, color_note, planned_meters, actual_meters, sort_order) VALUES (?,?,?,?,?,?,?,?,?)`);
-  const insWOAccSummary = db.prepare(`INSERT OR IGNORE INTO wo_accessories (wo_id, accessory_code, accessory_name, quantity, unit_price, notes) VALUES (?,?,?,?,?,?)`);
 
   const woMap = {}; // wo_number → { id, customerId, modelCode, status, qty, stages }
 
@@ -623,16 +600,6 @@ function seed() {
       }
     }
 
-    // Populate wo_fabrics summary table (for by-fabric report)
-    if (cut > 0) {
-      for (let fi = 0; fi < bomFabs.length; fi++) {
-        const bf = bomFabs[fi];
-        const plannedM = +(bf.meters * wo.qty).toFixed(2);
-        const actualM = +(bf.meters * cut).toFixed(2);
-        insWOFab.run(woRow.id, bf.fabric, bf.role, bf.meters, 5, null, plannedM, actualM, fi + 1);
-      }
-    }
-
     // Link accessories to WO — consumed at packing
     const bomAccs = MODEL_BOM_ACCESSORIES[wo.model] || [];
     const accConsumeQty = packed > 0 ? packed : (cut > 0 ? cut : 0);
@@ -651,17 +618,6 @@ function seed() {
         // Deduct from stock
         if (actualQty > 0) {
           db.prepare('UPDATE accessories SET quantity_on_hand = MAX(0, quantity_on_hand - ?) WHERE code=?').run(actualQty, ba.acc);
-        }
-      }
-    }
-
-    // Populate wo_accessories summary table (for by-accessory report)
-    if (accConsumeQty > 0) {
-      for (const ba of bomAccs) {
-        const accRow2 = db.prepare('SELECT name, unit_price FROM accessories WHERE code=?').get(ba.acc);
-        if (accRow2) {
-          const totalQtyAcc = +(ba.qty * accConsumeQty).toFixed(1);
-          insWOAccSummary.run(woRow.id, ba.acc, accRow2.name, totalQtyAcc, accRow2.unit_price, null);
         }
       }
     }
@@ -689,42 +645,6 @@ function seed() {
   ), 0)`).run();
 
   console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM work_orders').get().c} work orders`);
-
-  // ─── 11b. COST SNAPSHOTS ───────────────────────────
-  console.log('  → Seeding cost snapshots...');
-  const insCostSnap = db.prepare(`INSERT OR IGNORE INTO cost_snapshots (wo_id, model_id, total_pieces, total_meters_main, total_meters_lining, main_fabric_cost, lining_cost, accessories_cost, masnaiya, masrouf, waste_cost, extra_expenses, total_cost, cost_per_piece, snapshot_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-
-  for (const woNum of Object.keys(woMap)) {
-    const wo = woMap[woNum];
-    const woDef = WORK_ORDERS.find(w => w.num === woNum);
-    if (!woDef || woDef.stages[0] === 0) continue; // skip if no cutting done
-
-    const model = MODELS.find(m => m.code === wo.modelCode);
-    if (!model) continue;
-
-    // Get fabric costs from wo_fabric_batches
-    const fabricCosts = db.prepare(`SELECT role, COALESCE(SUM(actual_cost),0) as cost, COALESCE(SUM(actual_total_meters),0) as meters FROM wo_fabric_batches WHERE wo_id=? GROUP BY role`).all(wo.id);
-    let mainFabCost = 0, liningCost = 0, mainMeters = 0, liningMeters = 0, totalWaste = 0;
-    for (const fc of fabricCosts) {
-      if (fc.role === 'main') { mainFabCost = fc.cost; mainMeters = fc.meters; }
-      else { liningCost += fc.cost; liningMeters += fc.meters; }
-    }
-    totalWaste = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as w FROM wo_fabric_batches WHERE wo_id=?').get(wo.id).w;
-
-    // Get accessory costs from wo_accessories_detail
-    const accCost = db.prepare('SELECT COALESCE(SUM(actual_cost),0) as c FROM wo_accessories_detail WHERE wo_id=?').get(wo.id).c;
-
-    const masnaiya = +(((mainFabCost + liningCost + accCost) * 0.05)).toFixed(2);
-    const masrouf = +(15 * woDef.stages[0]).toFixed(2);
-    const totalCost = +(mainFabCost + liningCost + accCost + masnaiya + masrouf + totalWaste).toFixed(2);
-    const costPerPiece = woDef.stages[0] > 0 ? +(totalCost / woDef.stages[0]).toFixed(2) : 0;
-    const snapDate = dd(addDays(wo.startDate, 2));
-
-    insCostSnap.run(wo.id, modelMap[wo.modelCode]?.id || null, woDef.stages[0], +mainMeters.toFixed(2), +liningMeters.toFixed(2),
-      +mainFabCost.toFixed(2), +liningCost.toFixed(2), +accCost.toFixed(2), masnaiya, masrouf, +totalWaste.toFixed(2), 0,
-      totalCost, costPerPiece, snapDate);
-  }
-  console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM cost_snapshots').get().c} cost snapshots`);
 
   // ─── 12. INVOICES ─────────────────────────────────
   console.log('  → Seeding invoices...');
@@ -772,38 +692,6 @@ function seed() {
     }
   }
   console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM invoices').get().c} invoices`);
-
-  // ─── 12b. SHIPMENTS ────────────────────────────────
-  console.log('  → Seeding shipments...');
-  try {
-    const insShip = db.prepare(`INSERT OR IGNORE INTO shipments (shipment_number, shipment_type, status, customer_id, work_order_id, invoice_id, carrier_name, packages_count, ship_date, actual_delivery, shipping_address, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-    const insShipItem = db.prepare(`INSERT OR IGNORE INTO shipment_items (shipment_id, description, model_code, quantity, unit, notes) VALUES (?,?,?,?,?,?)`);
-    let shipNum = 1;
-    for (const inv of INVOICES) {
-      if (inv.shipped <= 0) continue;
-      const wo = woMap[inv.wo];
-      if (!wo) continue;
-      const mm = MODELS.find(m => m.code === wo.modelCode);
-      if (!mm) continue;
-
-      const invRow = db.prepare('SELECT id FROM invoices WHERE invoice_number=?').get(inv.num);
-      const shipDate = wo.completedDate ? addDays(wo.completedDate, randInt(1, 3)) : addDays(wo.startDate, 20);
-      const deliveryDate = addDays(shipDate, randInt(1, 3));
-
-      const shipCode = `SHP-2026-${pad(shipNum++)}`;
-      const custAddr = db.prepare('SELECT address FROM customers WHERE id=?').get(wo.customerId);
-
-      insShip.run(shipCode, 'outbound', 'delivered', wo.customerId, wo.id, invRow ? invRow.id : null,
-        'شركة النقل السريع', Math.ceil(inv.shipped / 50), dd(shipDate), dd(deliveryDate),
-        custAddr ? custAddr.address : '', `شحنة ${inv.num}`, userIds[0], dt(shipDate));
-
-      const shipRow = db.prepare('SELECT id FROM shipments WHERE shipment_number=?').get(shipCode);
-      if (shipRow) {
-        insShipItem.run(shipRow.id, `${mm.name_ar} — ${inv.wo}`, mm.code, inv.shipped, 'piece', null);
-      }
-    }
-    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM shipments').get().c} shipments`);
-  } catch (e) { console.log('    ⚠ Skipping shipments:', e.message); }
 
   // ─── 13. JOURNAL ENTRIES ────────────────────────
   console.log('  → Seeding journal entries...');
@@ -969,74 +857,6 @@ function seed() {
     console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM attendance').get().c} attendance records`);
   } catch (e) { console.log('    ⚠ Skipping attendance:', e.message); }
 
-  // ─── 15b. PAYROLL PERIODS & RECORDS ─────────────────
-  console.log('  → Seeding payroll...');
-  try {
-    const insPayrollPeriod = db.prepare(`INSERT OR IGNORE INTO payroll_periods (period_month, period_name, status, total_gross, total_net, total_deductions, notes, calculated_at, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
-    const insPayrollRec = db.prepare(`INSERT OR IGNORE INTO payroll_records (period_id, employee_id, days_worked, hours_worked, overtime_hours, absent_days, base_pay, overtime_pay, housing_allowance, transport_allowance, food_allowance, other_allowances, bonuses, gross_pay, absence_deduction, late_deduction, social_insurance, tax_deduction, loans_deduction, other_deductions, total_deductions, net_pay, payment_status, payment_date, payment_method) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-
-    const payrollMonths = [
-      { month: '2026-01', name: 'يناير 2026', endDate: '2026-01-31' },
-      { month: '2026-02', name: 'فبراير 2026', endDate: '2026-02-28' },
-      { month: '2026-03', name: 'مارس 2026', endDate: '2026-03-31' },
-    ];
-
-    for (const pm of payrollMonths) {
-      let periodGross = 0, periodNet = 0, periodDeductions = 0;
-
-      insPayrollPeriod.run(pm.month, pm.name, 'paid', 0, 0, 0, null, `${pm.endDate} 18:00:00`, `${pm.endDate} 18:00:00`);
-      const periodRow = db.prepare('SELECT id FROM payroll_periods WHERE period_month=?').get(pm.month);
-      if (!periodRow) continue;
-
-      for (let ei = 0; ei < EMPLOYEES.length; ei++) {
-        const emp = EMPLOYEES[ei];
-        const empRow = db.prepare('SELECT id FROM employees WHERE emp_code=?').get(emp.code);
-        if (!empRow) continue;
-
-        // Calculate from attendance
-        const attStats = db.prepare(`SELECT 
-          COUNT(CASE WHEN attendance_status='present' OR attendance_status='late' THEN 1 END) as days_present,
-          COUNT(CASE WHEN attendance_status='absent' THEN 1 END) as absent_days,
-          COALESCE(SUM(actual_hours),0) as total_hours,
-          COALESCE(SUM(CASE WHEN actual_hours > 8 THEN actual_hours - 8 ELSE 0 END),0) as overtime_hours
-          FROM attendance WHERE employee_id=? AND work_date >= ? AND work_date <= ?`).get(empRow.id, `${pm.month}-01`, pm.endDate);
-
-        const daysWorked = attStats ? attStats.days_present : 22;
-        const absentDays = attStats ? attStats.absent_days : 1;
-        const hoursWorked = attStats ? +attStats.total_hours.toFixed(1) : 176;
-        const overtimeHours = attStats ? +attStats.overtime_hours.toFixed(1) : 4;
-
-        const basePay = emp.salary;
-        const dailyRate = emp.salary_type === 'daily' ? emp.salary : +(emp.salary / 26).toFixed(2);
-        const overtimePay = +(overtimeHours * dailyRate / 8 * 1.5).toFixed(2);
-        const housing = +(basePay * 0.1).toFixed(2);
-        const transport = 300;
-        const food = 200;
-        const bonus = Math.random() < 0.3 ? randInt(200, 500) : 0;
-        const grossPay = +(basePay + overtimePay + housing + transport + food + bonus).toFixed(2);
-
-        const absenceDeduction = +(absentDays * dailyRate).toFixed(2);
-        const socialInsurance = +(basePay * 0.11).toFixed(2);
-        const taxDeduction = basePay >= 5000 ? +(basePay * 0.05).toFixed(2) : 0;
-        const totalDeductions = +(absenceDeduction + socialInsurance + taxDeduction).toFixed(2);
-        const netPay = +(grossPay - totalDeductions).toFixed(2);
-
-        insPayrollRec.run(periodRow.id, empRow.id, daysWorked, hoursWorked, overtimeHours, absentDays,
-          basePay, overtimePay, housing, transport, food, 0, bonus, grossPay,
-          absenceDeduction, 0, socialInsurance, taxDeduction, 0, 0, totalDeductions, netPay,
-          'paid', pm.endDate, 'bank');
-
-        periodGross += grossPay;
-        periodNet += netPay;
-        periodDeductions += totalDeductions;
-      }
-
-      db.prepare('UPDATE payroll_periods SET total_gross=?, total_net=?, total_deductions=?, status=? WHERE id=?')
-        .run(+periodGross.toFixed(2), +periodNet.toFixed(2), +periodDeductions.toFixed(2), 'paid', periodRow.id);
-    }
-    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM payroll_periods').get().c} payroll periods, ${db.prepare('SELECT COUNT(*) as c FROM payroll_records').get().c} payroll records`);
-  } catch (e) { console.log('    ⚠ Skipping payroll:', e.message); }
-
   // ─── 16. EXPENSES ──────────────────────────────────
   console.log('  → Seeding expenses...');
   const insExp = db.prepare(`INSERT OR IGNORE INTO expenses (expense_type, amount, description, expense_date, payment_method, currency, status, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
@@ -1087,61 +907,6 @@ function seed() {
     console.log(`    ✓ Permissions seeded`);
   } catch (e) { console.log('    ⚠ Skipping permissions:', e.message); }
 
-  // ─── 16. CURRENT-MONTH DATA ─────────────────────────
-  // Move some completed WOs and paid invoices into the current month
-  // so dashboard KPIs (monthly_revenue, completed_this_month) show real data
-  console.log('  → Adjusting dates for current-month dashboard visibility...');
-  const now = new Date();
-  const thisMonth1 = new Date(now.getFullYear(), now.getMonth(), 1);
-  const recentDate1 = dd(addDays(thisMonth1, 2));  // 3rd of current month
-  const recentDate2 = dd(addDays(thisMonth1, 4));  // 5th of current month
-  const recentDt1 = dt(addDays(thisMonth1, 2));
-  const recentDt2 = dt(addDays(thisMonth1, 4));
-
-  // Move WO-2026-011 and WO-2026-012 completed_date into current month
-  db.prepare("UPDATE work_orders SET completed_date=?, updated_at=? WHERE wo_number='WO-2026-011'").run(recentDate1, recentDt1);
-  db.prepare("UPDATE work_orders SET completed_date=?, updated_at=? WHERE wo_number='WO-2026-012'").run(recentDate2, recentDt2);
-
-  // Move their invoices (INV-2026-003, INV-2026-004) created_at into current month so monthly_revenue picks them up
-  db.prepare("UPDATE invoices SET created_at=?, updated_at=? WHERE invoice_number='INV-2026-003'").run(recentDt1, recentDt1);
-  db.prepare("UPDATE invoices SET created_at=?, updated_at=? WHERE invoice_number='INV-2026-004'").run(recentDt2, recentDt2);
-
-  // Move payment dates for those invoices too
-  const inv3Row = db.prepare("SELECT id FROM invoices WHERE invoice_number='INV-2026-003'").get();
-  const inv4Row = db.prepare("SELECT id FROM invoices WHERE invoice_number='INV-2026-004'").get();
-  if (inv3Row) db.prepare("UPDATE customer_payments SET payment_date=? WHERE invoice_id=?").run(recentDate1, inv3Row.id);
-  if (inv4Row) db.prepare("UPDATE customer_payments SET payment_date=? WHERE invoice_id=?").run(recentDate2, inv4Row.id);
-
-  // Move some expenses into current month for total_expenses_this_month
-  const recentExpDate = dd(addDays(thisMonth1, 1));
-  db.prepare("UPDATE expenses SET expense_date=? WHERE id IN (SELECT id FROM expenses WHERE status='approved' AND is_deleted=0 LIMIT 5)").run(recentExpDate);
-
-  // Add attendance for today
-  const todayStr = dd(now);
-  const insAtt2 = db.prepare(`INSERT OR IGNORE INTO attendance (employee_id, work_date, attendance_status, actual_hours, scheduled_hours, notes) VALUES (?,?,?,?,?,?)`);
-  const empIds2 = db.prepare('SELECT id FROM employees LIMIT 6').all();
-  empIds2.forEach(e => {
-    insAtt2.run(e.id, todayStr, 'present', 8, 8, null);
-  });
-
-  // Add payroll period for current month
-  const currMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const currMonthName = now.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
-  db.prepare("INSERT OR IGNORE INTO payroll_periods (period_month, period_name, status, total_gross, total_net, total_deductions) VALUES (?,?,?,?,?,?)")
-    .run(currMonthStr, currMonthName, 'open', 0, 0, 0);
-
-  console.log(`    ✓ Moved 2 completed WOs + 2 invoices into current month (${currMonthStr})`);
-  console.log(`    ✓ Added ${empIds2.length} attendance records for today (${todayStr})`);
-
-  // Update total_production_cost on all WOs from cost_snapshots
-  const woCosts = db.prepare(`
-    SELECT wo_id, SUM(total_cost) as total_cost FROM cost_snapshots GROUP BY wo_id
-  `).all();
-  const updWOCost = db.prepare('UPDATE work_orders SET total_production_cost=? WHERE id=?');
-  for (const wc of woCosts) {
-    updWOCost.run(Math.round(wc.total_cost * 100) / 100, wc.wo_id);
-  }
-  console.log(`    ✓ Updated production costs on ${woCosts.length} work orders`);
   // ═══════════════════════════════════════════════════
   // SEED VERIFICATION ASSERTIONS
   // ═══════════════════════════════════════════════════
@@ -1163,12 +928,6 @@ function seed() {
     accessory_total_units: db.prepare('SELECT ROUND(SUM(quantity_on_hand),2) as c FROM accessories').get().c,
     wo_by_status: db.prepare("SELECT status, COUNT(*) as c FROM work_orders GROUP BY status").all(),
     invoiced_total: db.prepare("SELECT ROUND(SUM(total),2) as c FROM invoices WHERE status IN ('paid','sent','partially_paid')").get().c,
-    cost_snapshots: db.prepare('SELECT COUNT(*) as c FROM cost_snapshots').get().c,
-    wo_fabrics: db.prepare('SELECT COUNT(*) as c FROM wo_fabrics').get().c,
-    wo_accessories: db.prepare('SELECT COUNT(*) as c FROM wo_accessories').get().c,
-    payroll_periods: db.prepare('SELECT COUNT(*) as c FROM payroll_periods').get().c,
-    payroll_records: db.prepare('SELECT COUNT(*) as c FROM payroll_records').get().c,
-    shipments: db.prepare('SELECT COUNT(*) as c FROM shipments').get().c,
   };
 
   console.log('\n✅ SEED SUMMARY:\n', JSON.stringify(summary, null, 2));
@@ -1183,11 +942,6 @@ function seed() {
   console.assert(summary.purchase_orders >= 12, '❌ Expected >= 12 purchase orders');
   console.assert(summary.invoices >= 10, '❌ Expected >= 10 invoices');
   console.assert(summary.fabric_total_meters > 0, '❌ Fabric inventory must not be zero');
-  console.assert(summary.cost_snapshots >= 10, '❌ Expected >= 10 cost snapshots');
-  console.assert(summary.wo_fabrics >= 10, '❌ Expected >= 10 wo_fabrics records');
-  console.assert(summary.wo_accessories >= 10, '❌ Expected >= 10 wo_accessories records');
-  console.assert(summary.payroll_periods >= 3, '❌ Expected >= 3 payroll periods');
-  console.assert(summary.payroll_records >= 15, '❌ Expected >= 15 payroll records');
 
   // Verify no negative fabric meters
   const fabrics = db.prepare('SELECT code, available_meters FROM fabrics').all();

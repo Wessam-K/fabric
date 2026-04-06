@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle, Camera } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle, Camera, Upload } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader } from '../components/ui';
@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import ImportCSV from '../components/ImportCSV';
 import { useAuth } from '../context/AuthContext';
 
 const ACC_TYPES = [
@@ -53,6 +54,7 @@ export default function Accessories() {
   const [stockAdjust, setStockAdjust] = useState({ qty_change: '', notes: '' });
   const [confirmDel, setConfirmDel] = useState(null);
   const [imageFile, setImageFile] = useState(null);
+  const [showImport, setShowImport] = useState(false);
 
   // Blob URL with cleanup to prevent memory leak
   const imagePreview = useMemo(() => imageFile ? URL.createObjectURL(imageFile) : null, [imageFile]);
@@ -112,9 +114,15 @@ export default function Accessories() {
     setConfirmDel(null);
     try {
       await api.delete(`/accessories/${code}`);
-      toast.success('تم إلغاء التفعيل');
+      toast.success('تم التعطيل بنجاح');
       fetchList();
-    } catch { toast.error('فشل'); }
+    } catch (err) {
+      if (err.response?.status === 409) {
+        toast.error(`لا يمكن تعطيل هذا الإكسسوار: مرتبط بـ ${err.response.data.blocking_count} سجل نشط`);
+      } else {
+        toast.error(err.response?.data?.error || 'فشل التعطيل');
+      }
+    }
   };
 
   const handleStockAdjust = async () => {
@@ -136,8 +144,8 @@ export default function Accessories() {
       {confirmDel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="card card-body max-w-sm w-full mx-4">
-            <h3 className="section-title mb-2">تأكيد الحذف</h3>
-            <p className="text-sm text-[var(--color-muted)] mb-5">إلغاء تفعيل هذا الاكسسوار؟</p>
+            <h3 className="section-title mb-2">تأكيد التعطيل</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-5">هل أنت متأكد من تعطيل هذا الاكسسوار؟ لا يمكن حذفه نهائياً — يمكن إعادة تفعيله لاحقاً.</p>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setConfirmDel(null)} className="btn btn-ghost">إلغاء</button>
               <button onClick={doDelete} className="btn btn-danger">تأكيد</button>
@@ -148,12 +156,19 @@ export default function Accessories() {
       <PageHeader title="سجل الاكسسوارات" subtitle={`${total} اكسسوار مسجل`}
         actions={<div className="flex items-center gap-2">
           <HelpButton pageKey="accessories" />
-          <ExportButton data={list} filename="accessories" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'acc_type',label:'النوع'},{key:'unit_price',label:'سعر الوحدة'},{key:'unit',label:'الوحدة'},{key:'quantity_on_hand',label:'المخزون'},{key:'supplier',label:'المورد'}]} />
+          <button onClick={() => setShowImport(true)} className="btn btn-outline btn-sm flex items-center gap-1.5"><Upload size={14} /> استيراد</button>
+          <ExportButton data={list} filename="accessories" backendEndpoint="/accessories/export" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'acc_type',label:'النوع'},{key:'unit_price',label:'سعر الوحدة'},{key:'unit',label:'الوحدة'},{key:'quantity_on_hand',label:'المخزون'},{key:'supplier',label:'المورد'}]} />
           <PermissionGuard module="accessories" action="create">
             <button onClick={openNew} className="btn btn-gold"><Plus size={16} /> إضافة اكسسوار</button>
           </PermissionGuard>
         </div>}
       />
+
+      <ImportCSV isOpen={showImport} onClose={() => setShowImport(false)}
+        endpoint="/accessories/import" entityName="الاكسسوارات"
+        templateColumns={['code','acc_type','name','unit_price','unit','supplier','notes']}
+        helpText="الأعمدة المطلوبة: code, name, unit_price. الأعمدة الاختيارية: acc_type (button/zipper/thread/label/packaging/elastic/other), unit, supplier, notes"
+        onSuccess={() => fetchList()} />
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap items-center">

@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 60
+    },
+    "auditLog": "C:\\msn3\\fabric\\backend\\logs\\.f172032f43b677756a95077adfd80274e8edd983-audit.json",
+    "files": [
+        {
+            "date": 1775434315001,
+            "name": "C:\\msn3\\fabric\\backend\\logs\\error-2026-04-06.log",
+            "hash": "62794f9f04f00c14e1739c7fb7c8ef376411d4575d2dc28ada9d7f397a4a1520"
+        }
+    ],
+    "hashType": "sha256"
+}

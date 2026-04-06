@@ -15,7 +15,8 @@ const { round2, safeSubtract } = require('../utils/money');
 const BOM = '\uFEFF';
 
 function escCSV(v) {
-  const s = String(v ?? '');
+  let s = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

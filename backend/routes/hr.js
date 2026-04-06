@@ -224,11 +224,15 @@ router.put('/employees/:id', requirePermission('hr', 'edit'), (req, res) => {
 // DELETE /api/hr/employees/:id — soft delete
 router.delete('/employees/:id', requirePermission('hr', 'delete'), (req, res) => {
   try {
-    const emp = db.prepare('SELECT id, full_name FROM employees WHERE id = ?').get(req.params.id);
+    const emp = db.prepare('SELECT id, full_name, status FROM employees WHERE id = ?').get(req.params.id);
     if (!emp) return res.status(404).json({ error: 'الموظف غير موجود' });
+    if (emp.status === 'terminated') return res.status(400).json({ error: 'تم إنهاء خدمة هذا الموظف بالفعل' });
+    // Check for active work order stages assigned to this employee
+    const activeStages = db.prepare("SELECT COUNT(*) as c FROM wo_stages wos JOIN work_orders wo ON wo.id = wos.wo_id WHERE wos.assigned_to=? AND wo.status IN ('pending','in_progress')").get(emp.id).c;
+    if (activeStages > 0) return res.status(409).json({ error: 'لا يمكن إنهاء خدمة هذا الموظف لأنه مرتبط بمراحل إنتاج نشطة', blocking_count: activeStages });
     db.prepare("UPDATE employees SET status='terminated', termination_date=datetime('now') WHERE id=?").run(emp.id);
-    logAudit(req, 'DELETE', 'employee', emp.id, emp.full_name);
-    res.json({ message: 'تم إنهاء خدمة الموظف' });
+    logAudit(req, 'DEACTIVATE', 'employee', emp.id, emp.full_name);
+    res.json({ message: 'تم إنهاء خدمة الموظف — لا يمكن الحذف النهائي من النظام' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

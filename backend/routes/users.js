@@ -321,7 +321,7 @@ router.post('/bulk', requireRole('superadmin'), (req, res) => {
 });
 
 // POST /api/users/:id/avatar — upload avatar image
-router.post('/:id/avatar', avatarUpload.single('avatar'), (req, res) => {
+router.post('/:id/avatar', requireRole('superadmin', 'manager', 'accountant', 'viewer', 'production', 'hr'), avatarUpload.single('avatar'), (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     if (req.user.id !== userId && req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });

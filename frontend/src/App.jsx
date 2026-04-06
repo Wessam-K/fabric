@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useState, lazy, Suspense } from 'react';
-import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench, Calculator, Send, CalendarClock, CheckSquare, FileSpreadsheet, ShoppingBag, Beaker, RotateCcw, FolderOpen, Database, Download, Upload, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Scissors, Gem, PlusCircle, List, Settings, BarChart2, FileText, Factory, Truck, ShoppingCart, ClipboardList, Warehouse, Users, Shield, Clock, Banknote, LogOut, UserCheck, Cog, ChevronDown, PanelLeftClose, PanelLeft, Package, Key, BookOpen, Scale, Bell, Menu, X, Layers, Calendar, DollarSign, Wrench, Calculator, Send, CalendarClock, CheckSquare, RotateCcw, FolderOpen, Database, Download, Upload, Sun, Moon } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import './i18n'; // Phase 4.2: i18n initialization
@@ -57,9 +57,6 @@ const MRP = lazy(() => import('./pages/MRP'));
 const Shipping = lazy(() => import('./pages/Shipping'));
 const Scheduling = lazy(() => import('./pages/Scheduling'));
 const Quality = lazy(() => import('./pages/Quality'));
-const Quotations = lazy(() => import('./pages/Quotations'));
-const SalesOrders = lazy(() => import('./pages/SalesOrders'));
-const Samples = lazy(() => import('./pages/Samples'));
 const Returns = lazy(() => import('./pages/Returns'));
 const Documents = lazy(() => import('./pages/Documents'));
 const Backups = lazy(() => import('./pages/Backups'));
@@ -130,9 +127,6 @@ function RouteAwareHelpButton() {
     '/returns': 'returns',
     '/scheduling': 'scheduling',
     '/quality': 'quality',
-    '/quotations': 'quotations',
-    '/sales-orders': 'salesorders',
-    '/samples': 'samples',
     '/stage-templates': 'stagetemplates',
     '/hr/employees': 'employees',
     '/hr/attendance': 'attendance',
@@ -178,36 +172,27 @@ function AppLayout() {
       id: 'production',
       label: 'الإنتاج',
       icon: Factory,
+      tour: 'group-production',
       show: () => can('work_orders', 'view') || can('models', 'view'),
       items: [
         { path: '/work-orders', label: 'أوامر الإنتاج', icon: Factory, hide: () => !can('work_orders', 'view'), tour: 'workorders' },
-        { path: '/work-orders/new', label: 'أمر جديد', icon: PlusCircle, hide: () => !can('work_orders', 'create') },
-        { path: '/models', label: 'الموديلات', icon: List, hide: () => !can('models', 'view') },
-        { path: '/machines', label: 'الماكينات', icon: Cog, hide: () => !can('machines', 'view') },
+        { path: '/work-orders/new', label: 'أمر جديد', icon: PlusCircle, hide: () => !can('work_orders', 'create'), tour: 'neworder' },
+        { path: '/models', label: 'الموديلات', icon: List, hide: () => !can('models', 'view'), tour: 'models' },
+        { path: '/machines', label: 'الماكينات', icon: Cog, hide: () => !can('machines', 'view'), tour: 'machines' },
         { path: '/maintenance', label: 'الصيانة', icon: Wrench, hide: () => !can('maintenance', 'view') },
         { path: '/scheduling', label: 'الجدولة', icon: CalendarClock, hide: () => !can('scheduling', 'view') },
         { path: '/stage-templates', label: 'قوالب المراحل', icon: Layers, hide: () => !can('settings', 'view') },
       ],
     },
     {
-      id: 'sales',
-      label: 'المبيعات',
-      icon: ShoppingBag,
-      show: () => can('quotations', 'view') || can('sales_orders', 'view') || can('samples', 'view'),
-      items: [
-        { path: '/quotations', label: 'عروض الأسعار', icon: FileSpreadsheet, hide: () => !can('quotations', 'view') },
-        { path: '/sales-orders', label: 'أوامر البيع', icon: ShoppingBag, hide: () => !can('sales_orders', 'view') },
-        { path: '/samples', label: 'العينات', icon: Beaker, hide: () => !can('samples', 'view') },
-      ],
-    },
-    {
       id: 'inventory',
       label: 'المخزون',
       icon: Package,
+      tour: 'group-inventory',
       show: () => can('fabrics', 'view') || can('inventory', 'view'),
       items: [
-        { path: '/fabrics', label: 'الأقمشة', icon: Scissors, hide: () => !can('fabrics', 'view') },
-        { path: '/accessories', label: 'الاكسسوارات', icon: Gem, hide: () => !can('accessories', 'view') },
+        { path: '/fabrics', label: 'الأقمشة', icon: Scissors, hide: () => !can('fabrics', 'view'), tour: 'fabrics' },
+        { path: '/accessories', label: 'الاكسسوارات', icon: Gem, hide: () => !can('accessories', 'view'), tour: 'accessories' },
         { path: '/inventory/fabrics', label: 'مخزون الأقمشة', icon: Warehouse, hide: () => !can('inventory', 'view') },
         { path: '/inventory/accessories', label: 'مخزون الاكسسوارات', icon: Package, hide: () => !can('inventory', 'view') },
         { path: '/mrp', label: 'تخطيط الاحتياجات', icon: Calculator, hide: () => !can('mrp', 'view') },
@@ -227,12 +212,13 @@ function AppLayout() {
       id: 'finance',
       label: 'المالية',
       icon: FileText,
+      tour: 'group-finance',
       show: () => can('invoices', 'view') || can('suppliers', 'view') || can('accounting', 'view'),
       items: [
-        { path: '/customers', label: 'العملاء', icon: UserCheck, hide: () => !can('invoices', 'view') },
-        { path: '/invoices', label: 'الفواتير', icon: FileText, hide: () => !can('invoices', 'view') },
-        { path: '/purchase-orders', label: 'أوامر الشراء', icon: ShoppingCart, hide: () => !can('purchase_orders', 'view') },
-        { path: '/suppliers', label: 'الموردين', icon: Truck, hide: () => !can('suppliers', 'view') },
+        { path: '/customers', label: 'العملاء', icon: UserCheck, hide: () => !can('invoices', 'view'), tour: 'customers' },
+        { path: '/invoices', label: 'الفواتير', icon: FileText, hide: () => !can('invoices', 'view'), tour: 'invoices' },
+        { path: '/purchase-orders', label: 'أوامر الشراء', icon: ShoppingCart, hide: () => !can('purchase_orders', 'view'), tour: 'purchaseorders' },
+        { path: '/suppliers', label: 'الموردين', icon: Truck, hide: () => !can('suppliers', 'view'), tour: 'suppliers' },
         { path: '/accounting/coa', label: 'دليل الحسابات', icon: BookOpen, hide: () => !can('accounting', 'view') },
         { path: '/accounting/journal', label: 'القيود اليومية', icon: Scale, hide: () => !can('accounting', 'view') },
         { path: '/accounting/trial-balance', label: 'ميزان المراجعة', icon: BarChart2, hide: () => !can('accounting', 'view') },
@@ -252,18 +238,19 @@ function AppLayout() {
       id: 'hr',
       label: 'الموارد البشرية',
       icon: Users,
+      tour: 'group-hr',
       show: () => can('hr', 'view'),
       items: [
-        { path: '/hr/employees', label: 'الموظفون', icon: Users, hide: () => !can('hr', 'view') },
-        { path: '/hr/attendance', label: 'الحضور', icon: Clock, hide: () => !can('hr', 'view') },
-        { path: '/hr/payroll', label: 'الرواتب', icon: Banknote, hide: () => !can('payroll', 'view') },
+        { path: '/hr/employees', label: 'الموظفون', icon: Users, hide: () => !can('hr', 'view'), tour: 'employees' },
+        { path: '/hr/attendance', label: 'الحضور', icon: Clock, hide: () => !can('hr', 'view'), tour: 'attendance' },
+        { path: '/hr/payroll', label: 'الرواتب', icon: Banknote, hide: () => !can('payroll', 'view'), tour: 'payroll' },
         { path: '/hr/leaves', label: 'الإجازات', icon: Calendar, hide: () => !can('hr', 'view') },
       ],
     },
     {
       items: [
-        { path: '/reports', label: 'التقارير', icon: BarChart2, hide: () => !can('reports', 'view') },
-        { path: '/exports', label: 'مركز التصدير', icon: Download, hide: () => !can('reports', 'view') },
+        { path: '/reports', label: 'التقارير', icon: BarChart2, hide: () => !can('reports', 'view'), tour: 'reports' },
+        { path: '/exports', label: 'مركز التصدير', icon: Download, hide: () => !can('reports', 'view'), tour: 'exports' },
         { path: '/import', label: 'استيراد البيانات', icon: Upload, hide: () => !can('settings', 'view') },
       ],
     },
@@ -331,7 +318,7 @@ function AppLayout() {
                   data-tour={item.tour || undefined}
                   className={({ isActive }) =>
                     `flex items-center gap-2.5 ${collapsed ? 'justify-center px-2' : 'px-3'} py-2 rounded-lg text-[13px] transition-colors ${
-                      isActive ? 'bg-[#c9a84c]/15 text-[#c9a84c]' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                      isActive ? 'bg-[#c9a84c]/15 text-[#c9a84c]' : 'text-gray-200 hover:text-white hover:bg-white/5'
                     }`}>
                   <item.icon size={16} strokeWidth={1.8} />
                   {!collapsed && <span>{item.label}</span>}
@@ -347,8 +334,9 @@ function AppLayout() {
             return (
               <div key={gi}>
                 <button onClick={() => setOpenGroup(isOpen ? null : group.id)}
+                  data-tour={group.tour || undefined}
                   className={`w-full flex items-center gap-2.5 ${collapsed ? 'justify-center px-2' : 'px-3'} py-2 rounded-lg text-[13px] transition-colors
-                    ${hasActive ? 'text-[#c9a84c]' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>
+                    ${hasActive ? 'text-[#c9a84c]' : 'text-gray-300 hover:text-white hover:bg-white/5'}`}>
                   <GroupIcon size={16} strokeWidth={1.8} />
                   {!collapsed && (
                     <>
@@ -362,9 +350,10 @@ function AppLayout() {
                     {visibleItems.map(item => (
                       <NavLink key={item.path} to={item.path} end={item.path === '/models' || item.path === '/work-orders'}
                         onClick={() => setMobileOpen(false)}
+                        data-tour={item.tour || undefined}
                         className={({ isActive }) =>
                           `flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] transition-colors ${
-                            isActive ? 'text-[#c9a84c] bg-[#c9a84c]/10' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                            isActive ? 'text-[#c9a84c] bg-[#c9a84c]/10' : 'text-gray-300 hover:text-white hover:bg-white/5'
                           }`}>
                         <item.icon size={14} strokeWidth={1.5} />
                         <span>{item.label}</span>
@@ -479,9 +468,6 @@ function AppLayout() {
           <Route path="/shipping" element={<ProtectedRoute perm={['shipping','view']}><Shipping /></ProtectedRoute>} />
           <Route path="/scheduling" element={<ProtectedRoute perm={['scheduling','view']}><Scheduling /></ProtectedRoute>} />
           <Route path="/quality" element={<ProtectedRoute perm={['quality','view']}><Quality /></ProtectedRoute>} />
-          <Route path="/quotations" element={<ProtectedRoute perm={['quotations','view']}><Quotations /></ProtectedRoute>} />
-          <Route path="/sales-orders" element={<ProtectedRoute perm={['sales_orders','view']}><SalesOrders /></ProtectedRoute>} />
-          <Route path="/samples" element={<ProtectedRoute perm={['samples','view']}><Samples /></ProtectedRoute>} />
           <Route path="/returns" element={<ProtectedRoute perm={['returns','view']}><Returns /></ProtectedRoute>} />
           <Route path="/documents" element={<ProtectedRoute perm={['documents','view']}><Documents /></ProtectedRoute>} />
           <Route path="/backups" element={<ProtectedRoute perm={['backups','view']}><Backups /></ProtectedRoute>} />
