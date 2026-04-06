@@ -56,7 +56,7 @@ router.delete('/:id', requirePermission('settings', 'delete'), (req, res) => {
     const tmpl = db.prepare('SELECT * FROM stage_templates WHERE id=?').get(id);
     if (!tmpl) return res.status(404).json({ error: 'القالب غير موجود' });
     // Check if any work orders use this template
-    const usedInWO = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE stage_template_id=?").get(id).c;
+    const usedInWO = db.prepare("SELECT COUNT(*) as c FROM work_orders WHERE template_id=?").get(id).c;
     if (usedInWO > 0) return res.status(409).json({ error: 'لا يمكن حذف هذا القالب لأنه مستخدم في أوامر عمل', blocking_count: usedInWO });
     db.prepare('DELETE FROM stage_templates WHERE id=?').run(id);
     logAudit(req, 'DELETE', 'stage_template', id, tmpl.name || 'template#' + id);

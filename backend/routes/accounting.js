@@ -66,7 +66,11 @@ router.get('/journal', requirePermission('accounting', 'view'), (req, res) => {
     if (from) { sql += ' AND je.entry_date >= ?'; params.push(from); }
     if (to) { sql += ' AND je.entry_date <= ?'; params.push(to); }
 
-    const countSql = sql.replace(/SELECT je\.\*.*?FROM/, 'SELECT COUNT(DISTINCT je.id) as c FROM');
+    let countSql = `SELECT COUNT(DISTINCT je.id) as c FROM journal_entries je LEFT JOIN users u ON je.created_by = u.id WHERE 1=1`;
+    if (status) { countSql += ' AND je.status = ?'; }
+    if (search) { countSql += ' AND (je.entry_number LIKE ? OR je.description LIKE ?)'; }
+    if (from) { countSql += ' AND je.entry_date >= ?'; }
+    if (to) { countSql += ' AND je.entry_date <= ?'; }
     const total = db.prepare(countSql).get(...params)?.c || 0;
 
     sql += ' ORDER BY je.entry_date DESC, je.id DESC';
