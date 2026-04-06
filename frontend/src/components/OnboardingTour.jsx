@@ -119,11 +119,13 @@ export default function OnboardingTour() {
 
   if (!user || !onDashboard) return null;
 
-  // Inject "don't show again" checkbox into last step
+  // Inject step numbers into titles + "don't show again" checkbox on last step
   const steps = TOUR_STEPS.map((step, i) => {
+    const numberedTitle = `${i + 1} / ${TOUR_STEPS.length} — ${step.title}`;
     if (i === TOUR_STEPS.length - 1) {
       return {
         ...step,
+        title: numberedTitle,
         content: (
           <div>
             <p>{step.content}</p>
@@ -136,7 +138,7 @@ export default function OnboardingTour() {
         ),
       };
     }
-    return step;
+    return { ...step, title: numberedTitle };
   });
 
   return (
@@ -152,11 +154,11 @@ export default function OnboardingTour() {
       spotlightPadding={4}
       callback={handleCallback}
       locale={{
-        back: 'السابق',
-        close: 'إغلاق',
+        back: '← السابق',
+        close: '✕ إغلاق',
         last: 'إنهاء الجولة ✓',
         next: 'التالي ←',
-        skip: 'تخطي الجولة',
+        skip: '⏭ تخطي الجولة كاملاً',
         open: 'اضغط للمتابعة',
       }}
       styles={{
@@ -236,6 +238,3 @@ export default function OnboardingTour() {
   );
 }
 
-export function resetTour() {
-  localStorage.removeItem(TOUR_STORAGE_KEY);
-}

@@ -59,6 +59,11 @@ export default function WorkOrderForm() {
   const [consumerPrice, setConsumerPrice] = useState('');
   const [wholesalePrice, setWholesalePrice] = useState('');
 
+  // Subcontracting
+  const [isSubcontract, setIsSubcontract] = useState(false);
+  const [subcontractorName, setSubcontractorName] = useState('');
+  const [subcontractCost, setSubcontractCost] = useState('');
+
   // Registry
   const [models, setModels] = useState([]);
   const [bomTemplates, setBomTemplates] = useState([]);
@@ -134,6 +139,9 @@ export default function WorkOrderForm() {
           setWholesalePrice(data.wholesale_price ? String(data.wholesale_price) : '');
           setQuantity(data.quantity ? String(data.quantity) : '');
           setIsSizeBased(data.is_size_based !== 0);
+          setIsSubcontract(!!data.is_subcontracted);
+          setSubcontractorName(data.subcontractor_name || '');
+          setSubcontractCost(data.subcontract_cost ? String(data.subcontract_cost) : '');
 
           const mf = (data.fabrics || []).filter(f => f.role === 'main');
           const lf = (data.fabrics || []).filter(f => f.role === 'lining');
@@ -249,6 +257,9 @@ export default function WorkOrderForm() {
           amount: parseFloat(e.amount) || 0,
           notes: e.notes || null,
         })),
+        is_subcontracted: isSubcontract ? 1 : 0,
+        subcontractor_name: isSubcontract ? subcontractorName.trim() || null : null,
+        subcontract_cost: isSubcontract ? parseFloat(subcontractCost) || 0 : 0,
       };
 
       if (isEdit) {
@@ -366,6 +377,29 @@ export default function WorkOrderForm() {
               <label className="block text-[11px] text-gray-500 mb-1">ملاحظات</label>
               <textarea rows={2} value={woNotes} onChange={e => setWoNotes(e.target.value)}
                 className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-[#c9a84c] outline-none resize-none" placeholder="ملاحظات..." />
+            </div>
+
+            {/* Subcontracting */}
+            <div className="mt-3 border-t border-gray-100 pt-3">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={isSubcontract} onChange={e => setIsSubcontract(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c]" />
+                <span className="text-gray-600">تصنيع خارجي (مقاولة من الباطن)</span>
+              </label>
+              {isSubcontract && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <div>
+                    <label className="block text-[11px] text-gray-500 mb-1">اسم المقاول</label>
+                    <input type="text" value={subcontractorName} onChange={e => setSubcontractorName(e.target.value)}
+                      className="w-full border-2 border-amber-200 rounded-lg px-3 py-2.5 text-sm focus:border-[#c9a84c] outline-none bg-white" placeholder="اسم المقاول..." />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-500 mb-1">تكلفة المقاولة</label>
+                    <input type="number" min="0" step="0.01" value={subcontractCost} onChange={e => setSubcontractCost(e.target.value)}
+                      className="w-full border-2 border-amber-200 rounded-lg px-3 py-2.5 text-sm font-mono focus:border-[#c9a84c] outline-none bg-white" placeholder="0.00" />
+                  </div>
+                </div>
+              )}
             </div>
             </div>
           </div>

@@ -54,11 +54,13 @@ export function useHRData(enabled = true) {
 
   useEffect(() => {
     if (!enabled) return;
+    let mounted = true;
     setLoading(true);
     api.get('/reports/hr-summary')
-      .then(res => setData(res.data))
+      .then(res => { if (mounted) setData(res.data); })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
   }, [enabled]);
 
   return { data, loading };

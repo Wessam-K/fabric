@@ -5,6 +5,7 @@ const DashboardConfigContext = createContext(null);
 
 const DEFAULT_WIDGETS = {
   kpis: true,
+  kpiTrends: true,
   todaySummary: true,
   alerts: true,
   productionPipeline: true,
@@ -19,7 +20,7 @@ const DEFAULT_WIDGETS = {
 };
 
 const DEFAULT_ORDER = [
-  'kpis', 'todaySummary', 'alerts', 'charts',
+  'kpis', 'kpiTrends', 'todaySummary', 'alerts', 'charts',
   'productionPipeline', 'financials', 'machineStatus', 'maintenance',
   'lowStock', 'recentOrders', 'bottlenecks', 'hrSummary',
 ];
@@ -117,6 +118,7 @@ export function useDashboardConfig() {
 
 export const WIDGET_META = {
   kpis:               { label: 'مؤشرات الأداء الرئيسية', icon: 'BarChart2' },
+  kpiTrends:          { label: 'اتجاهات المؤشرات', icon: 'TrendingUp' },
   todaySummary:       { label: 'ملخص اليوم', icon: 'CalendarDays' },
   alerts:             { label: 'التنبيهات العاجلة', icon: 'AlertTriangle' },
   productionPipeline: { label: 'خط الإنتاج', icon: 'Factory' },

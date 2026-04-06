@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Factory, CheckCircle, DollarSign, TrendingUp, AlertTriangle,
+  Factory, CheckCircle, DollarSign, TrendingUp, TrendingDown, AlertTriangle,
   CalendarDays, Clock, Wrench, RefreshCw, Settings, ChevronLeft,
-  Package, Users, Activity, Scissors, Gem, List, Truck, UserCheck, GripVertical
+  Package, Users, Activity, Scissors, Gem, List, Truck, UserCheck, GripVertical,
+  FileText, ShoppingCart, BarChart2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { DashboardConfigProvider, useDashboardConfig } from '../context/DashboardConfigContext';
@@ -16,6 +17,7 @@ import {
 import DashboardConfigPanel from '../components/DashboardConfigPanel';
 import HelpButton from '../components/HelpButton';
 import ErrorBoundary from '../components/ErrorBoundary';
+import DashboardReminders from '../components/DashboardReminders';
 
 const LazyCharts = lazy(() => import('../components/DashboardCharts'));
 
@@ -159,6 +161,65 @@ function WidgetRenderer({ widgetKey, dProps, widgets, data, hrData, kpis, net, p
             {kpis.map((kpi, i) => <KPICard key={i} {...kpi} />)}
           </div>
         );
+
+      case 'kpiTrends': {
+        const prevRevenue = data?.prev_monthly_revenue ?? null;
+        const prevCompleted = data?.prev_completed ?? null;
+        const prevActiveWO = data?.prev_month_active_wo ?? null;
+        const prevQuality = data?.prev_quality_rate ?? null;
+        const rows = [
+          { label: 'إيرادات الشهر', current: data?.monthly_revenue || 0, prev: prevRevenue, fmt: 'money' },
+          { label: 'مكتمل هذا الشهر', current: data?.completed_this_month ?? 0, prev: prevCompleted, fmt: 'num' },
+          { label: 'أوامر نشطة', current: data?.active_work_orders ?? 0, prev: prevActiveWO, fmt: 'num' },
+          { label: 'جودة الإنتاج', current: data?.quality_rate ?? 100, prev: prevQuality, fmt: 'pct' },
+        ];
+        const fmtVal = (v, fmt) => {
+          if (v == null) return '—';
+          if (fmt === 'money') return <MoneyDisplay amount={v} />;
+          if (fmt === 'pct') return `${v}%`;
+          return v;
+        };
+        const delta = (cur, prev) => {
+          if (prev == null || prev === 0) return null;
+          return Math.round(((cur - prev) / prev) * 100);
+        };
+        return (
+          <ChartContainer title="اتجاهات المؤشرات" subtitle="الشهر الحالي مقابل السابق">
+            <div className="overflow-x-auto -mx-5 px-5">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100 dark:border-white/10">
+                    <th className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 py-2 text-right">المؤشر</th>
+                    <th className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 py-2 text-right">الشهر الحالي</th>
+                    <th className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 py-2 text-right">الشهر السابق</th>
+                    <th className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 py-2 text-right">التغيير</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => {
+                    const d = delta(r.current, r.prev);
+                    return (
+                      <tr key={i} className="border-b border-gray-50 dark:border-white/5 last:border-0">
+                        <td className="text-xs text-gray-700 dark:text-gray-300 py-2">{r.label}</td>
+                        <td className="text-xs font-mono text-gray-700 dark:text-gray-300 py-2">{fmtVal(r.current, r.fmt)}</td>
+                        <td className="text-xs font-mono text-gray-500 dark:text-gray-400 py-2">{fmtVal(r.prev, r.fmt)}</td>
+                        <td className="text-xs font-mono py-2">
+                          {d != null ? (
+                            <span className={`flex items-center gap-0.5 ${d >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {d >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                              {d >= 0 ? '+' : ''}{d}%
+                            </span>
+                          ) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </ChartContainer>
+        );
+      }
 
       case 'todaySummary':
         if (!data?.today_summary) return null;
@@ -468,7 +529,7 @@ function WidgetRenderer({ widgetKey, dProps, widgets, data, hrData, kpis, net, p
    ══════════════════════════════════════════════════════════ */
 function DashboardInner() {
   const navigate = useNavigate();
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, can } = useAuth();
   const { widgets, refreshInterval, widgetOrder, moveWidget } = useDashboardConfig();
   const { data, loading, error, lastUpdated, refresh } = useDashboardData(refreshInterval);
   const { data: hrData } = useHRData(hasRole('superadmin', 'hr', 'manager'));
@@ -567,7 +628,32 @@ function DashboardInner() {
         </div>
       </div>
 
-      {/* ═══ Ordered Widget Sections ═══════════════════ */}
+      {/* ── Quick Actions ─────────────────────────────── */}
+      {(() => {
+        const actions = [
+          { label: 'أمر إنتاج جديد', icon: Factory, to: '/work-orders/new', perm: can('work_orders', 'create') },
+          { label: 'فاتورة جديدة', icon: FileText, to: '/invoices/new', perm: can('invoices', 'create') },
+          { label: 'أمر شراء', icon: ShoppingCart, to: '/purchase-orders/new', perm: can('purchase_orders', 'create') },
+          { label: 'التقارير', icon: BarChart2, to: '/reports', perm: can('reports', 'view') },
+        ].filter(a => a.perm);
+        return actions.length > 0 ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            {actions.map(a => (
+              <button key={a.to} onClick={() => navigate(a.to)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-[#c9a84c]/10 hover:text-[#c9a84c] border border-gray-200 dark:border-white/10 transition-colors">
+                <a.icon size={13} />
+                {a.label}
+              </button>
+            ))}
+          </div>
+        ) : null;
+      })()}
+
+      {/* ── Main content + Reminders sidebar ──────────── */}
+      <div className="flex gap-6">
+        <div className="flex-1 min-w-0 space-y-6">
+
+      {/* ═══ Ordered Widget Sections ═══════════════════ */}}
       {widgetOrder.map((key, idx) => {
         const dProps = { widgetKey: key, index: idx, onDragStart: handleDragStart, onDragOver: handleDragOver, onDrop: handleDrop, dragOverKey };
         return <WidgetRenderer key={key} widgetKey={key} dProps={dProps}
@@ -578,6 +664,12 @@ function DashboardInner() {
 
       {/* Secondary Stats (always shown, not draggable) */}
       <SecondaryStats data={data} />
+
+        </div>
+
+        {/* Reminders sidebar (xl+ screens only) */}
+        <DashboardReminders data={data} />
+      </div>
 
       {/* Config Panel Modal */}
       <DashboardConfigPanel open={configOpen} onClose={() => setConfigOpen(false)} />

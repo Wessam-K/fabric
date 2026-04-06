@@ -2970,6 +2970,20 @@ function runMigrations() {
     addCol53('attendance', 'check_out', 'TEXT');
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (53)`);
   }
+
+  // ═══ V54: Subcontracting fields on work_orders ═══
+  const v54 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 54').get();
+  if (!v54) {
+    const addCol54 = (table, col, def) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch {}
+    };
+    addCol54('work_orders', 'is_subcontracted', 'INTEGER DEFAULT 0');
+    addCol54('work_orders', 'subcontractor_id', 'INTEGER REFERENCES suppliers(id)');
+    addCol54('work_orders', 'subcontractor_name', 'TEXT');
+    addCol54('work_orders', 'subcontract_cost', 'REAL DEFAULT 0');
+    addCol54('work_orders', 'subcontract_notes', 'TEXT');
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (54)`);
+  }
 }
 
 initializeDatabase();

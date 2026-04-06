@@ -78,7 +78,7 @@ router.get('/suppliers', requirePermission('reports', 'view'), async (req, res) 
         COUNT(DISTINCT po.id) as total_pos,
         COALESCE(SUM(po.total_amount),0) as total_ordered,
         COALESCE(SUM(po.paid_amount),0) as total_paid,
-        COALESCE(SUM(po.total_amount - po.paid_amount),0) as outstanding,
+        COALESCE(SUM(po.total_amount - COALESCE(po.paid_amount,0)),0) as outstanding,
         COUNT(DISTINCT CASE WHEN po.status='received' THEN po.id END) as received_pos,
         COUNT(DISTINCT CASE WHEN po.status='cancelled' THEN po.id END) as cancelled_pos
       FROM suppliers s
@@ -294,7 +294,7 @@ router.get('/po-by-supplier', requirePermission('reports', 'view'), async (req, 
       SELECT s.code as supplier_code, s.name as supplier_name, s.supplier_type,
         po.po_number, po.po_type, po.status, po.order_date, po.expected_date, po.received_date,
         po.total_amount, po.paid_amount,
-        (po.total_amount - po.paid_amount) as outstanding,
+        (po.total_amount - COALESCE(po.paid_amount,0)) as outstanding,
         poi.item_type, poi.fabric_code, poi.accessory_code, poi.description as item_desc,
         poi.quantity, poi.unit, poi.unit_price, COALESCE(poi.received_qty_actual, poi.received_qty) as received_qty,
         ROUND(poi.quantity * poi.unit_price, 2) as line_total

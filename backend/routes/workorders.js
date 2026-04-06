@@ -72,7 +72,7 @@ function calculateWOCost(woId) {
 
   const masnaiya_total = (wo.masnaiya || 0) * totalPieces;
   const masrouf_total = (wo.masrouf || 0) * totalPieces;
-  const total_cost = main_fabric_cost + lining_cost + accessories_cost + masnaiya_total + masrouf_total + waste_cost + extra_expenses;
+  const total_cost = main_fabric_cost + lining_cost + accessories_cost + masnaiya_total + masrouf_total + waste_cost + extra_expenses + (wo.subcontract_cost || 0);
   const cost_per_piece = totalPieces > 0 ? total_cost / totalPieces : 0;
   const waste_cost_per_piece = totalPieces > 0 ? waste_cost / totalPieces : 0;
   const extra_cost_per_piece = totalPieces > 0 ? extra_expenses / totalPieces : 0;
@@ -97,6 +97,7 @@ function calculateWOCost(woId) {
     waste_cost_per_piece: round2(waste_cost_per_piece),
     extra_expenses: round2(extra_expenses),
     extra_cost_per_piece: round2(extra_cost_per_piece),
+    subcontract_cost: round2(wo.subcontract_cost || 0),
     total_cost: round2(total_cost),
     cost_per_piece: round2(cost_per_piece),
     suggested_consumer_price: round2(suggested_consumer),
@@ -304,7 +305,8 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
             masnaiya, masrouf, margin_pct, consumer_price, wholesale_price,
             quantity, is_size_based,
             fabrics, accessories, sizes, stages, notes,
-            fabric_batches, accessories_detail, extra_expenses } = req.body;
+            fabric_batches, accessories_detail, extra_expenses,
+            is_subcontracted, subcontractor_id, subcontractor_name, subcontract_cost, subcontract_notes } = req.body;
     if (!wo_number) return res.status(400).json({ error: 'رقم أمر العمل مطلوب' });
 
     // Validate numeric bounds
@@ -330,8 +332,8 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
         if (tpl) fabricVariantLabel = tpl.template_name;
       }
 
-      const r = db.prepare(`INSERT INTO work_orders (wo_number,model_id,template_id,priority,due_date,assigned_to,masnaiya,masrouf,margin_pct,consumer_price,wholesale_price,notes,quantity,is_size_based,fabric_variant_label) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(wo_number, model_id || null, template_id || null, priority || 'normal', due_date || null, assigned_to || null, defMasnaiya, defMasrouf, defMargin, consumer_price || null, wholesale_price || null, notes || null, quantity || 0, is_size_based ? 1 : 0, fabricVariantLabel);
+      const r = db.prepare(`INSERT INTO work_orders (wo_number,model_id,template_id,priority,due_date,assigned_to,masnaiya,masrouf,margin_pct,consumer_price,wholesale_price,notes,quantity,is_size_based,fabric_variant_label,is_subcontracted,subcontractor_id,subcontractor_name,subcontract_cost,subcontract_notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(wo_number, model_id || null, template_id || null, priority || 'normal', due_date || null, assigned_to || null, defMasnaiya, defMasrouf, defMargin, consumer_price || null, wholesale_price || null, notes || null, quantity || 0, is_size_based ? 1 : 0, fabricVariantLabel, is_subcontracted ? 1 : 0, subcontractor_id || null, subcontractor_name || null, subcontract_cost || 0, subcontract_notes || null);
       const woId = r.lastInsertRowid;
 
       // V3 legacy fabrics
@@ -486,7 +488,8 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
     const { model_id, priority, due_date, assigned_to, masnaiya, masrouf, margin_pct,
             consumer_price, wholesale_price, quantity, is_size_based,
             fabrics, accessories, sizes, notes,
-            fabric_batches, accessories_detail, extra_expenses } = req.body;
+            fabric_batches, accessories_detail, extra_expenses,
+            is_subcontracted, subcontractor_id, subcontractor_name, subcontract_cost, subcontract_notes } = req.body;
 
     // Validate numeric bounds
     if (masnaiya != null && parseFloat(masnaiya) < 0) return res.status(400).json({ error: 'قيمة المصنعية لا يمكن أن تكون سالبة' });
@@ -495,8 +498,8 @@ router.put('/:id', requirePermission('work_orders', 'edit'), (req, res) => {
     if (quantity != null && parseInt(quantity) <= 0) return res.status(400).json({ error: 'الكمية يجب أن تكون أكبر من صفر' });
 
     const transaction = db.transaction(() => {
-      db.prepare(`UPDATE work_orders SET model_id=COALESCE(?,model_id),priority=COALESCE(?,priority),due_date=?,assigned_to=COALESCE(?,assigned_to),masnaiya=COALESCE(?,masnaiya),masrouf=COALESCE(?,masrouf),margin_pct=COALESCE(?,margin_pct),consumer_price=?,wholesale_price=?,notes=COALESCE(?,notes),quantity=COALESCE(?,quantity),is_size_based=COALESCE(?,is_size_based),updated_at=datetime('now') WHERE id=?`)
-        .run(model_id ?? null, priority || null, due_date || null, assigned_to || null, masnaiya ?? null, masrouf ?? null, margin_pct ?? null, consumer_price ?? null, wholesale_price ?? null, notes || null, quantity ?? null, is_size_based ?? null, woId);
+      db.prepare(`UPDATE work_orders SET model_id=COALESCE(?,model_id),priority=COALESCE(?,priority),due_date=?,assigned_to=COALESCE(?,assigned_to),masnaiya=COALESCE(?,masnaiya),masrouf=COALESCE(?,masrouf),margin_pct=COALESCE(?,margin_pct),consumer_price=?,wholesale_price=?,notes=COALESCE(?,notes),quantity=COALESCE(?,quantity),is_size_based=COALESCE(?,is_size_based),is_subcontracted=COALESCE(?,is_subcontracted),subcontractor_id=?,subcontractor_name=?,subcontract_cost=COALESCE(?,subcontract_cost),subcontract_notes=?,updated_at=datetime('now') WHERE id=?`)
+        .run(model_id ?? null, priority || null, due_date || null, assigned_to || null, masnaiya ?? null, masrouf ?? null, margin_pct ?? null, consumer_price ?? null, wholesale_price ?? null, notes || null, quantity ?? null, is_size_based ?? null, is_subcontracted ?? null, subcontractor_id ?? null, subcontractor_name ?? null, subcontract_cost ?? null, subcontract_notes ?? null, woId);
 
       if (fabrics) {
         db.prepare('DELETE FROM wo_fabrics WHERE wo_id=?').run(woId);

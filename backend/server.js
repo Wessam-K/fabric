@@ -622,6 +622,17 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
     const monthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status='paid' AND created_at >= date('now','start of month')`).get().r;
     const monthlyCost = db.prepare(`SELECT COALESCE(SUM(total_production_cost),0) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month')`).get().c;
 
+    // V9b — previous month financials (for KPI trends)
+    const prevMonthlyRevenue = db.prepare(`SELECT COALESCE(SUM(total),0) as r FROM invoices WHERE status='paid' AND created_at >= date('now','start of month','-1 month') AND created_at < date('now','start of month')`).get().r;
+    const prevCompleted = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE status='completed' AND completed_date >= date('now','start of month','-1 month') AND completed_date < date('now','start of month')`).get().c;
+    const prevActiveWO = db.prepare(`SELECT COUNT(*) as c FROM work_orders WHERE status IN ('in_progress','pending') AND created_at < date('now','start of month')`).get().c;
+    let prevQualityRate = 100;
+    try {
+      const prevPassed = db.prepare(`SELECT COALESCE(SUM(ws.quantity_completed),0) as v FROM wo_stages ws JOIN work_orders wo ON wo.id=ws.wo_id WHERE wo.completed_date >= date('now','start of month','-1 month') AND wo.completed_date < date('now','start of month') AND ws.sort_order = (SELECT MAX(ws2.sort_order) FROM wo_stages ws2 WHERE ws2.wo_id=ws.wo_id)`).get().v;
+      const prevRejected = db.prepare(`SELECT COALESCE(SUM(ws.quantity_rejected),0) as v FROM wo_stages ws JOIN work_orders wo ON wo.id=ws.wo_id WHERE wo.completed_date >= date('now','start of month','-1 month') AND wo.completed_date < date('now','start of month') AND ws.sort_order = (SELECT MAX(ws2.sort_order) FROM wo_stages ws2 WHERE ws2.wo_id=ws.wo_id)`).get().v;
+      prevQualityRate = (prevPassed + prevRejected) > 0 ? Math.round((prevPassed / (prevPassed + prevRejected)) * 10000) / 100 : 100;
+    } catch (e) { logger.debug('dashboard prevQuality', e.message); }
+
     // V10 — machines utilization
     const totalMachines = db.prepare("SELECT COUNT(*) as c FROM machines WHERE status='active'").get().c;
     const machinesInUse = db.prepare(`SELECT COUNT(DISTINCT machine_id) as c FROM wo_stages WHERE status='in_progress' AND machine_id IS NOT NULL`).get().c;
@@ -699,6 +710,10 @@ app.get('/api/dashboard', requireAuth, requirePermission('dashboard', 'view'), (
       overdue_work_orders_count: overdueWorkOrdersCount,
       monthly_revenue: Math.round(monthlyRevenue * 100) / 100,
       monthly_cost: Math.round(monthlyCost * 100) / 100,
+      prev_monthly_revenue: Math.round(prevMonthlyRevenue * 100) / 100,
+      prev_completed: prevCompleted,
+      prev_month_active_wo: prevActiveWO,
+      prev_quality_rate: prevQualityRate,
       total_machines: totalMachines,
       machines_in_use: machinesInUse,
       total_customers: totalCustomers,

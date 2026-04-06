@@ -24,7 +24,7 @@ router.get('/summary', requirePermission('reports', 'view'), (req, res) => {
       SUM(total_pieces) as total_pieces
       FROM cost_snapshots`).get();
 
-    const outstandingPayables = db.prepare(`SELECT COALESCE(SUM(total_amount - paid_amount),0) as v FROM purchase_orders WHERE status NOT IN ('cancelled','draft')`).get().v;
+    const outstandingPayables = db.prepare(`SELECT COALESCE(SUM(total_amount - COALESCE(paid_amount,0)),0) as v FROM purchase_orders WHERE status NOT IN ('cancelled','draft')`).get().v;
     const pendingInvoices = db.prepare("SELECT COUNT(*) as c FROM invoices WHERE status IN ('draft','sent')").get().c;
 
     res.json({
@@ -127,7 +127,7 @@ router.get('/suppliers', requirePermission('reports', 'view'), (req, res) => {
         COUNT(DISTINCT po.id) as po_count,
         COALESCE(SUM(po.total_amount),0) as total_ordered,
         COALESCE(SUM(po.paid_amount),0) as total_paid,
-        COALESCE(SUM(po.total_amount - po.paid_amount),0) as balance
+        COALESCE(SUM(po.total_amount - COALESCE(po.paid_amount,0)),0) as balance
       FROM suppliers s
       LEFT JOIN purchase_orders po ON po.supplier_id=s.id AND po.status != 'cancelled'
       WHERE s.status='active'
@@ -415,7 +415,7 @@ router.get('/pivot', requirePermission('reports', 'view'), (req, res) => {
     } else if (source === 'financial') {
       rows = db.prepare(`
         SELECT po.po_number, s.name as supplier_name, s.supplier_type, po.status,
-          po.total_amount, po.paid_amount, (po.total_amount - po.paid_amount) as balance,
+          po.total_amount, po.paid_amount, (po.total_amount - COALESCE(po.paid_amount,0)) as balance,
           po.order_date, po.delivery_date,
           (SELECT COUNT(*) FROM purchase_order_items WHERE po_id=po.id) as item_count
         FROM purchase_orders po
