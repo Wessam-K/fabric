@@ -3,6 +3,7 @@ import { BarChart2, PieChart, TrendingUp, Download, DollarSign, Layers, Package,
 import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
+import { fmtDateTime } from '../utils/formatters';
 import { exportToExcel } from '../utils/exportExcel';
 import { downloadCSV } from '../utils/formatters';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
@@ -870,7 +871,7 @@ export default function Reports() {
                     <td className="px-4 py-3 font-mono text-xs font-bold">{r.wo_number}</td>
                     <td className="px-4 py-3 text-center font-mono text-red-500">{r.qty_rejected}</td>
                     <td className="px-4 py-3 text-xs text-gray-600">{r.rejection_reason || '—'}</td>
-                    <td className="px-4 py-3 text-center text-xs text-gray-400">{r.moved_at ? new Date(r.moved_at).toLocaleDateString('ar-EG') : '—'}</td>
+                    <td className="px-4 py-3 text-center text-xs text-gray-400">{r.moved_at ? fmtDateTime(r.moved_at) : '—'}</td>
                   </tr>
                 ))}
               </tbody>

@@ -5,7 +5,7 @@ const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
 const notificationEmitter = require('../lib/notificationEmitter');
 const { fireWebhook } = require('../utils/webhooks');
-const { round2 } = require('../utils/money');
+const { round2, safeAdd, safeMultiply } = require('../utils/money');
 
 // ═══════════════════════════════════════════════
 // COST CALCULATION (used by multiple endpoints)
@@ -31,22 +31,26 @@ function calculateWOCost(woId) {
   if (batchFabrics.length > 0) {
     for (const f of batchFabrics) {
       const meters = f.actual_total_meters ?? f.planned_total_meters;
-      const cost = meters * f.price_per_meter;
-      const wCost = (f.waste_meters || 0) * f.price_per_meter;
-      if (f.role === 'lining') { lining_cost += cost; total_meters_lining += meters; }
-      else { main_fabric_cost += cost; total_meters_main += meters; }
-      waste_cost += wCost;
+      const cost = safeMultiply(meters, f.price_per_meter);
+      const wCost = safeMultiply(f.waste_meters || 0, f.price_per_meter);
+      if (f.role === 'lining') { lining_cost = safeAdd(lining_cost, cost); total_meters_lining += meters; }
+      else { main_fabric_cost = safeAdd(main_fabric_cost, cost); total_meters_main += meters; }
+      waste_cost = safeAdd(waste_cost, wCost);
     }
   } else {
     for (const f of legacyFabrics) {
       const price = f.price_per_m || 0;
-      const meters = (f.meters_per_piece || 0) * (totalPieces || 1);
-      const baseCost = meters * price;
-      if (f.role === 'lining') { lining_cost += baseCost; total_meters_lining += meters; }
-      else {
-        const wCost = baseCost * ((f.waste_pct || 0) / 100);
-        main_fabric_cost += baseCost;
-        waste_cost += wCost;
+      const meters = safeMultiply(f.meters_per_piece || 0, totalPieces || 1);
+      const baseCost = safeMultiply(meters, price);
+      if (f.role === 'lining') {
+        lining_cost = safeAdd(lining_cost, baseCost);
+        const wCost = safeMultiply(baseCost, (f.waste_pct || 0) / 100);
+        waste_cost = safeAdd(waste_cost, wCost);
+        total_meters_lining += meters;
+      } else {
+        const wCost = safeMultiply(baseCost, (f.waste_pct || 0) / 100);
+        main_fabric_cost = safeAdd(main_fabric_cost, baseCost);
+        waste_cost = safeAdd(waste_cost, wCost);
         total_meters_main += meters;
       }
     }
@@ -58,21 +62,21 @@ function calculateWOCost(woId) {
   let accessories_cost = 0;
   if (detailAcc.length > 0) {
     for (const a of detailAcc) {
-      const qty = a.actual_quantity ?? (a.quantity_per_piece * totalPieces);
-      accessories_cost += qty * a.unit_price;
+      const qty = a.actual_quantity ?? safeMultiply(a.quantity_per_piece, totalPieces);
+      accessories_cost = safeAdd(accessories_cost, safeMultiply(qty, a.unit_price));
     }
   } else {
-    for (const a of legacyAcc) accessories_cost += (a.quantity || 0) * (a.unit_price || 0) * (totalPieces || 1);
+    for (const a of legacyAcc) accessories_cost = safeAdd(accessories_cost, safeMultiply(safeMultiply(a.quantity || 0, a.unit_price || 0), totalPieces || 1));
   }
 
   // Extra expenses
   const expenses = db.prepare('SELECT * FROM wo_extra_expenses WHERE wo_id=?').all(woId);
   let extra_expenses = 0;
-  for (const e of expenses) extra_expenses += e.amount;
+  for (const e of expenses) extra_expenses = safeAdd(extra_expenses, e.amount);
 
-  const masnaiya_total = (wo.masnaiya || 0) * totalPieces;
-  const masrouf_total = (wo.masrouf || 0) * totalPieces;
-  const total_cost = main_fabric_cost + lining_cost + accessories_cost + masnaiya_total + masrouf_total + waste_cost + extra_expenses + (wo.subcontract_cost || 0);
+  const masnaiya_total = safeMultiply(wo.masnaiya || 0, totalPieces);
+  const masrouf_total = safeMultiply(wo.masrouf || 0, totalPieces);
+  const total_cost = safeAdd(main_fabric_cost, lining_cost, accessories_cost, masnaiya_total, masrouf_total, waste_cost, extra_expenses, wo.subcontract_cost || 0);
   const cost_per_piece = totalPieces > 0 ? total_cost / totalPieces : 0;
   const waste_cost_per_piece = totalPieces > 0 ? waste_cost / totalPieces : 0;
   const extra_cost_per_piece = totalPieces > 0 ? extra_expenses / totalPieces : 0;
@@ -883,12 +887,10 @@ router.post('/:id/finalize', requirePermission('work_orders', 'edit'), (req, res
 
       const masnaiyaTotal = cost.masnaiya_total;
       const masroufTotal = cost.masrouf_total;
-      const totalCost = useFabricCost + useAccessoryCost + wasteCost + masnaiyaTotal + masroufTotal + cost.extra_expenses;
+      const totalCost = safeAdd(useFabricCost, useAccessoryCost, wasteCost, masnaiyaTotal, masroufTotal, cost.extra_expenses, cost.subcontract_cost);
       const qty = pieces_produced || wo.pieces_completed || wo.quantity || 0;
       const costPerPiece = qty > 0 ? totalCost / qty : 0;
       const wasteCostPerPiece = qty > 0 ? wasteCost / qty : 0;
-
-      const round2 = v => Math.round((v || 0) * 100) / 100;
 
       db.prepare(`UPDATE work_orders SET 
         status='completed', completed_date=datetime('now','localtime'),

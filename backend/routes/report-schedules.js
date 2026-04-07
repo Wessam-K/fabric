@@ -6,6 +6,14 @@ const { requirePermission, logAudit } = require('../middleware/auth');
 // List all schedules
 router.get('/', requirePermission('reports', 'view'), (req, res) => {
   try {
+    const { page, limit } = req.query;
+    if (page && limit) {
+      const pg = Math.max(1, parseInt(page));
+      const lim = Math.min(200, Math.max(1, parseInt(limit)));
+      const total = db.prepare('SELECT COUNT(*) as c FROM report_schedules').get().c;
+      const rows = db.prepare('SELECT * FROM report_schedules ORDER BY created_at DESC LIMIT ? OFFSET ?').all(lim, (pg - 1) * lim);
+      return res.json({ data: rows.map(r => ({ ...r, recipients: JSON.parse(r.recipients || '[]'), filters: JSON.parse(r.filters || '{}') })), total, page: pg, pages: Math.ceil(total / lim) });
+    }
     const rows = db.prepare('SELECT * FROM report_schedules ORDER BY created_at DESC').all();
     res.json(rows.map(r => ({ ...r, recipients: JSON.parse(r.recipients || '[]'), filters: JSON.parse(r.filters || '{}') })));
   } catch (err) {

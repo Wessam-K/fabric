@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Calendar, Layers, X, ChevronLeft, ChevronRight, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Calendar, Layers, X, ChevronLeft, ChevronRight, Edit2 } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -44,7 +44,7 @@ export default function Scheduling() {
         api.get('/scheduling', { params: { start_date: weekStart, end_date: endDate.toISOString().slice(0, 10) } }),
         api.get('/scheduling/lines'),
       ]);
-      setEntries(schedRes.data || []);
+      setEntries(Array.isArray(schedRes.data) ? schedRes.data : schedRes.data.data || []);
       setLines(linesRes.data || []);
     } catch { toast.error('فشل تحميل الجدولة'); }
     finally { setLoading(false); }
@@ -90,14 +90,6 @@ export default function Scheduling() {
     });
     setEditingId(e.id);
     setShowModal(true);
-  };
-
-  const deleteEntry = async (entryId) => {
-    try {
-      await api.delete(`/scheduling/${entryId}`);
-      toast.success('تم إلغاء الجدولة');
-      load();
-    } catch (err) { toast.error(err.response?.data?.error || 'فشل الحذف'); }
   };
 
   const saveLine = async () => {
@@ -182,13 +174,6 @@ export default function Scheduling() {
                               title={`${e.wo_number || ''} — ${e.notes || ''}`}
                               onClick={() => can('scheduling', 'edit') && editEntry(e)}>
                               {e.wo_number || `#${e.work_order_id}`}
-                              {can('scheduling', 'delete') && (
-                                <button onClick={(ev) => { ev.stopPropagation(); deleteEntry(e.id); }}
-                                  className="absolute left-0.5 top-0.5 opacity-0 group-hover:opacity-100 bg-red-600 rounded p-0.5"
-                                  title="إلغاء">
-                                  <Trash2 size={10} />
-                                </button>
-                              )}
                             </div>
                           ))}
                         </td>

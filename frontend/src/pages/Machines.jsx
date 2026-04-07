@@ -33,7 +33,7 @@ export default function Machines() {
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
       const { data } = await api.get('/machines', { params });
-      setMachines(data);
+      setMachines(Array.isArray(data) ? data : data.data || []);
     } catch { toast.error('فشل تحميل الماكينات'); }
     finally { setLoading(false); }
   };

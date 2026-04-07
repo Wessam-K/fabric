@@ -44,7 +44,10 @@ router.get('/employees', requirePermission('hr', 'view'), (req, res) => {
     if (search) { conditions.push('(e.full_name LIKE ? OR e.emp_code LIKE ? OR e.national_id LIKE ?)'); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-    const employees = db.prepare(`SELECT * FROM employees e ${where} ORDER BY e.emp_code`).all(...params);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+    const totalRows = db.prepare(`SELECT COUNT(*) as c FROM employees e ${where}`).get(...params).c;
+    const employees = db.prepare(`SELECT * FROM employees e ${where} ORDER BY e.emp_code LIMIT ? OFFSET ?`).all(...params, limit, (page - 1) * limit);
     
     // KPI counts
     const total = db.prepare("SELECT COUNT(*) as c FROM employees WHERE status='active'").get().c;
@@ -52,7 +55,7 @@ router.get('/employees', requirePermission('hr', 'view'), (req, res) => {
     const daily = db.prepare("SELECT COUNT(*) as c FROM employees WHERE status='active' AND employment_type='daily'").get().c;
     const pieceWork = db.prepare("SELECT COUNT(*) as c FROM employees WHERE status='active' AND employment_type='piece_work'").get().c;
 
-    res.json({ employees, kpi: { total, full_time: fullTime, daily, piece_work: pieceWork } });
+    res.json({ data: employees, total: totalRows, page, pages: Math.ceil(totalRows / limit), kpi: { total, full_time: fullTime, daily, piece_work: pieceWork } });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -585,15 +588,23 @@ router.post('/attendance/bulk', requirePermission('hr', 'edit'), (req, res) => {
 // ═══════════════════════════════════════════════
 
 // GET /api/hr/payroll — list periods
-router.get('/payroll', requirePermission('hr', 'view'), (req, res) => {
+router.get('/payroll', requirePermission('payroll', 'view'), (req, res) => {
   try {
+    const { page, limit } = req.query;
+    if (page && limit) {
+      const pg = Math.max(1, parseInt(page));
+      const lim = Math.min(200, Math.max(1, parseInt(limit)));
+      const total = db.prepare('SELECT COUNT(*) as c FROM payroll_periods').get().c;
+      const periods = db.prepare('SELECT * FROM payroll_periods ORDER BY period_month DESC LIMIT ? OFFSET ?').all(lim, (pg - 1) * lim);
+      return res.json({ data: periods, total, page: pg, pages: Math.ceil(total / lim) });
+    }
     const periods = db.prepare('SELECT * FROM payroll_periods ORDER BY period_month DESC').all();
     res.json(periods);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
 // POST /api/hr/payroll/periods — create period
-router.post('/payroll/periods', requirePermission('hr', 'create'), (req, res) => {
+router.post('/payroll/periods', requirePermission('payroll', 'manage'), (req, res) => {
   try {
     const { period_month } = req.body;
     if (!period_month) return res.status(400).json({ error: 'الشهر مطلوب' });
@@ -615,7 +626,7 @@ router.post('/payroll/periods', requirePermission('hr', 'create'), (req, res) =>
 });
 
 // POST /api/hr/payroll/:periodId/calculate — calculate payroll
-router.post('/payroll/:periodId/calculate', requirePermission('hr', 'edit'), (req, res) => {
+router.post('/payroll/:periodId/calculate', requirePermission('payroll', 'manage'), (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(req.params.periodId);
     if (!period) return res.status(404).json({ error: 'كشف الرواتب غير موجود' });
@@ -688,9 +699,11 @@ router.post('/payroll/:periodId/calculate', requirePermission('hr', 'edit'), (re
           summary.days_worked === 0 ? 'لا يوجد حضور مسجل' : null
         );
 
-        // Mark adjustments as applied
-        for (const adj of adjustments) {
-          db.prepare('UPDATE hr_adjustments SET applied = 1, period_id = ? WHERE id = ?').run(period.id, adj.id);
+        // Mark adjustments as applied (batch)
+        if (adjustments.length) {
+          const adjIds = adjustments.map(a => a.id);
+          const adjPh = adjIds.map(() => '?').join(',');
+          db.prepare(`UPDATE hr_adjustments SET applied = 1, period_id = ? WHERE id IN (${adjPh})`).run(period.id, ...adjIds);
         }
 
         totalGross += pay.gross_pay;
@@ -777,7 +790,7 @@ function calculateEmployeePay(employee, attendanceSummary, adjustments, settings
 }
 
 // GET /api/hr/payroll/:periodId — full period details
-router.get('/payroll/:periodId', requirePermission('hr', 'view'), (req, res) => {
+router.get('/payroll/:periodId', requirePermission('payroll', 'view'), (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(req.params.periodId);
     if (!period) return res.status(404).json({ error: 'كشف الرواتب غير موجود' });
@@ -795,7 +808,7 @@ router.get('/payroll/:periodId', requirePermission('hr', 'view'), (req, res) => 
 });
 
 // PATCH /api/hr/payroll/:periodId/approve
-router.patch('/payroll/:periodId/approve', requirePermission('hr', 'edit'), (req, res) => {
+router.patch('/payroll/:periodId/approve', requirePermission('payroll', 'manage'), (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(req.params.periodId);
     if (!period) return res.status(404).json({ error: 'كشف الرواتب غير موجود' });
@@ -810,7 +823,7 @@ router.patch('/payroll/:periodId/approve', requirePermission('hr', 'edit'), (req
 });
 
 // PATCH /api/hr/payroll/:periodId/pay
-router.patch('/payroll/:periodId/pay', requirePermission('hr', 'edit'), (req, res) => {
+router.patch('/payroll/:periodId/pay', requirePermission('payroll', 'manage'), (req, res) => {
   try {
     const period = db.prepare('SELECT * FROM payroll_periods WHERE id = ?').get(req.params.periodId);
     if (!period) return res.status(404).json({ error: 'كشف الرواتب غير موجود' });
@@ -826,7 +839,7 @@ router.patch('/payroll/:periodId/pay', requirePermission('hr', 'edit'), (req, re
 });
 
 // GET /api/hr/payroll/:periodId/slip/:employeeId — payslip
-router.get('/payroll/:periodId/slip/:employeeId', requirePermission('hr', 'view'), (req, res) => {
+router.get('/payroll/:periodId/slip/:employeeId', requirePermission('payroll', 'view'), (req, res) => {
   try {
     const record = db.prepare(`
       SELECT pr.*, e.emp_code, e.full_name, e.department, e.job_title, e.salary_type,

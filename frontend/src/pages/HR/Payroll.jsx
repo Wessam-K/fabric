@@ -8,6 +8,8 @@ import HelpButton from '../../components/HelpButton';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
+import { fmtDateTime } from '../../utils/formatters';
+import Tooltip from '../../components/Tooltip';
 
 const PERIOD_STATUS = {
   draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-700' },
@@ -27,6 +29,7 @@ export default function Payroll() {
   const [showCreate, setShowCreate] = useState(false);
   const [newPeriod, setNewPeriod] = useState({ period_month: new Date().toISOString().slice(0, 7), period_name: '' });
   const [calculating, setCalculating] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   useEffect(() => { loadPeriods(); }, []);
 
@@ -224,9 +227,19 @@ export default function Payroll() {
 
           {/* Payroll Table */}
           <div className="bg-white rounded-2xl border overflow-x-auto">
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+                <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+                <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-3 py-3 w-10">
+                    <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < records.length; }} checked={records.length > 0 && records.every(r => selectedIds.includes(r.id))} onChange={e => setSelectedIds(e.target.checked ? records.map(r => r.id) : [])}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                  </th>
                   <th className="px-3 py-3 text-right font-medium text-gray-600">الكود</th>
                   <th className="px-3 py-3 text-right font-medium text-gray-600">الاسم</th>
                   <th className="px-3 py-3 text-right font-medium text-gray-600">الراتب الأساسي</th>
@@ -242,7 +255,11 @@ export default function Payroll() {
               </thead>
               <tbody className="divide-y">
                 {records.map(r => (
-                  <tr key={r.id} className="hover:bg-gray-50">
+                  <tr key={r.id} className={`hover:bg-gray-50 ${selectedIds.includes(r.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                    <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.includes(r.id)} onChange={() => setSelectedIds(prev => prev.includes(r.id) ? prev.filter(x => x !== r.id) : [...prev, r.id])}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                    </td>
                     <td className="px-3 py-2 text-gray-500">{r.emp_code}</td>
                     <td className="px-3 py-2 font-medium">{r.full_name}</td>
                     <td className="px-3 py-2">{Number(r.base_salary).toLocaleString()}</td>
@@ -254,8 +271,8 @@ export default function Payroll() {
                     <td className="px-3 py-2">{Number(r.adjustments_total || 0).toLocaleString()}</td>
                     <td className="px-3 py-2 font-bold text-green-600 bg-green-50">{Number(r.net_salary).toLocaleString()}</td>
                     <td className="px-3 py-2 text-center">
-                      <button onClick={() => navigate(`/hr/payroll/${selectedPeriod.id}/slip/${r.employee_id}`)}
-                        className="text-[#c9a84c] hover:text-[#b8993f]"><Eye size={16} /></button>
+                      <Tooltip text="عرض كشف الراتب"><button onClick={() => navigate(`/hr/payroll/${selectedPeriod.id}/slip/${r.employee_id}`)}
+                        className="text-[#c9a84c] hover:text-[#b8993f]"><Eye size={16} /></button></Tooltip>
                     </td>
                   </tr>
                 ))}

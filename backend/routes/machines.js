@@ -64,22 +64,36 @@ router.get('/', requirePermission('machines', 'view'), (req, res) => {
       params.push(s, s, s);
     }
     q += ' ORDER BY sort_order, name';
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+    const countQ = q.replace('SELECT *', 'SELECT COUNT(*) as c');
+    const total = db.prepare(countQ).get(...params).c;
+    q += ' LIMIT ? OFFSET ?';
+    params.push(limit, (page - 1) * limit);
     const machines = db.prepare(q).all(...params);
 
-    // Add utilization stats
-    for (const m of machines) {
+    // Add utilization stats (batch)
+    if (machines.length > 0) {
+      const ids = machines.map(m => m.id);
+      const ph = ids.map(() => '?').join(',');
       const stats = db.prepare(`
-        SELECT COUNT(*) as total_stages,
-          SUM(CASE WHEN ws.status = 'in_progress' THEN 1 ELSE 0 END) as active_stages,
-          COALESCE(SUM(ws.actual_hours), 0) as total_hours
-        FROM wo_stages ws WHERE ws.machine_id = ?
-      `).get(m.id);
-      m.total_stages = stats.total_stages;
-      m.active_stages = stats.active_stages;
-      m.total_hours = Math.round((stats.total_hours || 0) * 100) / 100;
+        SELECT machine_id, COUNT(*) as total_stages,
+          SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as active_stages,
+          COALESCE(SUM(actual_hours), 0) as total_hours
+        FROM wo_stages WHERE machine_id IN (${ph}) GROUP BY machine_id
+      `).all(...ids);
+      const map = {};
+      for (const s of stats) map[s.machine_id] = s;
+      for (const m of machines) {
+        const s = map[m.id] || {};
+        m.total_stages = s.total_stages || 0;
+        m.active_stages = s.active_stages || 0;
+        m.total_hours = Math.round((s.total_hours || 0) * 100) / 100;
+      }
     }
 
-    res.json(machines);
+    res.json({ data: machines, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
     serverError(res, err);
   }

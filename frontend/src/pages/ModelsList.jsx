@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, FileText, Printer, List } from 'lucide-react';
+import { Plus, Edit2, FileText, Printer, List } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { fmtDateTime } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import { PageHeader, LoadingState, EmptyState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import { useConfirm } from '../components/ConfirmDialog';
@@ -29,22 +31,6 @@ export default function ModelsList() {
   };
 
   useEffect(() => { fetchModels(); }, [search]);
-
-  const handleDelete = async (code) => {
-    const ok = await confirm({ title: 'تعطيل الموديل', message: 'هل أنت متأكد من تعطيل هذا الموديل؟ لا يمكن حذفه نهائياً — يمكن إعادة تفعيله لاحقاً.', variant: 'warning' });
-    if (!ok) return;
-    try {
-      await api.delete(`/models/${code}`);
-      toast.success('تم تعطيل الموديل بنجاح');
-      fetchModels();
-    } catch (err) {
-      if (err.response?.status === 409) {
-        toast.error(`لا يمكن تعطيل هذا الموديل: مرتبط بـ ${err.response.data.blocking_count} أمر عمل نشط`);
-      } else {
-        toast.error(err.response?.data?.error || 'فشل التعطيل');
-      }
-    }
-  };
 
   return (
     <div className="page">
@@ -75,17 +61,16 @@ export default function ModelsList() {
                   {m.category && <span className="badge badge-info text-[10px]">{CATEGORY_MAP[m.category] || m.category}</span>}
                 </div>
                 {m.model_name && <p className="text-sm text-[var(--color-muted)] mt-0.5 truncate">{m.model_name}</p>}
-                <p className="text-[10px] text-[var(--color-muted)] mt-0.5">{new Date(m.created_at).toLocaleDateString('ar-EG')}</p>
+                <p className="text-[10px] text-[var(--color-muted)] mt-0.5">{fmtDateTime(m.created_at)}</p>
               </div>
               <div className="text-center shrink-0">
                 <p className="text-[10px] text-[var(--color-muted)]">قوالب BOM</p>
                 <p className="font-mono font-bold text-[var(--color-gold)] text-lg">{m.bom_template_count ?? '—'}</p>
               </div>
               <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                <button onClick={() => navigate(`/models/${m.model_code}/bom`)} className="btn btn-ghost btn-xs" title="قوالب BOM"><FileText size={16} /></button>
-                <button onClick={() => navigate(`/models/${m.model_code}/edit`)} className="btn btn-ghost btn-xs"><Edit2 size={16} /></button>
-                <button onClick={() => window.open(`/models/${m.model_code}/print`, '_blank')} className="btn btn-ghost btn-xs"><Printer size={16} /></button>
-                <button onClick={() => handleDelete(m.model_code)} className="btn btn-ghost btn-xs" style={{color:'var(--color-danger)'}}><Trash2 size={16} /></button>
+                <Tooltip text="قوالب BOM"><button onClick={() => navigate(`/models/${m.model_code}/bom`)} className="btn btn-ghost btn-xs"><FileText size={16} /></button></Tooltip>
+                <Tooltip text="تعديل"><button onClick={() => navigate(`/models/${m.model_code}/edit`)} className="btn btn-ghost btn-xs"><Edit2 size={16} /></button></Tooltip>
+                <Tooltip text="طباعة"><button onClick={() => window.open(`/models/${m.model_code}/print`, '_blank')} className="btn btn-ghost btn-xs"><Printer size={16} /></button></Tooltip>
               </div>
             </div>
           ))}

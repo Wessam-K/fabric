@@ -52,7 +52,7 @@ function generateToken(user) {
   return jwt.sign(
     { id: user.id, username: user.username, role: user.role, full_name: user.full_name },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRES }
+    { expiresIn: JWT_EXPIRES, algorithm: 'HS256' }
   );
 }
 
@@ -91,7 +91,7 @@ function requireAuth(req, res, next) {
     if (isTokenRevoked(token)) {
       return res.status(401).json({ error: 'تم إبطال الجلسة — يرجى تسجيل الدخول مجدداً' });
     }
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     req.user = decoded;
     req.token = token;
 

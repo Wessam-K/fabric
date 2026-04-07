@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Search, DollarSign, X, FileText, Users, Upload } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
+import { fmtDateTime } from '../utils/formatters';
 import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import ExportButton from '../components/ExportButton';
@@ -26,6 +27,7 @@ export default function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerInvoices, setCustomerInvoices] = useState([]);
   const [showImport, setShowImport] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const emptyForm = { name: '', phone: '', email: '', address: '', city: '', tax_number: '', credit_limit: '', notes: '', customer_type: 'retail', contact_name: '', payment_terms: '' };
   const [form, setForm] = useState(emptyForm);
@@ -92,7 +94,9 @@ export default function Customers() {
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="customers" />
           <button onClick={() => setShowImport(true)} className="btn btn-outline btn-sm flex items-center gap-1.5"><Upload size={14} /> استيراد</button>
-          <ExportButton data={customers} filename="customers" backendEndpoint="/customers/export" columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'customer_type',label:'النوع'},{key:'city',label:'المدينة'},{key:'phone',label:'الهاتف'},{key:'balance',label:'الرصيد'}]} />
+          <ExportButton data={customers} filename="customers" backendEndpoint="/customers/export"
+            selectedData={selectedIds.length ? customers.filter(c => selectedIds.includes(c.id)) : null}
+            columns={[{key:'code',label:'الكود'},{key:'name',label:'الاسم'},{key:'customer_type',label:'النوع'},{key:'city',label:'المدينة'},{key:'phone',label:'الهاتف'},{key:'balance',label:'الرصيد'}]} />
           <PermissionGuard module="customers" action="create">
             <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> عميل جديد</button>
           </PermissionGuard>
@@ -147,9 +151,20 @@ export default function Customers() {
           {customers.length === 0 ? (
             <div className="text-center py-16 text-gray-400">لا يوجد عملاء</div>
           ) : (
+            <>
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+                <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+                <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < customers.length; }} checked={customers.length > 0 && customers.every(c => selectedIds.includes(c.id))} onChange={e => setSelectedIds(e.target.checked ? customers.map(c => c.id) : [])}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                  </th>
                   <th className="px-4 py-3 text-right text-xs text-gray-500">الكود</th>
                   <th className="px-4 py-3 text-right text-xs text-gray-500">الاسم</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">النوع</th>
@@ -162,7 +177,11 @@ export default function Customers() {
               </thead>
               <tbody>
                 {customers.map(c => (
-                  <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <tr key={c.id} className={`border-t border-gray-100 hover:bg-gray-50/50 ${selectedIds.includes(c.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.includes(c.id)} onChange={() => setSelectedIds(prev => prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id])}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs font-bold">{c.code}</td>
                     <td className="px-4 py-3">
                       <Link to={`/customers/${c.id}`} className="font-bold text-[#1a1a2e] hover:text-[#c9a84c] transition-colors">{c.name}</Link>
@@ -190,6 +209,7 @@ export default function Customers() {
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </div>
       )}
@@ -310,7 +330,7 @@ export default function Customers() {
                       </td>
                       <td className="px-3 py-2 text-center font-mono text-xs">{fmt(inv.total)} ج.م</td>
                       <td className="px-3 py-2 text-center font-mono text-xs">{fmt(inv.paid_amount)} ج.م</td>
-                      <td className="px-3 py-2 text-center text-xs text-gray-400">{inv.created_at ? new Date(inv.created_at).toLocaleDateString('ar-EG') : '—'}</td>
+                      <td className="px-3 py-2 text-center text-xs text-gray-400">{inv.created_at ? fmtDateTime(inv.created_at) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>

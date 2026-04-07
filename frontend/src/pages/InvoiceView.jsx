@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Printer, ArrowRight, Download, Copy, Check } from 'lucide-react';
 import api from '../utils/api';
-import { downloadCSV } from '../utils/formatters';
+import { downloadCSV, fmtDateTime } from '../utils/formatters';
 import HelpButton from '../components/HelpButton';
 
 const STATUS_MAP = {
@@ -94,7 +94,7 @@ export default function InvoiceView() {
           <div className="text-left">
             <p className="font-mono text-xl font-bold text-[#1a1a2e]">{invoice.invoice_number}</p>
             <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
-            <p className="text-xs text-gray-400 mt-1">{new Date(invoice.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <p className="text-xs text-gray-400 mt-1">{fmtDateTime(invoice.created_at)}</p>
           </div>
         </div>
 
@@ -105,7 +105,7 @@ export default function InvoiceView() {
             <span className="text-gray-500">الاسم:</span><span className="font-bold">{invoice.customer_name}</span>
             {invoice.customer_phone && <><span className="text-gray-500">الهاتف:</span><span className="font-mono">{invoice.customer_phone}</span></>}
             {invoice.customer_email && <><span className="text-gray-500">البريد:</span><span>{invoice.customer_email}</span></>}
-            {invoice.due_date && <><span className="text-gray-500">تاريخ الاستحقاق:</span><span className="font-mono">{new Date(invoice.due_date).toLocaleDateString('ar-EG')}</span></>}
+            {invoice.due_date && <><span className="text-gray-500">تاريخ الاستحقاق:</span><span className="font-mono">{fmtDateTime(invoice.due_date)}</span></>}
           </div>
         </div>
 

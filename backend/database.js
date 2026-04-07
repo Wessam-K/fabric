@@ -2984,6 +2984,89 @@ function runMigrations() {
     addCol54('work_orders', 'subcontract_notes', 'TEXT');
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (54)`);
   }
+
+  // ═══ V55: Audit — Seed missing permission_definitions + role_permissions ═══
+  const v55 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 55').get();
+  if (!v55) {
+    try {
+      const insPD55 = db.prepare('INSERT OR IGNORE INTO permission_definitions (module, action, label_ar, description_ar, sort_order) VALUES (?,?,?,?,?)');
+      const insRP55 = db.prepare('INSERT OR IGNORE INTO role_permissions (role, module, action, allowed) VALUES (?,?,?,?)');
+
+      // inventory:edit was used in routes but never seeded
+      insPD55.run('inventory', 'edit', 'تعديل المخزون', 'إدارة المستودعات والتحويلات', 81);
+      for (const role of ['superadmin', 'manager']) {
+        insRP55.run(role, 'inventory', 'edit', 1);
+      }
+
+      // reports:create/edit/delete used in report-schedules.js but not in permission_definitions
+      insPD55.run('reports', 'create', 'إنشاء تقرير', 'إنشاء جداول التقارير', 92);
+      insPD55.run('reports', 'edit', 'تعديل تقرير', 'تعديل جداول التقارير', 93);
+      insPD55.run('reports', 'delete', 'حذف تقرير', 'حذف جداول التقارير', 94);
+      for (const role of ['superadmin', 'manager']) {
+        insRP55.run(role, 'reports', 'create', 1);
+        insRP55.run(role, 'reports', 'edit', 1);
+        insRP55.run(role, 'reports', 'delete', 1);
+      }
+
+      // accounting role_permissions were never seeded (V14 try/catch silently failed)
+      for (const act of ['view', 'create', 'edit', 'post']) {
+        for (const role of ['superadmin', 'manager']) {
+          insRP55.run(role, 'accounting', act, 1);
+        }
+        insRP55.run('accountant', 'accounting', act, 1);
+      }
+      insRP55.run('viewer', 'accounting', 'view', 1);
+    } catch {}
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (55)`);
+  }
+
+  // ── V56: Add missing indexes + remove duplicates ────────────────────
+  const v56 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 56').get();
+  if (!v56) {
+    // Add missing indexes
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_jel_account_id ON journal_entry_lines (account_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_je_status ON journal_entries (status)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_je_entry_date ON journal_entries (entry_date)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_payroll_employee ON payroll_records (employee_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_payroll_period ON payroll_records (period_id)`);
+
+    // Remove duplicate indexes
+    db.exec(`DROP INDEX IF EXISTS idx_work_orders_status`);
+    db.exec(`DROP INDEX IF EXISTS idx_notifications_user_read`);
+    db.exec(`DROP INDEX IF EXISTS idx_po_items_po`);
+    db.exec(`DROP INDEX IF EXISTS idx_wo_stages_wo`);
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (56)`);
+  }
+
+  // ── V57: Add soft-delete columns to entity tables missing them ──────
+  const v57 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 57').get();
+  if (!v57) {
+    const addCol = (table, col, def) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch {}
+    };
+    addCol('stage_templates', 'is_deleted', 'INTEGER DEFAULT 0');
+    addCol('customer_contacts', 'is_deleted', 'INTEGER DEFAULT 0');
+    addCol('report_schedules', 'is_deleted', 'INTEGER DEFAULT 0');
+    addCol('webhooks', 'is_deleted', 'INTEGER DEFAULT 0');
+    addCol('wo_extra_expenses', 'is_deleted', 'INTEGER DEFAULT 0');
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (57)`);
+  }
+
+  // ── V58: Add 2FA columns to users + check_in/check_out to attendance ──
+  const v58 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 58').get();
+  if (!v58) {
+    const addCol = (table, col, def) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch {}
+    };
+    addCol('users', 'totp_enabled', 'INTEGER DEFAULT 0');
+    addCol('users', 'totp_secret', 'TEXT');
+    addCol('users', 'totp_backup_codes', 'TEXT');
+    addCol('attendance', 'check_in', 'TEXT');
+    addCol('attendance', 'check_out', 'TEXT');
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (58)`);
+  }
 }
 
 initializeDatabase();

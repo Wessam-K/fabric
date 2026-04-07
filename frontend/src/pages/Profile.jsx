@@ -3,6 +3,8 @@ import { User, Mail, Building, Clock, Shield, Key, CalendarDays, Monitor, Trash2
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import { fmtDateTime } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import { PageHeader, LoadingState } from '../components/ui';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
@@ -108,7 +110,7 @@ export default function Profile() {
             )}
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <CalendarDays size={14} className="text-gray-400" />
-              <span>انضم {profile.created_at ? new Date(profile.created_at).toLocaleDateString('ar-EG') : '—'}</span>
+              <span>انضم {fmtDateTime(profile.created_at)}</span>
             </div>
             {profile.last_login && (
               <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -119,7 +121,7 @@ export default function Profile() {
             {profile.password_changed_at && (
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <Shield size={14} className="text-gray-400" />
-                <span>تغيير المرور {new Date(profile.password_changed_at).toLocaleDateString('ar-EG')}</span>
+                <span>تغيير المرور {fmtDateTime(profile.password_changed_at)}</span>
               </div>
             )}
           </div>
@@ -187,9 +189,9 @@ export default function Profile() {
                     {s.ip_address || '—'} · {s.created_at ? new Date(s.created_at).toLocaleString('ar-EG') : ''}
                   </p>
                 </div>
-                <button onClick={() => revokeSession(s.id)} className="text-red-400 hover:text-red-600 p-1" title="إلغاء الجلسة">
+                <Tooltip text="إلغاء الجلسة"><button onClick={() => revokeSession(s.id)} className="text-red-400 hover:text-red-600 p-1">
                   <Trash2 size={14} />
-                </button>
+                </button></Tooltip>
               </div>
             ))
           )}

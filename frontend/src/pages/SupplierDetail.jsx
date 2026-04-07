@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Phone, Mail, MapPin, DollarSign, ShoppingCart, Star, CreditCard } from 'lucide-react';
 import { PageHeader, LoadingState, Tabs } from '../components/ui';
 import api from '../utils/api';
+import { fmtDateTime } from '../utils/formatters';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
 
@@ -34,7 +35,7 @@ export default function SupplierDetail() {
   }, [id]);
 
   const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('ar-EG') : '—';
+  const fmtDate = (d) => fmtDateTime(d);
 
   const TYPE_MAP = { fabric: 'أقمشة', accessory: 'اكسسوارات', both: 'أقمشة واكسسوارات', other: 'أخرى' };
   const PO_STATUS = { draft: 'مسودة', sent: 'مُرسل', partial: 'جزئي', received: 'مُستلم', cancelled: 'ملغي' };

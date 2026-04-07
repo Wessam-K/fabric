@@ -1,14 +1,18 @@
 ﻿const express = require('express');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const db = require('../database');
-const { generateToken, requireAuth, logAudit, revokeToken, setAuthCookie, clearAuthCookie } = require('../middleware/auth');
+const { generateToken, requireAuth, logAudit, revokeToken, setAuthCookie, clearAuthCookie, JWT_SECRET } = require('../middleware/auth');
 const { setCSRFCookie, clearCSRFCookie } = require('../middleware/csrf');
 const jwt = require('jsonwebtoken');
 const { validatePassword } = require('../utils/validators');
 
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: 'تم تجاوز عدد المحاولات المسموح، حاول لاحقًا' } });
+const resetPwLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: 'تم تجاوز عدد المحاولات المسموح، حاول لاحقًا' } });
+
 // POST /api/auth/login
-router.post('/login', (req, res) => {
+router.post('/login', loginLimiter, (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
@@ -46,7 +50,9 @@ router.post('/login', (req, res) => {
     if (user.totp_enabled) {
       const { totp_code } = req.body;
       if (!totp_code) {
-        return res.json({ requires_2fa: true, user_id: user.id });
+        // Generate temporary 2FA token (not user_id — prevents enumeration)
+        const tfa_token = jwt.sign({ uid: user.id, purpose: '2fa' }, JWT_SECRET, { expiresIn: '5m', algorithm: 'HS256' });
+        return res.json({ requires_2fa: true, tfa_token });
       }
       // Verify TOTP code or backup code
       let totpValid = false;
@@ -180,7 +186,8 @@ router.get('/profile', requireAuth, (req, res) => {
 const crypto = require('crypto');
 
 // POST /api/auth/forgot-password — generate password reset token
-router.post('/forgot-password', (req, res) => {
+const forgotPwLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: { error: 'تم تجاوز عدد المحاولات المسموح، حاول لاحقًا' } });
+router.post('/forgot-password', forgotPwLimiter, (req, res) => {
   try {
     const { username, email } = req.body;
     if (!username && !email) return res.status(400).json({ error: 'اسم المستخدم أو البريد الإلكتروني مطلوب' });
@@ -223,7 +230,7 @@ router.post('/forgot-password', (req, res) => {
 });
 
 // POST /api/auth/reset-password — consume reset token and set new password
-router.post('/reset-password', (req, res) => {
+router.post('/reset-password', resetPwLimiter, (req, res) => {
   try {
     const { token, new_password } = req.body;
     if (!token || !new_password) return res.status(400).json({ error: 'الرمز وكلمة المرور الجديدة مطلوبان' });

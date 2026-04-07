@@ -56,7 +56,7 @@ router.get('/', requirePermission('scheduling', 'view'), (req, res) => {
     if (line_id) { where += ' AND ps.production_line_id=?'; params.push(parseInt(line_id)); }
     if (status) { where += ' AND ps.status=?'; params.push(status); }
 
-    const data = db.prepare(`
+    const sql = `
       SELECT ps.*, wo.wo_number, md.model_name, wo.quantity as wo_quantity,
         pl.name as line_name, m.name as machine_name, ws.stage_name,
         u.full_name as created_by_name
@@ -69,8 +69,12 @@ router.get('/', requirePermission('scheduling', 'view'), (req, res) => {
       LEFT JOIN users u ON u.id=ps.created_by
       WHERE ${where}
       ORDER BY ps.planned_start ASC
-    `).all(...params);
-    res.json(data);
+    `;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+    const total = db.prepare(`SELECT COUNT(*) as c FROM production_schedule ps WHERE ${where}`).get(...params).c;
+    const data = db.prepare(sql + ' LIMIT ? OFFSET ?').all(...params, limit, (page - 1) * limit);
+    res.json({ data, total, page, pages: Math.ceil(total / limit) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

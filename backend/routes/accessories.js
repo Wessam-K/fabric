@@ -98,12 +98,19 @@ router.post('/import', requirePermission('accessories', 'create'), (req, res) =>
     // Hoist settings queries outside loop
     const defLowStock = parseInt(db.prepare("SELECT value FROM settings WHERE key='low_stock_threshold'").get()?.value) || 20;
     const defReorderQty = parseInt(db.prepare("SELECT value FROM settings WHERE key='default_reorder_qty'").get()?.value) || 50;
+    // Batch-load existing codes to avoid N+1
+    const allCodes = items.filter(i => i.code).map(i => i.code);
+    const existingSet = new Set();
+    if (allCodes.length) {
+      const ph = allCodes.map(() => '?').join(',');
+      const rows = db.prepare(`SELECT code FROM accessories WHERE code IN (${ph})`).all(...allCodes);
+      rows.forEach(r => existingSet.add(r.code));
+    }
     db.transaction(() => {
       for (const item of items) {
         try {
           if (!item.code || !item.name) { errors.push(`سطر بدون كود أو اسم`); continue; }
-          const existing = db.prepare('SELECT id FROM accessories WHERE code=?').get(item.code);
-          if (existing) { update.run(item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.low_stock_threshold)||defLowStock, parseInt(item.reorder_qty)||defReorderQty, item.notes||null, item.code); updated++; }
+          if (existingSet.has(item.code)) { update.run(item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.low_stock_threshold)||defLowStock, parseInt(item.reorder_qty)||defReorderQty, item.notes||null, item.code); updated++; }
           else { insert.run(item.code, item.acc_type||'other', item.name, parseFloat(item.unit_price)||0, item.unit||'piece', parseInt(item.quantity_on_hand)||0, parseInt(item.low_stock_threshold)||defLowStock, parseInt(item.reorder_qty)||defReorderQty, item.notes||null); imported++; }
         } catch (e) { errors.push(`${item.code}: ${e.message}`); }
       }
@@ -140,7 +147,7 @@ router.delete('/:code', requirePermission('accessories', 'delete'), (req, res) =
     // Check for active work orders using this accessory
     const activeWO = db.prepare("SELECT COUNT(*) as c FROM wo_accessories wa JOIN work_orders wo ON wo.id = wa.wo_id WHERE wa.accessory_code=? AND wo.status IN ('pending','in_progress','paused')").get(req.params.code).c;
     if (activeWO > 0) return res.status(409).json({ error: 'لا يمكن تعطيل هذا الإكسسوار لأنه مرتبط بأوامر عمل نشطة', blocking_count: activeWO });
-    db.prepare("UPDATE accessories SET status='inactive', updated_at=datetime('now') WHERE code=?").run(req.params.code);
+    db.prepare("UPDATE accessories SET status='inactive' WHERE code=?").run(req.params.code);
     logAudit(req, 'DEACTIVATE', 'accessory', req.params.code, existing.name);
     res.json({ message: 'تم التعطيل بنجاح — لا يمكن الحذف النهائي من النظام', code: req.params.code });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

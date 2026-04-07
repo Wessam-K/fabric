@@ -550,19 +550,29 @@ router.get('/production-by-model', requirePermission('reports', 'view'), (req, r
       ORDER BY last_wo_date DESC
     `).all(...p);
 
-    // For each model, get fabric usage
-    for (const row of rows) {
-      row.fabric_usage = db.prepare(`
-        SELECT DISTINCT f.code as fabric_code, f.name as fabric_name, f.fabric_type
+    // Batch-load fabric usage for all models (avoids N+1)
+    const modelIds = rows.map(r => r.model_id);
+    const fabricUsageMap = {};
+    if (modelIds.length > 0) {
+      const placeholders = modelIds.map(() => '?').join(',');
+      const fabrics = db.prepare(`
+        SELECT wo.model_id, f.code as fabric_code, f.name as fabric_name, f.fabric_type
         FROM wo_fabrics wf
-        JOIN work_orders wo ON wo.id=wf.wo_id AND wo.model_id=?
+        JOIN work_orders wo ON wo.id=wf.wo_id AND wo.model_id IN (${placeholders})
         JOIN fabrics f ON f.code=wf.fabric_code
         UNION
-        SELECT DISTINCT f.code, f.name, f.fabric_type
+        SELECT wo.model_id, f.code, f.name, f.fabric_type
         FROM wo_fabric_batches wfb
-        JOIN work_orders wo ON wo.id=wfb.wo_id AND wo.model_id=?
+        JOIN work_orders wo ON wo.id=wfb.wo_id AND wo.model_id IN (${placeholders})
         JOIN fabrics f ON f.code=wfb.fabric_code
-      `).all(row.model_id, row.model_id);
+      `).all(...modelIds, ...modelIds);
+      for (const f of fabrics) {
+        if (!fabricUsageMap[f.model_id]) fabricUsageMap[f.model_id] = [];
+        fabricUsageMap[f.model_id].push({ fabric_code: f.fabric_code, fabric_name: f.fabric_name, fabric_type: f.fabric_type });
+      }
+    }
+    for (const row of rows) {
+      row.fabric_usage = fabricUsageMap[row.model_id] || [];
     }
 
     res.json(rows);
@@ -905,7 +915,11 @@ router.get('/financial/pl', requirePermission('reports', 'view'), (req, res) => 
          WHERE status = 'completed' AND completed_date >= ? AND completed_date < ?`
       ).get(monthStart, monthEnd).total;
 
-      const totalCost = materialCost + opex + maintenance;
+      // Payroll costs
+      let payroll = 0;
+      try { payroll = db.prepare(`SELECT COALESCE(SUM(pr.net_pay),0) as total FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pp.period_month >= strftime('%Y-%m',?) AND pp.period_month < strftime('%Y-%m',?)`).get(monthStart, monthEnd).total || 0; } catch {}
+
+      const totalCost = materialCost + opex + maintenance + payroll;
       const profit = revenue - totalCost;
 
       months.push({
@@ -915,6 +929,7 @@ router.get('/financial/pl', requirePermission('reports', 'view'), (req, res) => 
         material_cost: Math.round(materialCost * 100) / 100,
         operating_expenses: Math.round(opex * 100) / 100,
         maintenance_cost: Math.round(maintenance * 100) / 100,
+        payroll_cost: Math.round(payroll * 100) / 100,
         total_cost: Math.round(totalCost * 100) / 100,
         profit: Math.round(profit * 100) / 100,
         margin_pct: revenue > 0 ? Math.round((profit / revenue) * 10000) / 100 : 0,
@@ -926,9 +941,10 @@ router.get('/financial/pl', requirePermission('reports', 'view'), (req, res) => 
       material_cost: acc.material_cost + m.material_cost,
       operating_expenses: acc.operating_expenses + m.operating_expenses,
       maintenance_cost: acc.maintenance_cost + m.maintenance_cost,
+      payroll_cost: acc.payroll_cost + m.payroll_cost,
       total_cost: acc.total_cost + m.total_cost,
       profit: acc.profit + m.profit,
-    }), { revenue: 0, material_cost: 0, operating_expenses: 0, maintenance_cost: 0, total_cost: 0, profit: 0 });
+    }), { revenue: 0, material_cost: 0, operating_expenses: 0, maintenance_cost: 0, payroll_cost: 0, total_cost: 0, profit: 0 });
     totals.margin_pct = totals.revenue > 0 ? Math.round((totals.profit / totals.revenue) * 10000) / 100 : 0;
 
     res.json({ year, months, totals });
@@ -1119,13 +1135,14 @@ router.get('/pl-monthly', requirePermission('reports', 'view'), (req, res) => {
       const monthLabel = sd.slice(0, 7);
       
       const revenue = db.prepare(`SELECT COALESCE(SUM(total),0) as v FROM invoices WHERE status='paid' AND created_at >= ? AND created_at < ?`).get(sd, ed)?.v || 0;
+      const materialCost = db.prepare(`SELECT COALESCE(SUM(total_amount),0) as v FROM purchase_orders WHERE status NOT IN ('cancelled','draft') AND order_date >= ? AND order_date < ?`).get(sd, ed)?.v || 0;
       const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= ? AND expense_date < ?`).get(sd, ed)?.v || 0;
       const maintenance = db.prepare(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_orders WHERE is_deleted=0 AND status='completed' AND completed_date >= ? AND completed_date < ?`).get(sd, ed)?.v || 0;
       let payroll = 0;
       try { payroll = db.prepare(`SELECT COALESCE(SUM(pr.net_pay),0) as v FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pp.period_month >= strftime('%Y-%m',?) AND pp.period_month < strftime('%Y-%m',?)`).get(sd, ed)?.v || 0; } catch {}
       
-      const totalCost = expenses + maintenance + payroll;
-      data.push({ month: monthLabel, revenue, expenses, maintenance, payroll, total_cost: totalCost, net_profit: revenue - totalCost });
+      const totalCost = materialCost + expenses + maintenance + payroll;
+      data.push({ month: monthLabel, revenue, material_cost: materialCost, expenses, maintenance, payroll, total_cost: totalCost, net_profit: revenue - totalCost });
     }
     res.json({ months: data.reverse() });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -1146,6 +1163,9 @@ router.get('/pl-detail', requirePermission('reports', 'view'), (req, res) => {
     const expensesByCategory = db.prepare(`SELECT expense_type, COALESCE(SUM(amount),0) as total FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= ? AND expense_date <= ? GROUP BY expense_type ORDER BY total DESC`).all(from, to);
     const totalExpenses = db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM expenses WHERE is_deleted=0 AND status='approved' AND expense_date >= ? AND expense_date <= ?`).get(from, to)?.v || 0;
     
+    // Material cost (POs)
+    const materialCost = db.prepare(`SELECT COALESCE(SUM(total_amount),0) as v FROM purchase_orders WHERE status NOT IN ('cancelled','draft') AND order_date >= ? AND order_date <= ?`).get(from, to)?.v || 0;
+    
     // Maintenance costs
     const maintenanceCost = db.prepare(`SELECT COALESCE(SUM(cost),0) as v FROM maintenance_orders WHERE is_deleted=0 AND status='completed' AND completed_date >= ? AND completed_date <= ?`).get(from, to)?.v || 0;
     
@@ -1153,11 +1173,12 @@ router.get('/pl-detail', requirePermission('reports', 'view'), (req, res) => {
     let payrollCost = 0;
     try { payrollCost = db.prepare(`SELECT COALESCE(SUM(pr.net_pay),0) as v FROM payroll_records pr JOIN payroll_periods pp ON pp.id=pr.period_id WHERE pp.period_month >= strftime('%Y-%m',?) AND pp.period_month <= strftime('%Y-%m',?)`).get(from, to)?.v || 0; } catch {}
     
-    const totalCost = totalExpenses + maintenanceCost + payrollCost;
+    const totalCost = materialCost + totalExpenses + maintenanceCost + payrollCost;
     
     res.json({
       date_range: { from, to },
       revenue: { total: totalRevenue, by_customer: revenueByCustomer },
+      material_cost: materialCost,
       expenses: { total: totalExpenses, by_category: expensesByCategory },
       maintenance_cost: maintenanceCost,
       payroll_cost: payrollCost,

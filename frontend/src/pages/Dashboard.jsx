@@ -7,6 +7,8 @@ import {
   FileText, ShoppingCart, BarChart2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { fmtDateTime } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import { DashboardConfigProvider, useDashboardConfig } from '../context/DashboardConfigContext';
 import { useDashboardData, useHRData } from '../hooks/useDashboardData';
 import { MoneyDisplay, Skeleton } from '../components/ui';
@@ -256,7 +258,7 @@ function WidgetRenderer({ widgetKey, dProps, widgets, data, hrData, kpis, net, p
               {(data.overdue_work_orders || []).slice(0, 2).map(wo => (
                 <AlertItem key={`wo-${wo.id}`} type="danger"
                   title={wo.wo_number} subtitle={wo.model_code}
-                  value={wo.due_date ? new Date(wo.due_date).toLocaleDateString('ar-EG') : '—'}
+                  value={wo.due_date ? fmtDateTime(wo.due_date) : '—'}
                   to={`/work-orders/${wo.id}`} />
               ))}
               {(data.overdue_invoices || []).slice(0, 1).map(inv => (
@@ -616,14 +618,14 @@ function DashboardInner() {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={refresh} title="تحديث"
+          <Tooltip text="تحديث"><button onClick={refresh}
             className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors">
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <button onClick={() => setConfigOpen(true)} title="تخصيص"
+          </button></Tooltip>
+          <Tooltip text="تخصيص"><button onClick={() => setConfigOpen(true)}
             className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors">
             <Settings size={16} />
-          </button>
+          </button></Tooltip>
           <HelpButton pageKey="dashboard" />
         </div>
       </div>
@@ -653,7 +655,7 @@ function DashboardInner() {
       <div className="flex gap-6">
         <div className="flex-1 min-w-0 space-y-6">
 
-      {/* ═══ Ordered Widget Sections ═══════════════════ */}}
+      {/* ═══ Ordered Widget Sections ═══════════════════ */}
       {widgetOrder.map((key, idx) => {
         const dProps = { widgetKey: key, index: idx, onDragStart: handleDragStart, onDragOver: handleDragOver, onDrop: handleDrop, dragOverKey };
         return <WidgetRenderer key={key} widgetKey={key} dProps={dProps}

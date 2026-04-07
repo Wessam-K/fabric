@@ -11,10 +11,13 @@ const { generateNextNumber } = require('../utils/numberGenerator');
 // GET /api/quality/templates
 router.get('/templates', requirePermission('quality', 'view'), (req, res) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+    const total = db.prepare('SELECT COUNT(*) as c FROM qc_templates WHERE is_active=1').get().c;
     const rows = db.prepare(`SELECT qt.*, 
       (SELECT COUNT(*) FROM qc_template_items WHERE template_id=qt.id) as item_count
-      FROM qc_templates qt WHERE qt.is_active=1 ORDER BY qt.name`).all();
-    res.json(rows);
+      FROM qc_templates qt WHERE qt.is_active=1 ORDER BY qt.name LIMIT ? OFFSET ?`).all(limit, (page - 1) * limit);
+    res.json({ data: rows, total, page, pages: Math.ceil(total / limit) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

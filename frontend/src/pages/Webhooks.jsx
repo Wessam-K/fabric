@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Webhook, Plus, Trash2, Eye, X, Send, ToggleLeft, ToggleRight, RefreshCw } from 'lucide-react';
+import { Webhook, Plus, Eye, X, Send, ToggleLeft, ToggleRight, RefreshCw } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import Tooltip from '../components/Tooltip';
 import { useConfirm } from '../components/ConfirmDialog';
 
 const AVAILABLE_EVENTS = [
@@ -57,13 +58,6 @@ export default function Webhooks() {
       resetForm();
       load();
     } catch (err) { toast.error(err.response?.data?.error || 'فشل الحفظ'); }
-  };
-
-  const remove = async (id) => {
-    const ok = await confirm({ title: 'حذف ويب هوك', message: 'هل أنت متأكد من حذف هذا الويب هوك؟', variant: 'danger' });
-    if (!ok) return;
-    try { await api.delete(`/webhooks/${id}`); toast.success('تم الحذف'); load(); }
-    catch { toast.error('فشل الحذف'); }
   };
 
   const toggleStatus = async (wh) => {
@@ -186,18 +180,15 @@ export default function Webhooks() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 mr-4">
-                  <button onClick={() => toggleStatus(wh)} title={wh.status === 'active' ? 'تعطيل' : 'تفعيل'} className="p-2 rounded-lg hover:bg-gray-100">
+                  <Tooltip text={wh.status === 'active' ? 'تعطيل' : 'تفعيل'}><button onClick={() => toggleStatus(wh)} className="p-2 rounded-lg hover:bg-gray-100">
                     {wh.status === 'active' ? <ToggleRight size={20} className="text-green-600" /> : <ToggleLeft size={20} className="text-gray-400" />}
-                  </button>
-                  <button onClick={() => startEdit(wh)} title="تعديل" className="p-2 rounded-lg hover:bg-gray-100">
+                  </button></Tooltip>
+                  <Tooltip text="تعديل"><button onClick={() => startEdit(wh)} className="p-2 rounded-lg hover:bg-gray-100">
                     <Send size={16} className="text-blue-500" />
-                  </button>
-                  <button onClick={() => viewLogs(wh.id)} title="سجل التسليم" className="p-2 rounded-lg hover:bg-gray-100">
+                  </button></Tooltip>
+                  <Tooltip text="سجل التسليم"><button onClick={() => viewLogs(wh.id)} className="p-2 rounded-lg hover:bg-gray-100">
                     <Eye size={16} className="text-gray-500" />
-                  </button>
-                  <button onClick={() => remove(wh.id)} title="حذف" className="p-2 rounded-lg hover:bg-red-50">
-                    <Trash2 size={16} className="text-red-500" />
-                  </button>
+                  </button></Tooltip>
                 </div>
               </div>
             </div>

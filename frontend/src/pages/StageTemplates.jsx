@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, GripVertical, Trash2, Edit3, X, Check } from 'lucide-react';
+import { Plus, GripVertical, Edit3, X, Check } from 'lucide-react';
 import { PageHeader } from '../components/ui';
-import { ConfirmDialog } from '../components/ui';
+
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
@@ -13,7 +13,6 @@ export default function StageTemplates() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: '', color: '#6b7280' });
-  const [deleteId, setDeleteId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -40,15 +39,6 @@ export default function StageTemplates() {
         toast.success('تم إضافة المرحلة');
       }
       setShowForm(false);
-      load();
-    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
-  };
-
-  const handleDelete = async () => {
-    try {
-      await api.delete(`/stage-templates/${deleteId}`);
-      toast.success('تم حذف المرحلة');
-      setDeleteId(null);
       load();
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
@@ -94,7 +84,6 @@ export default function StageTemplates() {
                   <span className="text-sm font-semibold text-[#1a1a2e] flex-1">{stage.name}</span>
                   <span className="text-[10px] text-gray-400 font-mono">#{stage.sort_order}</span>
                   <button onClick={() => openEdit(stage)} className="text-gray-400 hover:text-blue-600 p-1"><Edit3 size={14} /></button>
-                  <button onClick={() => setDeleteId(stage.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
                 </div>
               ))}
             </div>
@@ -129,8 +118,6 @@ export default function StageTemplates() {
         </div>
       )}
 
-      <ConfirmDialog open={!!deleteId} title="حذف المرحلة" message="هل أنت متأكد من حذف هذه المرحلة؟" danger
-        onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
     </div>
   );
 }

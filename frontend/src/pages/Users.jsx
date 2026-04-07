@@ -3,6 +3,8 @@ import { Shield, Plus, Search, Edit2, Key, X, UserX, Check, Lock, Eye, Unlock, C
 import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
+import { fmtDateTime } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import { useConfirm } from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 
@@ -285,7 +287,7 @@ export default function UsersPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50/80">
                 <tr>
-                  <th className="px-3 py-3 w-10"><input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0} onChange={toggleSelectAll} className="rounded" /></th>
+                  <th className="px-3 py-3 w-10"><input type="checkbox" ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < filtered.length; }} checked={selected.size === filtered.length && filtered.length > 0} onChange={toggleSelectAll} className="rounded" /></th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-700">المستخدم</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-700">الدور</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-700">القسم</th>
@@ -315,7 +317,7 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600">{u.department || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{u.last_login ? new Date(u.last_login).toLocaleDateString('ar-EG') : '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{u.last_login ? fmtDateTime(u.last_login) : '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
                         {u.status === 'active' ? 'نشط' : 'معطل'}
@@ -326,13 +328,13 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="تعديل"><Edit2 size={14} className="text-gray-500" /></button>
-                        <button onClick={() => openUserPerms(u)} className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title="صلاحيات خاصة"><Lock size={14} className="text-blue-500" /></button>
-                        <button onClick={() => setResetPass({ show: true, userId: u.id, password: '' })} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="إعادة تعيين كلمة المرور"><Key size={14} className="text-gray-500" /></button>
+                        <Tooltip text="تعديل"><button onClick={() => openEdit(u)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"><Edit2 size={14} className="text-gray-500" /></button></Tooltip>
+                        <Tooltip text="صلاحيات خاصة"><button onClick={() => openUserPerms(u)} className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors"><Lock size={14} className="text-blue-500" /></button></Tooltip>
+                        <Tooltip text="إعادة تعيين كلمة المرور"><button onClick={() => setResetPass({ show: true, userId: u.id, password: '' })} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"><Key size={14} className="text-gray-500" /></button></Tooltip>
                         {u.locked_until && new Date(u.locked_until) > new Date() && (
-                          <button onClick={() => handleUnlock(u)} className="p-1.5 hover:bg-orange-50 rounded-lg transition-colors" title="فك القفل"><Unlock size={14} className="text-orange-500" /></button>
+                          <Tooltip text="فك القفل"><button onClick={() => handleUnlock(u)} className="p-1.5 hover:bg-orange-50 rounded-lg transition-colors"><Unlock size={14} className="text-orange-500" /></button></Tooltip>
                         )}
-                        <button onClick={() => handleDeactivate(u)} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title="تعطيل"><UserX size={14} className="text-red-400" /></button>
+                        <Tooltip text="تعطيل"><button onClick={() => handleDeactivate(u)} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"><UserX size={14} className="text-red-400" /></button></Tooltip>
                       </div>
                     </td>
                   </tr>

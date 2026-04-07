@@ -173,10 +173,20 @@ inviteRouter.post('/accept', (req, res) => {
 // GET /api/users — list all (superadmin only)
 router.get('/', requireRole('superadmin'), (req, res) => {
   try {
-    const users = db.prepare(`
-      SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, locked_until, failed_login_attempts
-      FROM users ORDER BY created_at DESC
-    `).all();
+    const { page, limit, search } = req.query;
+    let q = `SELECT id, username, full_name, email, role, department, employee_id, status, last_login, created_at, locked_until, failed_login_attempts
+      FROM users`;
+    const p = [];
+    if (search) { q += ' WHERE (username LIKE ? OR full_name LIKE ? OR email LIKE ?)'; const s = `%${search}%`; p.push(s, s, s); }
+    q += ' ORDER BY created_at DESC';
+    if (page && limit) {
+      const pg = Math.max(1, parseInt(page));
+      const lim = Math.min(200, Math.max(1, parseInt(limit)));
+      const total = db.prepare(q.replace(/SELECT .* FROM/, 'SELECT COUNT(*) as c FROM')).get(...p).c;
+      const users = db.prepare(q + ' LIMIT ? OFFSET ?').all(...p, lim, (pg - 1) * lim);
+      return res.json({ data: users, total, page: pg, pages: Math.ceil(total / lim) });
+    }
+    const users = db.prepare(q).all(...p);
     res.json(users);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

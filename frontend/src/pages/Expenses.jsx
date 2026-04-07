@@ -6,6 +6,8 @@ import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
+import { fmtDateTime, downloadCSV } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import { useAuth } from '../context/AuthContext';
 import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 import { useConfirm } from '../components/ConfirmDialog';
@@ -31,6 +33,7 @@ export default function Expenses() {
   const [editId, setEditId] = useState(null);
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const emptyForm = { description: '', expense_type: 'other', amount: '', expense_date: new Date().toISOString().slice(0, 10), notes: '', reference_type: '', reference_id: '' };
   const [form, setForm] = useState(emptyForm);
@@ -94,17 +97,12 @@ export default function Expenses() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
-  const handleDelete = async (id) => {
-    const ok = await confirm({ title: 'حذف المصروف', message: 'هل تريد حذف هذا المصروف؟' });
-    if (!ok) return;
-    try {
-      await api.delete(`/expenses/${id}`);
-      toast.success('تم حذف المصروف');
-      load(); loadSummary();
-    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
-  };
-
   const handleExport = async () => {
+    if (selectedIds.length) {
+      const rows = expenses.filter(e => selectedIds.includes(e.id)).map(e => ({ 'الوصف': e.description, 'النوع': TYPES[e.expense_type] || e.expense_type, 'المبلغ': e.amount, 'التاريخ': e.expense_date, 'الحالة': STATUS_LABELS[e.status] || e.status }));
+      downloadCSV(rows, 'expenses');
+      return;
+    }
     try { await exportFromBackend('/expenses/export', 'expenses'); toast.success('تم التصدير'); }
     catch { toast.error('فشل التصدير'); }
   };
@@ -130,7 +128,7 @@ export default function Expenses() {
       <PageHeader title="المصروفات" subtitle="إدارة مصروفات المصنع"
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="expenses" />
-          <button onClick={handleExport} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
+          <button onClick={handleExport} className="btn btn-secondary text-xs"><Download size={14} /> {selectedIds.length ? `تصدير ${selectedIds.length} محدد` : 'تصدير'}</button>
           <PermissionGuard module="expenses" action="create">
             <button onClick={handleImport} className="btn btn-secondary text-xs"><Upload size={14} /> استيراد</button>
             <button onClick={() => { setEditId(null); setForm(emptyForm); setShowModal(true); }} className="btn btn-gold"><Plus size={16} /> مصروف جديد</button>
@@ -182,9 +180,19 @@ export default function Expenses() {
 
       {/* Table */}
       <div className="card overflow-x-auto">
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+            <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+            <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+          </div>
+        )}
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-gray-500 text-xs">
+              <th className="py-3 px-3 w-10">
+                <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < expenses.length; }} checked={expenses.length > 0 && expenses.every(e => selectedIds.includes(e.id))} onChange={ev => setSelectedIds(ev.target.checked ? expenses.map(e => e.id) : [])}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+              </th>
               <th className="text-right py-3 px-3 font-medium">الوصف</th>
               <th className="text-right py-3 px-3 font-medium">النوع</th>
               <th className="text-right py-3 px-3 font-medium">المبلغ</th>
@@ -195,15 +203,19 @@ export default function Expenses() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="6" className="text-center py-8 text-gray-400">جاري التحميل...</td></tr>
+              <tr><td colSpan="7" className="text-center py-8 text-gray-400">جاري التحميل...</td></tr>
             ) : expenses.length === 0 ? (
-              <tr><td colSpan="6" className="text-center py-8 text-gray-400">لا توجد مصروفات</td></tr>
+              <tr><td colSpan="7" className="text-center py-8 text-gray-400">لا توجد مصروفات</td></tr>
             ) : expenses.map(e => (
-              <tr key={e.id} className="border-b hover:bg-gray-50 transition-colors">
+              <tr key={e.id} className={`border-b hover:bg-gray-50 transition-colors ${selectedIds.includes(e.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                <td className="py-3 px-3" onClick={ev => ev.stopPropagation()}>
+                  <input type="checkbox" checked={selectedIds.includes(e.id)} onChange={() => setSelectedIds(prev => prev.includes(e.id) ? prev.filter(x => x !== e.id) : [...prev, e.id])}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                </td>
                 <td className="py-3 px-3 font-medium">{e.description}</td>
                 <td className="py-3 px-3 text-gray-500">{TYPES[e.expense_type] || e.expense_type}</td>
                 <td className="py-3 px-3 font-mono font-bold">{fmt(e.amount)} ج</td>
-                <td className="py-3 px-3 text-gray-500">{e.expense_date || '—'}</td>
+                <td className="py-3 px-3 text-gray-500">{fmtDateTime(e.expense_date)}</td>
                 <td className="py-3 px-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[e.status] || 'bg-gray-100 text-gray-600'}`}>
                     {STATUS_LABELS[e.status] || e.status}
@@ -213,15 +225,12 @@ export default function Expenses() {
                   <div className="flex items-center gap-1">
                     {e.status === 'pending' && can('expenses', 'approve') && (
                       <>
-                        <button onClick={() => handleApprove(e.id)} className="text-green-600 hover:bg-green-50 p-1 rounded" title="اعتماد"><CheckCircle size={16} /></button>
-                        <button onClick={() => { setRejectId(e.id); setRejectReason(''); }} className="text-red-600 hover:bg-red-50 p-1 rounded" title="رفض"><XCircle size={16} /></button>
+                        <Tooltip text="اعتماد"><button onClick={() => handleApprove(e.id)} className="text-green-600 hover:bg-green-50 p-1 rounded"><CheckCircle size={16} /></button></Tooltip>
+                        <Tooltip text="رفض"><button onClick={() => { setRejectId(e.id); setRejectReason(''); }} className="text-red-600 hover:bg-red-50 p-1 rounded"><XCircle size={16} /></button></Tooltip>
                       </>
                     )}
                     {e.status === 'pending' && can('expenses', 'edit') && (
                       <button onClick={() => openEdit(e)} className="text-blue-600 hover:bg-blue-50 p-1 rounded text-xs">تعديل</button>
-                    )}
-                    {can('expenses', 'delete') && (
-                      <button onClick={() => handleDelete(e.id)} className="text-red-400 hover:bg-red-50 p-1 rounded text-xs">حذف</button>
                     )}
                   </div>
                 </td>

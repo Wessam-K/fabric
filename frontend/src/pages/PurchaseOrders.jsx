@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, ShoppingCart, Clock, CheckCircle, DollarSign, Package, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
+import { fmtDateTime, downloadCSV } from '../utils/formatters';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
@@ -34,6 +35,7 @@ export default function PurchaseOrders() {
   const emptyItem = { item_type: 'fabric', item_code: '', description: '', quantity: '', unit_price: '' };
   const [form, setForm] = useState({ po_number: '', supplier_id: '', tax_pct: '0', discount: '0', expected_date: '', notes: '', items: [{ ...emptyItem }] });
   const [defaultTax, setDefaultTax] = useState('0');
+  const [selectedIds, setSelectedIds] = useState([]);
 
   // Receive workflow
   const [showReceive, setShowReceive] = useState(null);
@@ -153,7 +155,14 @@ export default function PurchaseOrders() {
       <PageHeader title="أوامر الشراء" subtitle="إدارة مشتريات الخامات والاكسسوارات"
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="purchaseorders" />
-          <button onClick={() => exportFromBackend('/purchase-orders/export', 'purchase-orders').catch(() => {})} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
+          <button onClick={() => {
+            if (selectedIds.length) {
+              const rows = orders.filter(o => selectedIds.includes(o.id)).map(o => ({ 'الرقم': o.po_number, 'المورد': o.supplier_name, 'الحالة': o.status, 'الإجمالي': o.total_amount, 'التاريخ': o.created_at }));
+              downloadCSV(rows, 'purchase-orders');
+            } else {
+              exportFromBackend('/purchase-orders/export', 'purchase-orders').catch(() => {});
+            }
+          }} className="btn btn-secondary text-xs"><Download size={14} /> {selectedIds.length ? `تصدير ${selectedIds.length} محدد` : 'تصدير'}</button>
           <PermissionGuard module="purchase_orders" action="create">
             <button onClick={openCreate} className="btn btn-gold"><Plus size={16} /> أمر شراء جديد</button>
           </PermissionGuard>
@@ -205,9 +214,20 @@ export default function PurchaseOrders() {
           {orders.length === 0 ? (
             <div className="text-center py-16 text-gray-400">لا توجد أوامر شراء</div>
           ) : (
+            <>
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+                <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+                <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < orders.length; }} checked={orders.length > 0 && orders.every(o => selectedIds.includes(o.id))} onChange={e => setSelectedIds(e.target.checked ? orders.map(o => o.id) : [])}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                  </th>
                   <th className="px-4 py-3 text-right text-xs text-gray-500">الرقم</th>
                   <th className="px-4 py-3 text-right text-xs text-gray-500">المورد</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">الحالة</th>
@@ -219,7 +239,11 @@ export default function PurchaseOrders() {
               </thead>
               <tbody>
                 {orders.map(po => (
-                  <tr key={po.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <tr key={po.id} className={`border-t border-gray-100 hover:bg-gray-50/50 ${selectedIds.includes(po.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.includes(po.id)} onChange={() => setSelectedIds(prev => prev.includes(po.id) ? prev.filter(x => x !== po.id) : [...prev, po.id])}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs font-bold">{po.po_number}</td>
                     <td className="px-4 py-3">
                       <span className="font-bold text-[#1a1a2e]">{po.supplier_name}</span>
@@ -229,8 +253,8 @@ export default function PurchaseOrders() {
                       <span className={`text-[10px] px-2 py-1 rounded-full ${STATUS_MAP[po.status]?.color}`}>{STATUS_MAP[po.status]?.label}</span>
                     </td>
                     <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(po.total_amount)} ج</td>
-                    <td className="px-4 py-3 text-center text-xs text-gray-400">{po.expected_date ? new Date(po.expected_date).toLocaleDateString('ar-EG') : '—'}</td>
-                    <td className="px-4 py-3 text-center text-xs text-gray-400">{new Date(po.created_at).toLocaleDateString('ar-EG')}</td>
+                    <td className="px-4 py-3 text-center text-xs text-gray-400">{po.expected_date ? fmtDateTime(po.expected_date) : '—'}</td>
+                    <td className="px-4 py-3 text-center text-xs text-gray-400">{fmtDateTime(po.created_at)}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {can('purchase_orders', 'edit') && po.status === 'draft' && <button onClick={() => updateStatus(po.id, 'sent')} className="text-[10px] px-2 py-1 bg-blue-50 text-blue-700 rounded">إرسال</button>}
@@ -242,6 +266,7 @@ export default function PurchaseOrders() {
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </div>
       )}

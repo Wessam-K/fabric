@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Play, Package, AlertTriangle, ShoppingCart, Trash2, Eye, X } from 'lucide-react';
+import { Plus, Search, Play, Package, AlertTriangle, ShoppingCart, Eye, X } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { fmtDateTime } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
@@ -60,14 +62,6 @@ export default function MRP() {
     } catch (err) { toast.error(err.response?.data?.error || 'فشل إنشاء أوامر الشراء'); }
   };
 
-  const cancelRun = async (id) => {
-    try {
-      await api.delete(`/mrp/${id}`);
-      toast.success('تم إلغاء العملية');
-      loadRuns();
-    } catch { toast.error('فشل الإلغاء'); }
-  };
-
   return (
     <div className="p-4 lg:p-6 max-w-7xl mx-auto">
       <PageHeader title="تخطيط الاحتياجات — MRP" icon={Package} count={runs.length} action={<HelpButton pageKey="mrp" />} />
@@ -107,7 +101,7 @@ export default function MRP() {
                 {runs.map(r => (
                   <tr key={r.id} className="hover:bg-gray-50">
                     <td className="p-3 font-mono font-bold text-[#1a1a2e]">{r.run_number}</td>
-                    <td className="p-3 text-gray-600">{r.run_date?.slice(0, 10)}</td>
+                    <td className="p-3 text-gray-600">{fmtDateTime(r.run_date)}</td>
                     <td className="p-3 text-center">{r.work_order_count}</td>
                     <td className="p-3 text-center">
                       <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-xs font-bold">
@@ -121,14 +115,9 @@ export default function MRP() {
                     </td>
                     <td className="p-3 text-center">
                       <div className="flex justify-center gap-1">
-                        <button onClick={() => viewRun(r.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="عرض">
+                        <Tooltip text="عرض"><button onClick={() => viewRun(r.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded">
                           <Eye size={16} />
-                        </button>
-                        {r.status === 'draft' && (
-                          <button onClick={() => cancelRun(r.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded" title="إلغاء">
-                            <Trash2 size={16} />
-                          </button>
-                        )}
+                        </button></Tooltip>
                       </div>
                     </td>
                   </tr>
@@ -146,7 +135,7 @@ export default function MRP() {
             <div className="flex justify-between items-center p-5 border-b bg-gray-50">
               <div>
                 <h2 className="text-lg font-bold">تفاصيل MRP — {selectedRun.run_number}</h2>
-                <p className="text-sm text-gray-500">{selectedRun.run_date?.slice(0, 10)} • {suggestions.length} اقتراح</p>
+                <p className="text-sm text-gray-500">{fmtDateTime(selectedRun.run_date)} • {suggestions.length} اقتراح</p>
               </div>
               <div className="flex gap-2">
                 {selectedRun.status === 'draft' && (

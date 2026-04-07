@@ -60,6 +60,7 @@ const Quality = lazy(() => import('./pages/Quality'));
 const Returns = lazy(() => import('./pages/Returns'));
 const Samples = lazy(() => import('./pages/Samples'));
 const Quotations = lazy(() => import('./pages/Quotations'));
+const SalesOrders = lazy(() => import('./pages/SalesOrders'));
 const Documents = lazy(() => import('./pages/Documents'));
 const Backups = lazy(() => import('./pages/Backups'));
 const Webhooks = lazy(() => import('./pages/Webhooks'));
@@ -233,6 +234,7 @@ function AppLayout() {
           <Route path="/returns" element={<ProtectedRoute perm={['returns','view']}><Returns /></ProtectedRoute>} />
           <Route path="/samples" element={<ProtectedRoute perm={['samples','view']}><Samples /></ProtectedRoute>} />
           <Route path="/quotations" element={<ProtectedRoute perm={['quotations','view']}><Quotations /></ProtectedRoute>} />
+          <Route path="/sales-orders" element={<ProtectedRoute perm={['sales_orders','view']}><SalesOrders /></ProtectedRoute>} />
           <Route path="/documents" element={<ProtectedRoute perm={['documents','view']}><Documents /></ProtectedRoute>} />
           <Route path="/backups" element={<ProtectedRoute perm={['backups','view']}><Backups /></ProtectedRoute>} />
           <Route path="/webhooks" element={<ProtectedRoute perm={['settings','view']}><Webhooks /></ProtectedRoute>} />
@@ -282,7 +284,7 @@ function AuthRouter() {
       <Route path="/accept-invite" element={<AcceptInvite />} />
       <Route path="/models/:code/print" element={user ? <ProtectedRoute perm={['models','view']}><PrintView /></ProtectedRoute> : <Navigate to="/login" replace />} />
       <Route path="/models/:code/invoice" element={user ? <ProtectedRoute perm={['models','view']}><InvoicePrint /></ProtectedRoute> : <Navigate to="/login" replace />} />
-      <Route path="/invoices/:id/view" element={user ? <InvoiceView /> : <Navigate to="/login" replace />} />
+      <Route path="/invoices/:id/view" element={<ProtectedRoute perm={['invoices','view']}><InvoiceView /></ProtectedRoute>} />
       <Route path="/*" element={user ? <AppLayout /> : <Navigate to="/login" replace />} />
     </Routes>
     </Suspense>

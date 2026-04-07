@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Database, Plus, Trash2, Download, RefreshCw, Shield, X } from 'lucide-react';
+import { Database, Plus, Download, RefreshCw, Shield, X } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -34,12 +34,7 @@ export default function Backups() {
     finally { setCreating(false); }
   };
 
-  const remove = async (id) => {
-    const ok = await confirm({ title: 'حذف نسخة احتياطية', message: 'هل أنت متأكد من حذف هذه النسخة؟', variant: 'danger' });
-    if (!ok) return;
-    try { await api.delete(`/backups/${id}`); toast.success('تم الحذف'); load(); }
-    catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
-  };
+  
 
   const restore = async (id) => {
     const ok = await confirm({ title: 'استعادة نسخة احتياطية', message: 'تحذير: سيتم استبدال قاعدة البيانات الحالية. هل أنت متأكد؟', variant: 'danger' });
@@ -116,11 +111,7 @@ export default function Backups() {
                     <RefreshCw size={14} /> استعادة
                   </button>
                 )}
-                {can('backups', 'delete') && (
-                  <button onClick={() => remove(b.id)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
-                    <Trash2 size={14} /> حذف
-                  </button>
-                )}
+
               </div>
             </div>
           ))}

@@ -3,9 +3,11 @@ import { Plus, Calendar, Download, BarChart2 } from 'lucide-react';
 import api from '../../utils/api';
 import { useToast } from '../../components/Toast';
 import HelpButton from '../../components/HelpButton';
+import { fmtDateTime } from '../../utils/formatters';
 import { PageHeader, LoadingState, Tabs, Modal, EmptyState } from '../../components/ui';
 import { exportToExcel } from '../../utils/exportExcel';
 import { useAuth } from '../../context/AuthContext';
+import Tooltip from '../../components/Tooltip';
 
 export default function Leaves() {
   const toast = useToast();
@@ -18,6 +20,7 @@ export default function Leaves() {
   const [form, setForm] = useState({ employee_id: '', leave_type: 'annual', start_date: '', end_date: '', reason: '' });
   const [balances, setBalances] = useState([]);
   const [showBalances, setShowBalances] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const load = async () => {
     setLoading(true);
@@ -27,7 +30,7 @@ export default function Leaves() {
         api.get('/hr/employees'),
       ]);
       setLeaves(lRes.data);
-      setEmployees(Array.isArray(eRes.data) ? eRes.data : eRes.data.employees || []);
+      setEmployees(Array.isArray(eRes.data) ? eRes.data : eRes.data.data || eRes.data.employees || []);
       // Load leave balances
       try { const bRes = await api.get('/hr/leave-balances'); setBalances(bRes.data || []); } catch {}
     } catch { toast.error('فشل تحميل البيانات'); }
@@ -55,7 +58,7 @@ export default function Leaves() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('ar-EG') : '—';
+  const fmtDate = (d) => fmtDateTime(d);
   const TYPES = { annual: 'سنوية', sick: 'مرضية', unpaid: 'بدون راتب', emergency: 'طارئة' };
   const STATUS = { pending: 'قيد المراجعة', approved: 'مقبولة', rejected: 'مرفوضة' };
   const STATUS_COLORS = { pending: 'bg-yellow-100 text-yellow-700', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' };
@@ -115,12 +118,21 @@ export default function Leaves() {
             <EmptyState icon={Calendar} title="لا توجد طلبات إجازات" />
           ) : (
             <table className="data-table">
-              <thead><tr><th>الموظف</th><th>النوع</th><th>من</th><th>إلى</th><th>الأيام</th><th>الحالة</th><th>السبب</th><th></th></tr></thead>
+              <thead><tr>
+                <th className="w-10">
+                  <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < filtered.length; }} checked={filtered.length > 0 && filtered.every(l => selectedIds.includes(l.id))} onChange={e => setSelectedIds(e.target.checked ? filtered.map(l => l.id) : [])}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                </th>
+                <th>الموظف</th><th>النوع</th><th>من</th><th>إلى</th><th>الأيام</th><th>الحالة</th><th>السبب</th><th></th></tr></thead>
               <tbody>
                 {filtered.map(l => {
                   const days = l.start_date && l.end_date ? Math.ceil((new Date(l.end_date) - new Date(l.start_date)) / 86400000) + 1 : '—';
                   return (
-                    <tr key={l.id}>
+                    <tr key={l.id} className={selectedIds.includes(l.id) ? 'bg-[#c9a84c]/5' : ''}>
+                      <td onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.includes(l.id)} onChange={() => setSelectedIds(prev => prev.includes(l.id) ? prev.filter(x => x !== l.id) : [...prev, l.id])}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                      </td>
                       <td className="text-xs font-semibold">{l.employee_name || l.employee_id}</td>
                       <td className="text-xs">{TYPES[l.leave_type] || l.leave_type}</td>
                       <td className="text-xs">{fmtDate(l.start_date)}</td>

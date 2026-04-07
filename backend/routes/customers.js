@@ -53,12 +53,19 @@ router.post('/import', requirePermission('customers', 'create'), (req, res) => {
     let imported = 0, updated = 0, errors = [];
     const insert = db.prepare(`INSERT INTO customers (code,name,customer_type,phone,email,address,city,tax_number,credit_limit,contact_name,payment_terms,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
     const update = db.prepare(`UPDATE customers SET name=?,customer_type=?,phone=?,email=?,address=?,city=?,tax_number=?,credit_limit=?,contact_name=?,payment_terms=?,notes=? WHERE code=?`);
+    // Batch-load existing codes to avoid N+1
+    const allCodes = items.filter(i => i.code).map(i => i.code);
+    const existingSet = new Set();
+    if (allCodes.length) {
+      const ph = allCodes.map(() => '?').join(',');
+      const rows = db.prepare(`SELECT code FROM customers WHERE code IN (${ph})`).all(...allCodes);
+      rows.forEach(r => existingSet.add(r.code));
+    }
     db.transaction(() => {
       for (const item of items) {
         try {
           if (!item.code || !item.name) { errors.push(`سطر بدون كود أو اسم`); continue; }
-          const existing = db.prepare('SELECT id FROM customers WHERE code=?').get(item.code);
-          if (existing) { update.run(item.name, item.customer_type||'wholesale', item.phone||null, item.email||null, item.address||null, item.city||null, item.tax_number||null, parseFloat(item.credit_limit)||0, item.contact_name||null, item.payment_terms||null, item.notes||null, item.code); updated++; }
+          if (existingSet.has(item.code)) { update.run(item.name, item.customer_type||'wholesale', item.phone||null, item.email||null, item.address||null, item.city||null, item.tax_number||null, parseFloat(item.credit_limit)||0, item.contact_name||null, item.payment_terms||null, item.notes||null, item.code); updated++; }
           else { insert.run(item.code, item.name, item.customer_type||'wholesale', item.phone||null, item.email||null, item.address||null, item.city||null, item.tax_number||null, parseFloat(item.credit_limit)||0, item.contact_name||null, item.payment_terms||null, item.notes||null); imported++; }
         } catch (e) { errors.push(`${item.code}: ${e.message}`); }
       }

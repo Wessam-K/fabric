@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle, Camera, Upload } from 'lucide-react';
+import { Plus, Edit2, X, CircleDot, Zap, Layers, Tag, Package, Grip, MoreHorizontal, Shield, Aperture, AlertTriangle, Camera, Upload } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { PageHeader } from '../components/ui';
@@ -9,6 +9,7 @@ import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
 import ImportCSV from '../components/ImportCSV';
 import { useAuth } from '../context/AuthContext';
+import Tooltip from '../components/Tooltip';
 
 const ACC_TYPES = [
   { value: '', label: 'الكل', icon: null },
@@ -52,7 +53,6 @@ export default function Accessories() {
   const [form, setForm] = useState({ ...emptyForm });
   const [stockModal, setStockModal] = useState(null);
   const [stockAdjust, setStockAdjust] = useState({ qty_change: '', notes: '' });
-  const [confirmDel, setConfirmDel] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [showImport, setShowImport] = useState(false);
 
@@ -106,25 +106,6 @@ export default function Accessories() {
     }
   };
 
-  const handleDelete = async (code) => {
-    setConfirmDel(code);
-  };
-  const doDelete = async () => {
-    const code = confirmDel;
-    setConfirmDel(null);
-    try {
-      await api.delete(`/accessories/${code}`);
-      toast.success('تم التعطيل بنجاح');
-      fetchList();
-    } catch (err) {
-      if (err.response?.status === 409) {
-        toast.error(`لا يمكن تعطيل هذا الإكسسوار: مرتبط بـ ${err.response.data.blocking_count} سجل نشط`);
-      } else {
-        toast.error(err.response?.data?.error || 'فشل التعطيل');
-      }
-    }
-  };
-
   const handleStockAdjust = async () => {
     if (!stockAdjust.qty_change || parseInt(stockAdjust.qty_change) === 0) { toast.error('الكمية مطلوبة'); return; }
     try {
@@ -141,18 +122,6 @@ export default function Accessories() {
 
   return (
     <div className="page">
-      {confirmDel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="card card-body max-w-sm w-full mx-4">
-            <h3 className="section-title mb-2">تأكيد التعطيل</h3>
-            <p className="text-sm text-[var(--color-muted)] mb-5">هل أنت متأكد من تعطيل هذا الاكسسوار؟ لا يمكن حذفه نهائياً — يمكن إعادة تفعيله لاحقاً.</p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setConfirmDel(null)} className="btn btn-ghost">إلغاء</button>
-              <button onClick={doDelete} className="btn btn-danger">تأكيد</button>
-            </div>
-          </div>
-        </div>
-      )}
       <PageHeader title="سجل الاكسسوارات" subtitle={`${total} اكسسوار مسجل`}
         actions={<div className="flex items-center gap-2">
           <HelpButton pageKey="accessories" />
@@ -242,8 +211,7 @@ export default function Accessories() {
                 {/* Actions */}
                 <div className="flex gap-1 mt-3 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                   {can('accessories', 'edit') && <button onClick={() => { setStockModal(a); setStockAdjust({ qty_change: '', notes: '' }); }} className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg text-[10px]">تعديل مخزون</button>}
-                  {can('accessories', 'edit') && <button onClick={() => openEdit(a)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={14} /></button>}
-                  {can('accessories', 'delete') && <button onClick={() => handleDelete(a.code)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>}
+                  {can('accessories', 'edit') && <Tooltip content="تعديل"><button onClick={() => openEdit(a)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={14} /></button></Tooltip>}
                 </div>
               </div>
             );

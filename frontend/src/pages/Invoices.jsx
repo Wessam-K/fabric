@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, FileText, Clock, CheckCircle, AlertTriangle, Send, X, Eye, Pencil, Trash2, Download } from 'lucide-react';
+import { Plus, Search, FileText, Clock, CheckCircle, AlertTriangle, Send, X, Eye, Pencil, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
+import { fmtDateTime, downloadCSV } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
@@ -34,6 +36,7 @@ export default function Invoices() {
   const [dateTo, setDateTo] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editInvoice, setEditInvoice] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const load = async () => {
     setLoading(true);
@@ -60,16 +63,6 @@ export default function Invoices() {
     } catch { toast.error('فشل التحديث'); }
   };
 
-  const deleteInvoice = async (id) => {
-    const ok = await confirm({ title: 'حذف الفاتورة', message: 'هل تريد حذف هذه الفاتورة؟' });
-    if (!ok) return;
-    try {
-      await api.delete(`/invoices/${id}`);
-      toast.success('تم حذف الفاتورة');
-      load();
-    } catch { toast.error('فشل الحذف'); }
-  };
-
   const kpiCards = [
     { label: 'إجمالي الفواتير', value: totals.total_count || 0, icon: FileText, color: 'bg-blue-50 text-blue-600' },
     { label: 'المدفوعة', value: `${fmt(totals.total_paid)} ج`, icon: CheckCircle, color: 'bg-green-50 text-green-600' },
@@ -83,7 +76,14 @@ export default function Invoices() {
       <PageHeader title="الفواتير" subtitle="إدارة الفواتير والمدفوعات"
         action={<div className="flex items-center gap-2">
           <HelpButton pageKey="invoices" />
-          <button onClick={() => exportFromBackend('/invoices/export', 'invoices').catch(() => {})} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
+          <button onClick={() => {
+            if (selectedIds.length) {
+              const rows = invoices.filter(i => selectedIds.includes(i.id)).map(i => ({ 'رقم الفاتورة': i.invoice_number, 'العميل': i.customer_name, 'الحالة': i.status, 'المبلغ': i.total, 'التاريخ': i.created_at }));
+              downloadCSV(rows, 'invoices');
+            } else {
+              exportFromBackend('/invoices/export', 'invoices').catch(() => {});
+            }
+          }} className="btn btn-secondary text-xs"><Download size={14} /> {selectedIds.length ? `تصدير ${selectedIds.length} محدد` : 'تصدير'}</button>
           <PermissionGuard module="invoices" action="create">
             <button onClick={() => { setEditInvoice(null); setShowForm(true); }} className="btn btn-gold"><Plus size={16} /> فاتورة جديدة</button>
           </PermissionGuard>
@@ -150,9 +150,19 @@ export default function Invoices() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+              <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+              <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+            </div>
+          )}
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-4 py-3 w-10">
+                  <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < invoices.length; }} checked={invoices.length > 0 && invoices.every(i => selectedIds.includes(i.id))} onChange={e => setSelectedIds(e.target.checked ? invoices.map(i => i.id) : [])}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                </th>
                 <th className="px-4 py-3 text-right text-xs text-gray-500">رقم الفاتورة</th>
                 <th className="px-4 py-3 text-right text-xs text-gray-500">العميل</th>
                 <th className="px-4 py-3 text-center text-xs text-gray-500">الحالة</th>
@@ -165,7 +175,11 @@ export default function Invoices() {
               {invoices.map(inv => {
                 const st = STATUS_MAP[inv.status] || STATUS_MAP.draft;
                 return (
-                  <tr key={inv.id} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
+                  <tr key={inv.id} className={`border-t border-gray-100 hover:bg-gray-50/50 transition-colors ${selectedIds.includes(inv.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.includes(inv.id)} onChange={() => setSelectedIds(prev => prev.includes(inv.id) ? prev.filter(x => x !== inv.id) : [...prev, inv.id])}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs font-bold">{inv.invoice_number}</td>
                     <td className="px-4 py-3">
                       <div className="font-bold text-sm">{inv.customer_name}</div>
@@ -178,27 +192,23 @@ export default function Invoices() {
                     </td>
                     <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(inv.total)} ج</td>
                     <td className="px-4 py-3 text-center text-xs text-gray-500">
-                      {new Date(inv.created_at).toLocaleDateString('ar-EG')}
+                      {fmtDateTime(inv.created_at)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => navigate(`/invoices/${inv.id}/view`)} title="عرض"
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-blue-600"><Eye size={15} /></button>
+                        <Tooltip text="عرض"><button onClick={() => navigate(`/invoices/${inv.id}/view`)}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-blue-600"><Eye size={15} /></button></Tooltip>
                         {can('invoices', 'edit') && (
-                          <button onClick={() => { setEditInvoice(inv); setShowForm(true); }} title="تعديل"
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-amber-600"><Pencil size={15} /></button>
+                          <Tooltip text="تعديل"><button onClick={() => { setEditInvoice(inv); setShowForm(true); }}
+                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-amber-600"><Pencil size={15} /></button></Tooltip>
                         )}
                         {inv.status === 'draft' && (
-                          <button onClick={() => updateStatus(inv.id, 'sent')} title="إرسال"
-                            className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors text-gray-400 hover:text-blue-600"><Send size={15} /></button>
+                          <Tooltip text="إرسال"><button onClick={() => updateStatus(inv.id, 'sent')}
+                            className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors text-gray-400 hover:text-blue-600"><Send size={15} /></button></Tooltip>
                         )}
                         {(inv.status === 'sent' || inv.status === 'overdue') && (
-                          <button onClick={() => updateStatus(inv.id, 'paid')} title="تم الدفع"
-                            className="p-1.5 hover:bg-green-50 rounded-lg transition-colors text-gray-400 hover:text-green-600"><CheckCircle size={15} /></button>
-                        )}
-                        {can('invoices', 'delete') && (
-                          <button onClick={() => deleteInvoice(inv.id)} title="حذف"
-                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
+                          <Tooltip text="تم الدفع"><button onClick={() => updateStatus(inv.id, 'paid')}
+                            className="p-1.5 hover:bg-green-50 rounded-lg transition-colors text-gray-400 hover:text-green-600"><CheckCircle size={15} /></button></Tooltip>
                         )}
                       </div>
                     </td>

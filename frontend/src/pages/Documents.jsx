@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, FileText, Eye, X, Upload, Trash2, Download } from 'lucide-react';
+import { Plus, Search, FileText, Eye, X, Upload, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -8,6 +8,8 @@ import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmDialog';
 import HelpButton from '../components/HelpButton';
+import { fmtDateTime } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 
 const CATEGORY_LABELS = { general: 'عام', contract: 'عقد', invoice: 'فاتورة', report: 'تقرير', certificate: 'شهادة', specification: 'مواصفات', drawing: 'رسم', photo: 'صورة', other: 'أخرى' };
 
@@ -26,6 +28,7 @@ export default function Documents() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [file, setFile] = useState(null);
   const [form, setForm] = useState({ title: '', description: '', category: 'general', entity_type: '', entity_id: '' });
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const load = async () => {
     setLoading(true);
@@ -65,13 +68,6 @@ export default function Documents() {
     catch { toast.error('فشل التحميل'); }
   };
 
-  const remove = async (id) => {
-    const ok = await confirm({ title: 'حذف المستند', message: 'هل أنت متأكد من حذف هذا المستند؟' });
-    if (!ok) return;
-    try { await api.delete(`/documents/${id}`); toast.success('تم الحذف'); load(); setShowDetail(false); }
-    catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
-  };
-
   const formatSize = (bytes) => {
     if (!bytes) return '-';
     if (bytes < 1024) return bytes + ' B';
@@ -102,19 +98,33 @@ export default function Documents() {
         <div className="text-center py-16 bg-white rounded-xl border"><FileText size={48} className="mx-auto mb-4 text-gray-300" /><p className="text-gray-500">لا توجد مستندات</p></div>
       ) : (
         <div className="bg-white rounded-xl border overflow-hidden">
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+              <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+              <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+            </div>
+          )}
           <table className="w-full text-sm">
-            <thead className="bg-gray-50"><tr><th className="p-3 text-right">العنوان</th><th className="p-3 text-right">الفئة</th><th className="p-3 text-center">النوع</th><th className="p-3 text-center">الحجم</th><th className="p-3 text-right">بواسطة</th><th className="p-3 text-center">إجراءات</th></tr></thead>
+            <thead className="bg-gray-50"><tr>
+              <th className="p-3 w-10">
+                <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < docs.length; }} checked={docs.length > 0 && docs.every(d => selectedIds.includes(d.id))} onChange={e => setSelectedIds(e.target.checked ? docs.map(d => d.id) : [])}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+              </th>
+              <th className="p-3 text-right">العنوان</th><th className="p-3 text-right">الفئة</th><th className="p-3 text-center">النوع</th><th className="p-3 text-center">الحجم</th><th className="p-3 text-right">بواسطة</th><th className="p-3 text-center">إجراءات</th></tr></thead>
             <tbody className="divide-y">
               {docs.map(d => (
-                <tr key={d.id} className="hover:bg-gray-50">
+                <tr key={d.id} className={`hover:bg-gray-50 ${selectedIds.includes(d.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                  <td className="p-3" onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => setSelectedIds(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                  </td>
                   <td className="p-3 font-bold">{d.title}</td>
                   <td className="p-3"><span className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700">{CATEGORY_LABELS[d.category] || d.category}</span></td>
                   <td className="p-3 text-center text-gray-500 font-mono text-xs">{d.mime_type?.split('/').pop() || '-'}</td>
                   <td className="p-3 text-center text-gray-500">{formatSize(d.file_size)}</td>
                   <td className="p-3 text-gray-600">{d.uploaded_by_name || '-'}</td>
                   <td className="p-3 text-center flex justify-center gap-1">
-                    <button onClick={() => viewDetail(d.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} /></button>
-                    {can('documents', 'delete') && <button onClick={() => remove(d.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} /></button>}
+                    <Tooltip text="عرض التفاصيل"><button onClick={() => viewDetail(d.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} /></button></Tooltip>
                   </td>
                 </tr>
               ))}

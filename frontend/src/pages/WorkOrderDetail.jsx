@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Play, Trash2, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker, Printer, XCircle } from 'lucide-react';
+import { ArrowRight, Play, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker, Printer, XCircle } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
@@ -175,18 +175,6 @@ export default function WorkOrderDetail() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
-  const handleDelete = () => {
-    openConfirm(
-      'إلغاء أمر الشغل',
-      `هل أنت متأكد من إلغاء أمر الشغل ${wo?.wo_number}؟ لا يمكن التراجع عن هذا الإجراء.`,
-      async () => {
-        closeConfirm();
-        try { await api.delete(`/work-orders/${id}`); toast.success('تم الإلغاء'); navigate('/work-orders'); }
-        catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
-      }
-    );
-  };
-
   const handleStatusChange = async (status) => {
     try { await api.patch(`/work-orders/${id}/status`, { status }); toast.success('تم تحديث الحالة'); load(); }
     catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
@@ -198,11 +186,6 @@ export default function WorkOrderDetail() {
       const { data } = await api.post(`/work-orders/${id}/expenses`, { description: expDesc, amount: parseFloat(expAmount) });
       setWo(data); setExpDesc(''); setExpAmount(''); toast.success('تمت إضافة المصروف');
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
-  };
-
-  const handleDeleteExpense = async (expId) => {
-    try { const { data } = await api.delete(`/work-orders/${id}/expenses/${expId}`); setWo(data); toast.success('تم الحذف'); }
-    catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
   const handlePartialInvoice = async () => {
@@ -283,7 +266,6 @@ export default function WorkOrderDetail() {
           )}
           <button onClick={handlePrint} className="btn btn-ghost"><Printer size={14} /> طباعة</button>
           {can('work_orders', 'edit') && <button onClick={() => navigate(`/work-orders/${id}/edit`)} className="btn btn-outline"><Edit2 size={14} /> تعديل</button>}
-          {can('work_orders', 'delete') && <button onClick={handleDelete} className="btn btn-ghost" style={{color:'var(--color-danger)'}}><Trash2 size={16} /></button>}
         </div>
       </div>
 
@@ -614,14 +596,13 @@ export default function WorkOrderDetail() {
                 <p className="text-center text-xs text-gray-400 py-4">لا توجد مصاريف إضافية</p>
               ) : (
                 <table className="w-full text-sm">
-                  <thead><tr className="text-xs text-gray-400"><th className="text-right pb-2">الوصف</th><th className="text-center pb-2">المبلغ</th><th className="text-center pb-2">التاريخ</th><th className="pb-2"></th></tr></thead>
+                  <thead><tr className="text-xs text-gray-400"><th className="text-right pb-2">الوصف</th><th className="text-center pb-2">المبلغ</th><th className="text-center pb-2">التاريخ</th></tr></thead>
                   <tbody>
                     {wo.extra_expenses.map(e => (
                       <tr key={e.id} className="border-t border-gray-100">
                         <td className="py-2">{e.description}</td>
                         <td className="py-2 text-center font-mono font-bold text-red-500">{fmt(e.amount)} ج</td>
                         <td className="py-2 text-center text-xs text-gray-400">{new Date(e.recorded_at).toLocaleDateString('ar-EG')}</td>
-                        <td className="py-2 text-center">{can('work_orders', 'edit') && <button onClick={() => handleDeleteExpense(e.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button>}</td>
                       </tr>
                     ))}
                   </tbody>

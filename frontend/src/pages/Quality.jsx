@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
 import HelpButton from '../components/HelpButton';
+import Tooltip from '../components/Tooltip';
 
 const TABS = [
   { key: 'inspections', label: 'الفحوصات', icon: ClipboardCheck },
@@ -74,7 +75,7 @@ function InspectionsTab() {
 
   useEffect(() => { load(); }, [page, statusFilter]);
   useEffect(() => {
-    api.get('/quality/templates').then(r => setTemplates(r.data || [])).catch(() => {});
+    api.get('/quality/templates').then(r => { const d = r.data; setTemplates(Array.isArray(d) ? d : d.data || []); }).catch(() => {});
     api.get('/work-orders', { params: { limit: 100 } }).then(r => setWorkOrders(r.data?.data || [])).catch(() => {});
   }, []);
 
@@ -156,7 +157,7 @@ function InspectionsTab() {
                     <td className="p-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[i.status] || 'bg-gray-100'}`}>{STATUS_LABELS[i.status] || i.status}</span>
                     </td>
-                    <td className="p-3 text-center"><button onClick={() => viewDetail(i.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} /></button></td>
+                    <td className="p-3 text-center"><Tooltip content="عرض"><button onClick={() => viewDetail(i.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} /></button></Tooltip></td>
                   </tr>
                 ))}
               </tbody>
@@ -293,7 +294,7 @@ function TemplatesTab() {
 
   const load = async () => {
     setLoading(true);
-    try { const { data } = await api.get('/quality/templates'); setTemplates(data || []); }
+    try { const { data } = await api.get('/quality/templates'); setTemplates(Array.isArray(data) ? data : data.data || []); }
     catch { toast.error('فشل التحميل'); }
     finally { setLoading(false); }
   };

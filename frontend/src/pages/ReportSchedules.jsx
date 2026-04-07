@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { CalendarClock, Plus, Trash2, X, ToggleLeft, ToggleRight, RefreshCw, Clock } from 'lucide-react';
+import { CalendarClock, Plus, X, ToggleLeft, ToggleRight, RefreshCw, Clock } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import Tooltip from '../components/Tooltip';
 import { useConfirm } from '../components/ConfirmDialog';
 
 const REPORT_TYPES = [
@@ -64,13 +65,6 @@ export default function ReportSchedules() {
       }
       resetForm(); load();
     } catch (err) { toast.error(err.response?.data?.error || 'فشل الحفظ'); }
-  };
-
-  const remove = async (id) => {
-    const ok = await confirm({ title: 'حذف جدول زمني', message: 'هل أنت متأكد؟', variant: 'danger' });
-    if (!ok) return;
-    try { await api.delete(`/report-schedules/${id}`); toast.success('تم الحذف'); load(); }
-    catch { toast.error('فشل الحذف'); }
   };
 
   const toggle = async (id) => {
@@ -200,15 +194,12 @@ export default function ReportSchedules() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 mr-4">
-                  <button onClick={() => toggle(s.id)} title={s.enabled ? 'تعطيل' : 'تفعيل'} className="p-2 rounded-lg hover:bg-gray-100">
+                  <Tooltip text={s.enabled ? 'تعطيل' : 'تفعيل'}><button onClick={() => toggle(s.id)} className="p-2 rounded-lg hover:bg-gray-100">
                     {s.enabled ? <ToggleRight size={20} className="text-green-600" /> : <ToggleLeft size={20} className="text-gray-400" />}
-                  </button>
-                  <button onClick={() => startEdit(s)} title="تعديل" className="p-2 rounded-lg hover:bg-gray-100">
+                  </button></Tooltip>
+                  <Tooltip text="تعديل"><button onClick={() => startEdit(s)} className="p-2 rounded-lg hover:bg-gray-100">
                     <CalendarClock size={16} className="text-blue-500" />
-                  </button>
-                  <button onClick={() => remove(s.id)} title="حذف" className="p-2 rounded-lg hover:bg-red-50">
-                    <Trash2 size={16} className="text-red-500" />
-                  </button>
+                  </button></Tooltip>
                 </div>
               </div>
             </div>

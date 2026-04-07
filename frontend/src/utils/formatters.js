@@ -6,6 +6,8 @@ export const fmtMoney = (n) => `${fmtNum(n)} ج`;
 
 export const fmtDate = (d) => d ? new Date(d).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
 
+export const fmtDateTime = (d) => d ? new Date(d).toLocaleString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
 export const fmtPercent = (n) => `${(n || 0).toFixed(1)}%`;
 
 export const downloadCSV = (rows, filename) => {

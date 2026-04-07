@@ -20,15 +20,26 @@ router.get('/', requirePermission('purchase_orders', 'view'), (req, res) => {
     if (date_to) { q += ' AND po.order_date <= ?'; p.push(date_to); }
     if (search) { const s = `%${search}%`; q += ' AND (po.po_number LIKE ? OR s.name LIKE ?)'; p.push(s, s); }
     q += ' ORDER BY po.created_at DESC';
-    const orders = db.prepare(q).all(...p);
 
+    // Compute totals from full result set (using a lightweight query)
+    const countQ = q.replace(/SELECT po\.\*, s\.name as supplier_name, s\.code as supplier_code/, 'SELECT po.status, po.total_amount, po.paid_amount');
+    const allForTotals = db.prepare(countQ).all(...p);
     const totals = {
-      total: orders.length,
-      draft_total: orders.filter(o => o.status === 'draft').reduce((s, o) => s + (o.total_amount || 0), 0),
-      pending_total: orders.filter(o => o.status === 'sent' || o.status === 'partial').reduce((s, o) => s + (o.total_amount || 0), 0),
-      received_total: orders.filter(o => o.status === 'received').reduce((s, o) => s + (o.total_amount || 0), 0),
-      outstanding: orders.filter(o => o.status !== 'cancelled' && o.status !== 'draft').reduce((s, o) => s + (o.total_amount || 0) - (o.paid_amount || 0), 0),
+      total: allForTotals.length,
+      draft_total: allForTotals.filter(o => o.status === 'draft').reduce((s, o) => s + (o.total_amount || 0), 0),
+      pending_total: allForTotals.filter(o => o.status === 'sent' || o.status === 'partial').reduce((s, o) => s + (o.total_amount || 0), 0),
+      received_total: allForTotals.filter(o => o.status === 'received').reduce((s, o) => s + (o.total_amount || 0), 0),
+      outstanding: allForTotals.filter(o => o.status !== 'cancelled' && o.status !== 'draft').reduce((s, o) => s + (o.total_amount || 0) - (o.paid_amount || 0), 0),
     };
+
+    const { page, limit: lim } = req.query;
+    if (page && lim) {
+      const pg = Math.max(1, parseInt(page));
+      const perPage = Math.min(200, Math.max(1, parseInt(lim)));
+      const orders = db.prepare(q + ' LIMIT ? OFFSET ?').all(...p, perPage, (pg - 1) * perPage);
+      return res.json({ orders, totals, page: pg, pages: Math.ceil(totals.total / perPage) });
+    }
+    const orders = db.prepare(q).all(...p);
     res.json({ orders, totals });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

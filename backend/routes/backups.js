@@ -11,7 +11,17 @@ if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 // GET /api/backups
 router.get('/', requirePermission('backups', 'view'), (req, res) => {
   try {
-    const rows = db.prepare('SELECT b.id, b.file_name, b.file_path, b.file_size, b.notes, b.status, b.created_at, u.full_name as created_by_name FROM backups b LEFT JOIN users u ON u.id=b.created_by ORDER BY b.created_at DESC').all();
+    const { page, limit } = req.query;
+    const baseQ = 'FROM backups b LEFT JOIN users u ON u.id=b.created_by';
+    const selectQ = `SELECT b.id, b.file_name, b.file_path, b.file_size, b.notes, b.status, b.created_at, u.full_name as created_by_name ${baseQ} ORDER BY b.created_at DESC`;
+    if (page && limit) {
+      const pg = Math.max(1, parseInt(page));
+      const lim = Math.min(200, Math.max(1, parseInt(limit)));
+      const total = db.prepare(`SELECT COUNT(*) as c ${baseQ}`).get().c;
+      const rows = db.prepare(selectQ + ' LIMIT ? OFFSET ?').all(lim, (pg - 1) * lim);
+      return res.json({ data: rows, total, page: pg, pages: Math.ceil(total / lim) });
+    }
+    const rows = db.prepare(selectQ).all();
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

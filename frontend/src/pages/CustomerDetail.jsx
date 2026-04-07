@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Phone, Mail, MapPin, DollarSign, FileText, CreditCard, Clock, Plus, Trash2, User, MessageSquare, Activity } from 'lucide-react';
+import { ArrowRight, Phone, Mail, MapPin, DollarSign, FileText, CreditCard, Clock, Plus, User, MessageSquare, Activity } from 'lucide-react';
 import { PageHeader, LoadingState, Tabs } from '../components/ui';
 import api from '../utils/api';
+import { fmtDateTime } from '../utils/formatters';
 import { useToast } from '../components/Toast';
 import HelpButton from '../components/HelpButton';
 
@@ -68,14 +69,6 @@ export default function CustomerDetail() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
-  const deleteContact = async (contactId) => {
-    try {
-      await api.delete(`/customers/${id}/contacts/${contactId}`);
-      toast.success('تم حذف جهة الاتصال');
-      loadContacts();
-    } catch { toast.error('فشل الحذف'); }
-  };
-
   const addNote = async () => {
     if (!newNote.trim()) return;
     try {
@@ -87,7 +80,7 @@ export default function CustomerDetail() {
   };
 
   const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('ar-EG') : '—';
+  const fmtDate = (d) => fmtDateTime(d);
 
   const STATUS_LABELS = { draft: 'مسودة', sent: 'مُرسلة', paid: 'مدفوعة', overdue: 'متأخرة', cancelled: 'ملغاة' };
   const STATUS_COLORS = { draft: 'bg-gray-100 text-gray-600', sent: 'bg-blue-100 text-blue-700', paid: 'bg-green-100 text-green-700', overdue: 'bg-red-100 text-red-700', cancelled: 'bg-gray-200 text-gray-500' };
@@ -308,7 +301,6 @@ export default function CustomerDetail() {
                         <td className="text-xs font-mono">{c.phone || '—'}</td>
                         <td className="text-xs">{c.email || '—'}</td>
                         <td>{c.is_primary ? <span className="text-[10px] bg-green-100 text-green-700 rounded-full px-2 py-0.5">رئيسي</span> : '—'}</td>
-                        <td><button onClick={() => deleteContact(c.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>

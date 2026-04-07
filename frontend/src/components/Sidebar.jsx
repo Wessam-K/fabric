@@ -73,7 +73,8 @@ const NAV_GROUPS = (can, user) => [
       { path: '/accounting/journal',        label: '\u0627\u0644\u0642\u064a\u0648\u062f \u0627\u0644\u064a\u0648\u0645\u064a\u0629',    icon: Scale,                                  hide: () => !can('accounting', 'view') },
       { path: '/accounting/trial-balance',  label: '\u0645\u064a\u0632\u0627\u0646 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629',    icon: BarChart2,                              hide: () => !can('accounting', 'view') },
       { path: '/expenses',                  label: '\u0627\u0644\u0645\u0635\u0631\u0648\u0641\u0627\u062a',         icon: DollarSign,                             hide: () => !can('expenses', 'view') },
-      { path: '/quotations',               label: '\u0639\u0631\u0648\u0636 \u0627\u0644\u0623\u0633\u0639\u0627\u0631',      icon: FileText,                               hide: () => !can('invoices', 'view') },
+      { path: '/quotations',               label: '\u0639\u0631\u0648\u0636 \u0627\u0644\u0623\u0633\u0639\u0627\u0631',      icon: FileText,                               hide: () => !can('quotations', 'view') },
+      { path: '/sales-orders',             label: '\u0623\u0648\u0627\u0645\u0631 \u0627\u0644\u0628\u064a\u0639',        icon: ShoppingCart,                            hide: () => !can('sales_orders', 'view') },
     ],
   },
   {
@@ -83,7 +84,7 @@ const NAV_GROUPS = (can, user) => [
     show: () => can('quality', 'view'),
     items: [
       { path: '/quality',  label: '\u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u062c\u0648\u062f\u0629',  icon: CheckSquare,  hide: () => !can('quality', 'view') },
-      { path: '/samples',  label: '\u0627\u0644\u0639\u064a\u0646\u0627\u062a',        icon: Gem,          hide: () => !can('quality', 'view') },
+      { path: '/samples',  label: '\u0627\u0644\u0639\u064a\u0646\u0627\u062a',        icon: Gem,          hide: () => !can('samples', 'view') },
     ],
   },
   {

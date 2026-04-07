@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, X, Trash2, Download, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, X, Download, Upload } from 'lucide-react';
 import { PageHeader } from '../../components/ui';
+import TableFilters from '../../components/ui/TableFilters';
 import HelpButton from '../../components/HelpButton';
 import PermissionGuard from '../../components/PermissionGuard';
 import ImportCSV from '../../components/ImportCSV';
@@ -8,6 +9,8 @@ import api from '../../utils/api';
 import { exportToExcel } from '../../utils/exportExcel';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { useToast } from '../../components/Toast';
+import { fmtDateTime } from '../../utils/formatters';
+import Tooltip from '../../components/Tooltip';
 
 const DEPARTMENTS = ['الإنتاج', 'المخازن', 'المحاسبة', 'الإدارة', 'الموارد البشرية'];
 const EMP_TYPES = { full_time: 'دوام كامل', part_time: 'دوام جزئي', daily: 'يومي', piece_work: 'بالقطعة' };
@@ -28,6 +31,7 @@ export default function Employees() {
   const [form, setForm] = useState({});
   const [error, setError] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   useEffect(() => { load(); }, [search, filterDept, filterType]);
 
@@ -37,7 +41,7 @@ export default function Employees() {
     if (filterDept) params.department = filterDept;
     if (filterType) params.employment_type = filterType;
     api.get('/hr/employees', { params }).then(r => {
-      setEmployees(r.data.employees);
+      setEmployees(r.data.data || r.data.employees);
       setKpi(r.data.kpi);
     }).catch(() => {});
   }
@@ -72,12 +76,6 @@ export default function Employees() {
       setShowDrawer(false);
       load();
     } catch (err) { setError(err.response?.data?.error || 'حدث خطأ'); }
-  }
-
-  async function handleDelete(emp) {
-    const ok = await confirm({ title: 'إنهاء الخدمة', message: `إنهاء خدمة ${emp.full_name}؟` });
-    if (!ok) return;
-    try { await api.delete(`/hr/employees/${emp.id}`); load(); } catch (err) { toast.error(err.response?.data?.error || 'حدث خطأ'); }
   }
 
   function handleExport() {
@@ -124,27 +122,38 @@ export default function Employees() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3">
-        <div className="relative flex-1">
+      <div className="space-y-3">
+        <div className="relative max-w-md">
           <Search size={16} className="absolute right-3 top-3 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم أو الكود..."
             className="w-full pr-10 pl-4 py-2.5 border rounded-xl text-sm" />
         </div>
-        <select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="px-3 py-2.5 border rounded-xl text-sm">
-          <option value="">جميع الأقسام</option>
-          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-3 py-2.5 border rounded-xl text-sm">
-          <option value="">جميع الأنواع</option>
-          {Object.entries(EMP_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        <TableFilters
+          filters={[
+            { key: 'dept', label: 'القسم', type: 'select', options: DEPARTMENTS.map(d => ({ value: d, label: d })) },
+            { key: 'type', label: 'نوع التعاقد', type: 'select', options: Object.entries(EMP_TYPES).map(([k, v]) => ({ value: k, label: v })) },
+          ]}
+          values={{ dept: filterDept, type: filterType }}
+          onChange={(key, val) => { if (key === 'dept') setFilterDept(val); else setFilterType(val); }}
+          onClear={() => { setFilterDept(''); setFilterType(''); }}
+        />
       </div>
 
       {/* Table */}
       <div className="bg-white rounded-2xl border overflow-hidden">
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+            <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+            <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+          </div>
+        )}
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 w-10">
+                <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < employees.length; }} checked={employees.length > 0 && employees.every(e => selectedIds.includes(e.id))} onChange={e => setSelectedIds(e.target.checked ? employees.map(e => e.id) : [])}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+              </th>
               <th className="px-4 py-3 text-right font-medium text-gray-600">الكود</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600">الاسم</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600">القسم</th>
@@ -157,7 +166,11 @@ export default function Employees() {
           </thead>
           <tbody className="divide-y">
             {employees.map(emp => (
-              <tr key={emp.id} className="hover:bg-gray-50">
+              <tr key={emp.id} className={`hover:bg-gray-50 ${selectedIds.includes(emp.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={selectedIds.includes(emp.id)} onChange={() => setSelectedIds(prev => prev.includes(emp.id) ? prev.filter(x => x !== emp.id) : [...prev, emp.id])}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                </td>
                 <td className="px-4 py-3 font-mono text-xs">{emp.emp_code}</td>
                 <td className="px-4 py-3 font-medium">{emp.full_name}</td>
                 <td className="px-4 py-3 text-gray-600">{emp.department || '—'}</td>
@@ -171,13 +184,12 @@ export default function Employees() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(emp)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Edit2 size={14} /></button>
-                    <button onClick={() => handleDelete(emp)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 size={14} /></button>
+                    <Tooltip text="تعديل"><button onClick={() => openEdit(emp)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Edit2 size={14} /></button></Tooltip>
                   </div>
                 </td>
               </tr>
             ))}
-            {employees.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">لا يوجد موظفون</td></tr>}
+            {employees.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">لا يوجد موظفون</td></tr>}
           </tbody>
         </table>
       </div>

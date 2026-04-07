@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Bell, Check, CheckCheck, Trash2, Search } from 'lucide-react';
+import { Bell, Check, CheckCheck, Search } from 'lucide-react';
 import api from '../utils/api';
 import { PageHeader, LoadingState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
+import Tooltip from '../components/Tooltip';
 import { useNavigate } from 'react-router-dom';
 
 const TYPE_LABELS = { low_stock: 'مخزون منخفض', low_stock_fabric: 'مخزون قماش', low_stock_accessory: 'مخزون إكسسوار', overdue: 'متأخر', overdue_invoice: 'فاتورة متأخرة', overdue_work_order: 'أمر متأخر', overdue_maintenance: 'صيانة متأخرة', maintenance_upcoming: 'صيانة قادمة', maintenance_stale: 'صيانة معلقة', expense_pending: 'مصروف معلق', machine_broken: 'ماكينة معطلة', machine_idle: 'ماكينة متوقفة', info: 'معلومات', warning: 'تنبيه', system: 'نظام' };
@@ -43,8 +44,8 @@ export default function Notifications() {
 
   const remove = async (id) => {
     try {
-      await api.delete(`/notifications/${id}`);
-      setItems(items.filter(n => n.id !== id));
+      await api.patch(`/notifications/${id}/read`);
+      setItems(items.map(n => n.id === id ? { ...n, is_read: 1 } : n));
     } catch {}
   };
 
@@ -110,8 +111,7 @@ export default function Notifications() {
                 <p className="text-[10px] text-gray-300 mt-1">{new Date(n.created_at).toLocaleString('ar-EG')}</p>
               </div>
               <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                {!n.is_read && <button onClick={() => markRead(n.id)} className="text-gray-300 hover:text-green-500" title="تعليم كمقروء"><Check size={14} /></button>}
-                <button onClick={() => remove(n.id)} className="text-gray-300 hover:text-red-500" title="حذف"><Trash2 size={14} /></button>
+                {!n.is_read && <Tooltip text="تعليم كمقروء"><button onClick={() => markRead(n.id)} className="text-gray-300 hover:text-green-500"><Check size={14} /></button></Tooltip>}
               </div>
             </div>
           ))}

@@ -1,4 +1,5 @@
 export { default as DataTable } from './DataTable';
+export { default as TableFilters } from './TableFilters';
 export { StatCard, KPIStrip } from './StatCard';
 export { default as PageHeader } from './PageHeader';
 export { FormSection, FormRow, FormField } from './FormSection';

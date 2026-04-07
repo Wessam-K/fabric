@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Download, Upload, Wrench, AlertTriangle, Clock, CheckCircle, Barcode, X } from 'lucide-react';
 import { PageHeader } from '../components/ui';
+import TableFilters from '../components/ui/TableFilters';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import Pagination from '../components/Pagination';
@@ -9,6 +10,8 @@ import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
 import { exportFromBackend, importFromCSV } from '../utils/exportUtils';
 import { useConfirm } from '../components/ConfirmDialog';
+import { fmtDateTime, downloadCSV } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 
 const PRIORITY_COLORS = { critical: 'bg-red-100 text-red-700', high: 'bg-orange-100 text-orange-700', medium: 'bg-yellow-100 text-yellow-700', low: 'bg-green-100 text-green-700' };
 const PRIORITY_LABELS = { critical: 'حرج', high: 'عالي', medium: 'متوسط', low: 'منخفض' };
@@ -35,6 +38,7 @@ export default function Maintenance() {
   const [barcodeSearch, setBarcodeSearch] = useState('');
   const barcodeBufferRef = useRef('');
   const barcodeTimerRef = useRef(null);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   // Listen for rapid barcode scanner input (USB HID mode)
   useEffect(() => {
@@ -127,16 +131,6 @@ export default function Maintenance() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
-  const handleDelete = async (id) => {
-    const ok = await confirm({ title: 'حذف أمر الصيانة', message: 'هل تريد حذف أمر الصيانة؟' });
-    if (!ok) return;
-    try {
-      await api.delete(`/maintenance/${id}`);
-      toast.success('تم الحذف');
-      load(); loadStats();
-    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
-  };
-
   const handleExport = async () => {
     try { await exportFromBackend('/maintenance/export', 'maintenance'); toast.success('تم التصدير'); }
     catch { toast.error('فشل التصدير'); }
@@ -201,36 +195,47 @@ export default function Maintenance() {
       </div>
 
       {/* Barcode + Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex items-center gap-1">
-          <Barcode size={15} className="text-gray-400" />
-          <input type="text" value={barcodeSearch} onChange={e => setBarcodeSearch(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleBarcodeSearch()}
-            placeholder="باركود..."
-            className="w-32 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex items-center gap-1">
+            <Barcode size={15} className="text-gray-400" />
+            <input type="text" value={barcodeSearch} onChange={e => setBarcodeSearch(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleBarcodeSearch()}
+              placeholder="باركود..."
+              className="w-32 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none" />
+          </div>
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" value={search} onChange={e => { setSearch(e.target.value); setBarcodeSearch(''); }} placeholder="بحث..."
+              className="w-full pr-9 pl-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-[#c9a84c] outline-none" />
+          </div>
         </div>
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" value={search} onChange={e => { setSearch(e.target.value); setBarcodeSearch(''); }} placeholder="بحث..."
-            className="w-full pr-9 pl-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-[#c9a84c] outline-none" />
-        </div>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none">
-          <option value="">كل الحالات</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)}
-          className="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c] outline-none">
-          <option value="">كل الأولويات</option>
-          {Object.entries(PRIORITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        <TableFilters
+          filters={[
+            { key: 'status', label: 'الحالة', type: 'select', options: Object.entries(STATUS_LABELS).map(([k, v]) => ({ value: k, label: v })) },
+            { key: 'priority', label: 'الأولوية', type: 'select', options: Object.entries(PRIORITY_LABELS).map(([k, v]) => ({ value: k, label: v })) },
+          ]}
+          values={{ status: statusFilter, priority: priorityFilter }}
+          onChange={(key, val) => { if (key === 'status') setStatusFilter(val); else setPriorityFilter(val); }}
+          onClear={() => { setStatusFilter(''); setPriorityFilter(''); }}
+        />
       </div>
 
       {/* Table */}
       <div className="card overflow-x-auto">
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+            <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+            <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+          </div>
+        )}
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-gray-500 text-xs">
+              <th className="py-3 px-3 w-10">
+                <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < orders.length; }} checked={orders.length > 0 && orders.every(o => selectedIds.includes(o.id))} onChange={e => setSelectedIds(e.target.checked ? orders.map(o => o.id) : [])}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+              </th>
               <th className="text-right py-3 px-3 font-medium">باركود</th>
               <th className="text-right py-3 px-3 font-medium">العنوان</th>
               <th className="text-right py-3 px-3 font-medium">الماكينة</th>
@@ -243,11 +248,15 @@ export default function Maintenance() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="8" className="text-center py-8 text-gray-400">جاري التحميل...</td></tr>
+              <tr><td colSpan="9" className="text-center py-8 text-gray-400">جاري التحميل...</td></tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan="8" className="text-center py-8 text-gray-400">لا توجد أوامر صيانة</td></tr>
+              <tr><td colSpan="9" className="text-center py-8 text-gray-400">لا توجد أوامر صيانة</td></tr>
             ) : orders.map(o => (
-              <tr key={o.id} className="border-b hover:bg-gray-50 transition-colors">
+              <tr key={o.id} className={`border-b hover:bg-gray-50 transition-colors ${selectedIds.includes(o.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                <td className="py-3 px-3" onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={selectedIds.includes(o.id)} onChange={() => setSelectedIds(prev => prev.includes(o.id) ? prev.filter(x => x !== o.id) : [...prev, o.id])}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                </td>
                 <td className="py-3 px-3 font-mono text-xs text-gray-500">{o.barcode || '—'}</td>
                 <td className="py-3 px-3 font-medium">{o.title}</td>
                 <td className="py-3 px-3 text-gray-500">{o.machine_name || `#${o.machine_id}`}</td>
@@ -266,10 +275,7 @@ export default function Maintenance() {
                 <td className="py-3 px-3">
                   <div className="flex items-center gap-1">
                     {can('maintenance', 'edit') && o.status !== 'completed' && o.status !== 'cancelled' && (
-                      <button onClick={() => openEdit(o)} className="text-blue-600 hover:bg-blue-50 p-1 rounded text-xs">تعديل</button>
-                    )}
-                    {can('maintenance', 'delete') && (
-                      <button onClick={() => handleDelete(o.id)} className="text-red-400 hover:bg-red-50 p-1 rounded text-xs">حذف</button>
+                      <Tooltip text="تعديل"><button onClick={() => openEdit(o)} className="text-blue-600 hover:bg-blue-50 p-1 rounded text-xs">تعديل</button></Tooltip>
                     )}
                   </div>
                 </td>

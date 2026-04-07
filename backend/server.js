@@ -15,7 +15,7 @@ const { contentTypeEnforcement } = require('./middleware/contentType'); // Phase
 const logger = require('./utils/logger'); // Phase 6.1: Structured logging
 const { migrate } = require('./migrate'); // Phase 2.1: Migration runner
 const { LicenseManager } = require('./lib/license'); // Phase 5.1: Licensing
-const { initWebSocket, broadcast, getClientCount } = require('./utils/websocket'); // Phase 3.7: WebSocket
+const { initWebSocket, getClientCount } = require('./utils/websocket'); // Phase 3.7: WebSocket
 
 // Phase 5.3: Sentry error tracking (optional — only if DSN configured)
 if (process.env.SENTRY_DSN) {
@@ -520,11 +520,8 @@ app.get('/api/webhooks/:id/logs', requireAuth, (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
   res.json(getWebhookLogs(parseInt(req.params.id)));
 });
-app.delete('/api/webhooks/:id', requireAuth, (req, res) => {
-  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
-  deleteWebhook(parseInt(req.params.id));
-  res.json({ success: true });
-});
+// Webhook delete blocked — production safety (soft-delete only)
+// app.delete('/api/webhooks/:id', ...) removed — use deactivation instead
 
 // Phase 3.1: API versioning — mount under both /api and /api/v1 for forward compatibility
 const apiRouter = express.Router();
@@ -567,6 +564,18 @@ apiRouter.use('/report-schedules', reportSchedulesRouter);
 
 // Public invite endpoints (no auth required — must be before requireAuth router)
 app.use('/api/users/invite', require('./routes/users').inviteRouter || express.Router());
+
+// ── Production safety: block all DELETE requests (no data deletion allowed) ──
+if (process.env.NODE_ENV === 'production') {
+  app.use('/api', (req, res, next) => {
+    if (req.method === 'DELETE') {
+      // Allow session termination (security feature)
+      if (req.path.startsWith('/sessions')) return next();
+      return res.status(403).json({ error: 'الحذف غير مسموح — بيئة إنتاج' });
+    }
+    next();
+  });
+}
 
 app.use('/api', requireAuth, apiRouter);
 app.use('/api/v1', requireAuth, apiRouter);
@@ -1128,6 +1137,12 @@ const server = app.listen(PORT, () => {
       runAllCleanups();
       setInterval(runAllCleanups, 24 * 60 * 60 * 1000);
     }, msUntilMidnight());
+  }
+
+  // Report scheduling engine — check every 5 minutes for due reports
+  if (process.env.NODE_ENV !== 'test') {
+    const { startScheduler } = require('./utils/reportScheduler');
+    startScheduler();
   }
 });
 

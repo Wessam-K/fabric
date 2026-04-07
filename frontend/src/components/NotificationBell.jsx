@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, X, RefreshCw } from 'lucide-react';
 import api from '../utils/api';
 import useNotificationStream from '../hooks/useNotificationStream';
+import { fmtDateTime } from '../utils/formatters';
+import Tooltip from './Tooltip';
 
 const NAV_MAP = {
   fabric: '/fabrics',
@@ -14,6 +16,14 @@ const NAV_MAP = {
   maintenance: '/maintenance',
   machine: '/machines',
   expense: '/expenses',
+  employee: '/hr/employees',
+  shipping: '/shipping',
+  sample: '/samples',
+  quotation: '/quotations',
+  sales_order: '/sales-orders',
+  quality: '/quality',
+  document: '/documents',
+  leave: '/hr/leaves',
 };
 
 const TYPE_ICONS = {
@@ -111,8 +121,8 @@ export default function NotificationBell() {
   const handleNotificationClick = (n) => {
     if (!n.is_read) markRead(n.id);
     const basePath = NAV_MAP[n.reference_type];
-    if (basePath && n.reference_id) {
-      if (n.reference_type === 'work_order') {
+    if (basePath) {
+      if (n.reference_id) {
         navigate(`${basePath}/${n.reference_id}`);
       } else {
         navigate(basePath);
@@ -125,14 +135,14 @@ export default function NotificationBell() {
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(!open)} className="relative p-2 text-gray-400 hover:text-[#c9a84c] transition-colors">
+      <Tooltip text="الإشعارات"><button onClick={() => setOpen(!open)} className="relative p-2 text-gray-400 hover:text-[#c9a84c] transition-colors">
         <Bell size={18} />
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
-      </button>
+      </button></Tooltip>
 
       {open && (
         <div className="absolute left-0 top-full mt-2 w-[22rem] sm:w-96 bg-white dark:bg-[#1a1a2e] rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 z-[100] max-h-[32rem] overflow-hidden flex flex-col" dir="rtl">
@@ -171,7 +181,7 @@ export default function NotificationBell() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-[#1a1a2e] dark:text-white">{n.title}</p>
                       <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed line-clamp-2">{n.body || n.message}</p>
-                      <p className="text-[9px] text-gray-300 mt-1">{n.created_at ? new Date(n.created_at).toLocaleString('ar-EG') : ''}</p>
+                      <p className="text-[9px] text-gray-300 mt-1">{n.created_at ? fmtDateTime(n.created_at) : ''}</p>
                     </div>
                     <button onClick={(e) => dismiss(e, n.id)}
                       className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 p-0.5 transition-opacity shrink-0">

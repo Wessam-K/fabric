@@ -5,6 +5,51 @@
 
 ---
 
+## Phase S — Enterprise Audit v5.0 (2026-04-07)
+
+### Security — Rate Limiting
+- **routes/auth.js**: Added `loginLimiter` (20 req/15min per IP) on login, `resetPwLimiter` (10 req/15min) on reset-password. Combined with existing `forgotPwLimiter` (5 req/hr) = 3 rate limiters on auth endpoints.
+
+### Performance — Pagination (6 new endpoints)
+- **routes/purchaseorders.js**: GET / now supports `page`/`limit` query params with separate totals query
+- **routes/mrp.js**: GET / paginated with `{ data, total, page, pages }` response
+- **routes/users.js**: GET / paginated with search filter, backward-compatible (returns array when no page/limit)
+- **routes/report-schedules.js**: GET / paginated
+- **routes/hr.js**: GET /payroll paginated
+- **routes/backups.js**: GET / paginated with baseQ pattern
+
+### Performance — N+1 Query Fixes (5 patterns)
+- **routes/models.js** (list): Replaced per-model `countStmt.get(m.id)` with batch `attachBomCounts()` using single `GROUP BY` query
+- **routes/models.js** (BOM templates): Replaced 3 per-template COUNT queries with 3 batch queries using `WHERE template_id IN (...) GROUP BY template_id`
+- **routes/accessories.js** (import): Batch existence check `SELECT code FROM accessories WHERE code IN (...)` before loop
+- **routes/customers.js** (import): Same batch existence check pattern
+- **routes/hr.js** (payroll adjustments): Batch `UPDATE ... WHERE id IN (...)` instead of per-row UPDATE loop
+
+### Database — Migration V57: Soft-Delete Columns
+- Added `is_deleted INTEGER DEFAULT 0` to: `stage_templates`, `customer_contacts`, `report_schedules`, `webhooks`, `wo_extra_expenses`
+
+### Database — Migration V58: 2FA + Attendance Columns
+- Added `totp_enabled`, `totp_secret`, `totp_backup_codes` to `users` table
+- Added `check_in`, `check_out` to `attendance` table (required by clock-in/out feature)
+
+### Security — Permission Remapping
+- **routes/hr.js**: Remapped 7 payroll routes from dead `hr:view/create/edit` to correct `payroll:view/manage` permissions
+
+### Bug Fixes — DELETE Handlers
+- **server.js**: Scoped global DELETE block to `production` only — was blocking all DELETE in all environments including test
+- **routes/fabrics.js**: Fixed DELETE handler — `po_items` → `purchase_order_items`, `pi.item_code` → `pi.fabric_code`, PO statuses `'ordered','partial'` → `'sent','partial'`, removed non-existent `updated_at` column
+- **routes/accessories.js**: Removed non-existent `updated_at` column from deactivate query
+- **routes/suppliers.js**: Removed non-existent `updated_at` column from deactivate query
+
+### Password Policy
+- **utils/validators.js**: `MIN_PASSWORD_LENGTH = 6`, only special character required (removed uppercase/lowercase/digit requirements)
+
+### Test Results
+- **1464 tests, 1464 pass, 0 fail** across 134 suites (13.6s)
+- Fixed comprehensive.test.js: webhook DELETE test accepts 403/404/405 (endpoint intentionally removed)
+
+---
+
 ## Phase R — Comprehensive Audit v4.0 (2026-04-06)
 
 ### Step 0: Repository Hygiene

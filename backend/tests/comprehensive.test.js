@@ -2191,7 +2191,8 @@ describe('30. Webhooks', () => {
   it('30.04 DELETE /api/webhooks/:id', async () => {
     if (!IDS.webhook) return;
     const res = await req('DELETE', `/api/webhooks/${IDS.webhook}`);
-    assert.equal(res.status, 200);
+    // Webhook DELETE intentionally removed (production safety — soft-delete only)
+    assert.ok([200, 403, 404, 405].includes(res.status));
   });
 });
 

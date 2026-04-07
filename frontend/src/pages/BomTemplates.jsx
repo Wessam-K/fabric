@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Plus, Save, Trash2, Star, Scissors, Package, Layers, DollarSign, BarChart3 } from 'lucide-react';
+import { ArrowRight, Plus, Save, Star, Scissors, Package, Layers, DollarSign, BarChart3 } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
@@ -75,7 +75,6 @@ export default function BomTemplates() {
   const [sizes, setSizes] = useState([emptySize()]);
   const [accessories, setAccessories] = useState([]);
   const [notes, setNotes] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(null);
   const [showMatrix, setShowMatrix] = useState(false);
   const [matrixData, setMatrixData] = useState([]);
 
@@ -210,28 +209,6 @@ export default function BomTemplates() {
     setLinings([emptyFabric('lining')]);
     setSizes([emptySize()]);
     setAccessories([]);
-  };
-
-  const handleDelete = async (tplId) => {
-    setConfirmDelete(tplId);
-  };
-
-  const doDelete = async () => {
-    const tplId = confirmDelete;
-    setConfirmDelete(null);
-    try {
-      await api.delete(`/models/${code}/bom-templates/${tplId}`);
-      toast.success('تم الحذف');
-      const { data: tpls } = await api.get(`/models/${code}/bom-templates`);
-      setTemplates(tpls);
-      if (tpls.length > 0) {
-        await loadTemplate(tpls[0].id);
-      } else {
-        handleNew();
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'لا يمكن الحذف');
-    }
   };
 
   const handleSetDefault = async (tplId) => {
@@ -432,10 +409,6 @@ export default function BomTemplates() {
                   className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-[#c9a84c] rounded-lg text-sm transition-colors">
                   <Star size={14} /> تعيين كافتراضي
                 </button>
-                <button onClick={() => handleDelete(activeId)}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm transition-colors">
-                  <Trash2 size={14} /> حذف القالب
-                </button>
               </div>
             )}
 
@@ -488,21 +461,6 @@ export default function BomTemplates() {
         </button>
       </div>
 
-      {/* Confirm Delete Modal */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4 text-center space-y-4">
-            <h3 className="font-bold text-lg">حذف القالب</h3>
-            <p className="text-gray-600 text-sm">هل أنت متأكد من حذف هذا القالب؟ لا يمكن التراجع.</p>
-            <div className="flex gap-2 justify-center">
-              <button onClick={() => setConfirmDelete(null)}
-                className="px-4 py-2 rounded-lg border text-sm hover:bg-gray-50">إلغاء</button>
-              <button onClick={doDelete}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-700">حذف</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

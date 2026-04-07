@@ -3,6 +3,8 @@ import { Plus, Search, Truck, Eye, X, MapPin, Package } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { fmtDateTime } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +28,7 @@ export default function Shipping() {
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState({ shipment_number: '', shipment_type: 'outbound', customer_id: '', carrier: '', tracking_number: '', estimated_delivery: '', notes: '', items: [{ work_order_id: '', description: '', quantity: 1 }] });
   const [customers, setCustomers] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const load = async () => {
     setLoading(true);
@@ -118,10 +121,20 @@ export default function Shipping() {
         </div>
       ) : (
         <div className="bg-white rounded-xl border overflow-hidden">
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+              <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+              <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600">
                 <tr>
+                  <th className="p-3 w-10">
+                    <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < shipments.length; }} checked={shipments.length > 0 && shipments.every(s => selectedIds.includes(s.id))} onChange={e => setSelectedIds(e.target.checked ? shipments.map(s => s.id) : [])}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                  </th>
                   <th className="p-3 text-right">رقم الشحنة</th>
                   <th className="p-3 text-right">النوع</th>
                   <th className="p-3 text-right">العميل/المورد</th>
@@ -133,19 +146,23 @@ export default function Shipping() {
               </thead>
               <tbody className="divide-y">
                 {shipments.map(s => (
-                  <tr key={s.id} className="hover:bg-gray-50">
+                  <tr key={s.id} className={`hover:bg-gray-50 ${selectedIds.includes(s.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                    <td className="p-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => setSelectedIds(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                    </td>
                     <td className="p-3 font-mono font-bold text-[#1a1a2e]">{s.shipment_number}</td>
                     <td className="p-3">{s.shipment_type === 'inbound' ? 'وارد' : 'صادر'}</td>
                     <td className="p-3 text-gray-600">{s.customer_name || s.supplier_name || '-'}</td>
                     <td className="p-3 text-gray-600">{s.carrier || '-'}</td>
-                    <td className="p-3 text-center">{s.estimated_delivery?.slice(0, 10) || '-'}</td>
+                    <td className="p-3 text-center">{fmtDateTime(s.estimated_delivery)}</td>
                     <td className="p-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[s.status] || 'bg-gray-100'}`}>
                         {STATUS_LABELS[s.status] || s.status}
                       </span>
                     </td>
                     <td className="p-3 text-center">
-                      <button onClick={() => viewDetail(s.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} /></button>
+                      <Tooltip text="عرض التفاصيل"><button onClick={() => viewDetail(s.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} /></button></Tooltip>
                     </td>
                   </tr>
                 ))}
@@ -259,7 +276,7 @@ export default function Shipping() {
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-xs text-gray-500">التسليم المتوقع</p>
-                  <p className="font-bold">{selected.estimated_delivery?.slice(0, 10) || '-'}</p>
+                  <p className="font-bold">{fmtDateTime(selected.estimated_delivery)}</p>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-xs text-gray-500">رقم التتبع</p>

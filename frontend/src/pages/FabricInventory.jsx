@@ -3,6 +3,7 @@ import { Search, Package, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-r
 import { PageHeader, LoadingState, EmptyState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
+import { fmtDateTime } from '../utils/formatters';
 import { useToast } from '../components/Toast';
 
 const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
@@ -131,7 +132,7 @@ export default function FabricInventory() {
                                 {b.batch_status === 'available' ? 'متاح' : b.batch_status === 'depleted' ? 'نفد' : b.batch_status}
                               </span>
                             </td>
-                            <td className="py-2 text-center">{b.received_date ? new Date(b.received_date).toLocaleDateString('ar-EG') : '—'}</td>
+                            <td className="py-2 text-center">{b.received_date ? fmtDateTime(b.received_date) : '—'}</td>
                           </tr>
                         ))}
                       </tbody>

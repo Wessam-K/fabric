@@ -4,6 +4,8 @@ import api from '../utils/api';
 import { PageHeader, LoadingState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import { useToast } from '../components/Toast';
+import Tooltip from '../components/Tooltip';
+import { fmtDate } from '../utils/formatters';
 
 const STATUS_MAP = { draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-600' }, posted: { label: 'مرحّل', color: 'bg-green-100 text-green-600' }, void: { label: 'ملغى', color: 'bg-red-100 text-red-600' } };
 
@@ -13,6 +15,7 @@ export default function JournalEntries() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
   const [view, setView] = useState(null); // entry detail
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ entry_number: '', entry_date: new Date().toISOString().slice(0, 10), description: '', reference: '', lines: [{ account_id: '', debit: '', credit: '', description: '' }, { account_id: '', debit: '', credit: '', description: '' }] });
@@ -96,7 +99,7 @@ export default function JournalEntries() {
           <div className="flex justify-between items-start">
             <div>
               <h3 className="text-lg font-bold text-[#1a1a2e]">{view.entry_number}</h3>
-              <p className="text-xs text-gray-400">{view.entry_date} · {view.created_by_name}</p>
+              <p className="text-xs text-gray-400">{fmtDate(view.entry_date)} · {view.created_by_name}</p>
               {view.description && <p className="text-sm text-gray-600 mt-1">{view.description}</p>}
             </div>
             <div className="flex gap-2 items-center">
@@ -223,11 +226,19 @@ export default function JournalEntries() {
         </select>
       </div>
 
+      {selectedIds.length > 0 && (
+        <div className="mb-3 flex items-center gap-3 bg-[#c9a84c]/10 border border-[#c9a84c]/30 rounded-xl px-4 py-2">
+          <span className="text-sm font-bold text-[#1a1a2e]">{selectedIds.length} محدد</span>
+          <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+        </div>
+      )}
+
       {loading ? <LoadingState /> : (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-3 py-3 w-8"><input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < entries.length; }} checked={entries.length > 0 && selectedIds.length === entries.length} onChange={e => setSelectedIds(e.target.checked ? entries.map(x => x.id) : [])} /></th>
                 <th className="px-4 py-3 text-right text-xs text-gray-500">الرقم</th>
                 <th className="px-4 py-3 text-right text-xs text-gray-500">التاريخ</th>
                 <th className="px-4 py-3 text-right text-xs text-gray-500">البيان</th>
@@ -239,9 +250,10 @@ export default function JournalEntries() {
             </thead>
             <tbody>
               {entries.map(e => (
-                <tr key={e.id} className="border-t border-gray-100 hover:bg-gray-50/50 cursor-pointer" onClick={() => openView(e.id)}>
+                <tr key={e.id} className={`border-t border-gray-100 hover:bg-gray-50/50 cursor-pointer ${selectedIds.includes(e.id) ? 'bg-[#c9a84c]/5' : ''}`} onClick={() => openView(e.id)}>
+                  <td className="px-3 py-3" onClick={ev => ev.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(e.id)} onChange={ev => setSelectedIds(ev.target.checked ? [...selectedIds, e.id] : selectedIds.filter(id => id !== e.id))} /></td>
                   <td className="px-4 py-3 font-mono text-xs font-bold">{e.entry_number}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{e.entry_date}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{fmtDate(e.entry_date)}</td>
                   <td className="px-4 py-3 font-bold text-[#1a1a2e] truncate max-w-[200px]">{e.description || '—'}</td>
                   <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{Math.round(e.total_debit || 0).toLocaleString('ar-EG')} ج</td>
                   <td className="px-4 py-3 text-center">
@@ -249,12 +261,12 @@ export default function JournalEntries() {
                   </td>
                   <td className="px-4 py-3 text-center text-xs text-gray-400">{e.created_by_name}</td>
                   <td className="px-4 py-3 text-center" onClick={ev => ev.stopPropagation()}>
-                    <button onClick={() => openView(e.id)} className="text-gray-400 hover:text-[#c9a84c]"><Eye size={14} /></button>
-                    {e.status === 'draft' && <button onClick={() => handlePost(e.id)} className="text-gray-400 hover:text-green-600 mr-2"><CheckCircle size={14} /></button>}
+                    <Tooltip content="عرض"><button onClick={() => openView(e.id)} className="text-gray-400 hover:text-[#c9a84c]"><Eye size={14} /></button></Tooltip>
+                    {e.status === 'draft' && <Tooltip content="ترحيل"><button onClick={() => handlePost(e.id)} className="text-gray-400 hover:text-green-600 mr-2"><CheckCircle size={14} /></button></Tooltip>}
                   </td>
                 </tr>
               ))}
-              {entries.length === 0 && <tr><td colSpan={7} className="text-center py-12 text-gray-400">لا توجد قيود</td></tr>}
+              {entries.length === 0 && <tr><td colSpan={8} className="text-center py-12 text-gray-400">لا توجد قيود</td></tr>}
             </tbody>
           </table>
         </div>

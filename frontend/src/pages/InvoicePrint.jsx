@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Printer, Copy, Check } from 'lucide-react';
 import api from '../utils/api';
 import HelpButton from '../components/HelpButton';
+import { fmtDateTime } from '../utils/formatters';
 
 const SIZES = ['qty_s', 'qty_m', 'qty_l', 'qty_xl', 'qty_2xl', 'qty_3xl'];
 const SIZE_LABELS = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
@@ -86,7 +87,7 @@ export default function InvoicePrint() {
           <div className="text-left">
             <p className="font-mono text-xl font-bold text-[#1a1a2e]">{model.model_code}</p>
             <p className="font-mono text-xs text-gray-500">#{model.serial_number}</p>
-            <p className="text-xs text-gray-400 mt-1">{new Date(model.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <p className="text-xs text-gray-400 mt-1">{fmtDateTime(model.created_at)}</p>
           </div>
         </div>
 

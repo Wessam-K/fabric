@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, FileText, ShoppingCart, Eye, X, ArrowLeftRight, Trash2 } from 'lucide-react';
+import { Plus, Search, FileText, ShoppingCart, Eye, X, ArrowLeftRight } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { fmtDateTime } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
@@ -25,6 +27,7 @@ export default function Quotations() {
   const [customers, setCustomers] = useState([]);
   const [form, setForm] = useState({ quotation_number: '', customer_id: '', valid_until: '', notes: '', discount_percent: 0, tax_percent: 0, items: [{ description: '', quantity: 1, unit: 'pc', unit_price: 0, notes: '' }] });
   const [defaultTax, setDefaultTax] = useState(0);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const load = async () => {
     setLoading(true);
@@ -123,21 +126,36 @@ export default function Quotations() {
         <div className="text-center py-16 bg-white rounded-xl border"><FileText size={48} className="mx-auto mb-4 text-gray-300" /><p className="text-gray-500">لا توجد عروض أسعار</p></div>
       ) : (
         <div className="bg-white rounded-xl border overflow-hidden">
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+              <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+              <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600">
-                <tr><th className="p-3 text-right">الرقم</th><th className="p-3 text-right">العميل</th><th className="p-3 text-center">الإجمالي</th><th className="p-3 text-center">صالح حتى</th><th className="p-3 text-center">الحالة</th><th className="p-3 text-center">إجراءات</th></tr>
+                <tr>
+                  <th className="p-3 w-10">
+                    <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < quotations.length; }} checked={quotations.length > 0 && quotations.every(q => selectedIds.includes(q.id))} onChange={e => setSelectedIds(e.target.checked ? quotations.map(q => q.id) : [])}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                  </th>
+                  <th className="p-3 text-right">الرقم</th><th className="p-3 text-right">العميل</th><th className="p-3 text-center">الإجمالي</th><th className="p-3 text-center">صالح حتى</th><th className="p-3 text-center">الحالة</th><th className="p-3 text-center">إجراءات</th></tr>
               </thead>
               <tbody className="divide-y">
                 {quotations.map(q => (
-                  <tr key={q.id} className="hover:bg-gray-50">
+                  <tr key={q.id} className={`hover:bg-gray-50 ${selectedIds.includes(q.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                    <td className="p-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.includes(q.id)} onChange={() => setSelectedIds(prev => prev.includes(q.id) ? prev.filter(x => x !== q.id) : [...prev, q.id])}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                    </td>
                     <td className="p-3 font-mono font-bold text-[#1a1a2e]">{q.quotation_number}</td>
                     <td className="p-3 text-gray-600">{q.customer_name || '-'}</td>
                     <td className="p-3 text-center font-bold">{Number(q.total || 0).toLocaleString()}</td>
-                    <td className="p-3 text-center text-gray-500">{q.valid_until?.slice(0, 10) || '-'}</td>
+                    <td className="p-3 text-center text-gray-500">{fmtDateTime(q.valid_until)}</td>
                     <td className="p-3 text-center"><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[q.status]}`}>{STATUS_LABELS[q.status]}</span></td>
                     <td className="p-3 text-center">
-                      <button onClick={() => viewDetail(q.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} /></button>
+                      <Tooltip text="عرض التفاصيل"><button onClick={() => viewDetail(q.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} /></button></Tooltip>
                     </td>
                   </tr>
                 ))}
@@ -227,7 +245,7 @@ export default function Quotations() {
             <div className="p-5 overflow-y-auto max-h-[65vh]">
               <div className="grid grid-cols-4 gap-3 mb-4">
                 <div className="bg-gray-50 p-3 rounded-lg"><p className="text-xs text-gray-500">الحالة</p><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[selected.status]}`}>{STATUS_LABELS[selected.status]}</span></div>
-                <div className="bg-gray-50 p-3 rounded-lg"><p className="text-xs text-gray-500">صالح حتى</p><p className="font-bold">{selected.valid_until?.slice(0, 10) || '-'}</p></div>
+                <div className="bg-gray-50 p-3 rounded-lg"><p className="text-xs text-gray-500">صالح حتى</p><p className="font-bold">{fmtDateTime(selected.valid_until)}</p></div>
                 <div className="bg-gray-50 p-3 rounded-lg"><p className="text-xs text-gray-500">الخصم</p><p className="font-bold">{selected.discount_percent}%</p></div>
                 <div className="bg-[#c9a84c]/10 p-3 rounded-lg"><p className="text-xs text-gray-500">الإجمالي</p><p className="font-bold text-lg">{Number(selected.total || 0).toLocaleString()}</p></div>
               </div>

@@ -34,20 +34,26 @@ router.get('/', requirePermission('models', 'view'), (req, res) => {
     if (search) { q += ' AND (serial_number LIKE ? OR model_code LIKE ? OR model_name LIKE ?)'; const s = `%${search}%`; p.push(s, s, s); }
     q += ' ORDER BY created_at DESC';
 
-    const countStmt = db.prepare('SELECT COUNT(*) as c FROM bom_templates WHERE model_id = ?');
+    // Batch bom_template_count to avoid N+1
+    const attachBomCounts = (rows) => {
+      if (!rows.length) return rows;
+      const ids = rows.map(m => m.id);
+      const placeholders = ids.map(() => '?').join(',');
+      const counts = db.prepare(`SELECT model_id, COUNT(*) as c FROM bom_templates WHERE model_id IN (${placeholders}) GROUP BY model_id`).all(...ids);
+      const countMap = Object.fromEntries(counts.map(r => [r.model_id, r.c]));
+      return rows.map(m => ({ ...m, bom_template_count: countMap[m.id] || 0 }));
+    };
 
     if (page && limit) {
       const pg = Math.max(1, parseInt(page));
       const lim = Math.min(200, Math.max(1, parseInt(limit)));
       const total = db.prepare(q.replace('SELECT *', 'SELECT COUNT(*) as c')).get(...p).c;
       const rows = db.prepare(q + ' LIMIT ? OFFSET ?').all(...p, lim, (pg - 1) * lim);
-      const data = rows.map(m => ({ ...m, bom_template_count: countStmt.get(m.id).c }));
-      return res.json({ data, total, page: pg, totalPages: Math.ceil(total / lim) });
+      return res.json({ data: attachBomCounts(rows), total, page: pg, totalPages: Math.ceil(total / lim) });
     }
 
     const models = db.prepare(q).all(...p);
-    const result = models.map(m => ({ ...m, bom_template_count: countStmt.get(m.id).c }));
-    res.json(result);
+    res.json(attachBomCounts(models));
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -218,11 +224,21 @@ router.get('/:code/bom-templates', requirePermission('models', 'view'), (req, re
     const model = db.prepare('SELECT id FROM models WHERE model_code=?').get(req.params.code);
     if (!model) return res.status(404).json({ error: 'الموديل غير موجود' });
     const templates = db.prepare('SELECT * FROM bom_templates WHERE model_id=? ORDER BY is_default DESC, id').all(model.id);
-    // Attach summary counts
-    for (const t of templates) {
-      t.fabric_count = db.prepare('SELECT COUNT(*) as c FROM bom_template_fabrics WHERE template_id=?').get(t.id).c;
-      t.accessory_count = db.prepare('SELECT COUNT(*) as c FROM bom_template_accessories WHERE template_id=?').get(t.id).c;
-      t.size_count = db.prepare('SELECT COUNT(*) as c FROM bom_template_sizes WHERE template_id=?').get(t.id).c;
+    // Batch summary counts (fix N+1)
+    if (templates.length) {
+      const tIds = templates.map(t => t.id);
+      const ph = tIds.map(() => '?').join(',');
+      const fabricCounts = db.prepare(`SELECT template_id, COUNT(*) as c FROM bom_template_fabrics WHERE template_id IN (${ph}) GROUP BY template_id`).all(...tIds);
+      const accCounts = db.prepare(`SELECT template_id, COUNT(*) as c FROM bom_template_accessories WHERE template_id IN (${ph}) GROUP BY template_id`).all(...tIds);
+      const sizeCounts = db.prepare(`SELECT template_id, COUNT(*) as c FROM bom_template_sizes WHERE template_id IN (${ph}) GROUP BY template_id`).all(...tIds);
+      const fMap = Object.fromEntries(fabricCounts.map(r => [r.template_id, r.c]));
+      const aMap = Object.fromEntries(accCounts.map(r => [r.template_id, r.c]));
+      const sMap = Object.fromEntries(sizeCounts.map(r => [r.template_id, r.c]));
+      for (const t of templates) {
+        t.fabric_count = fMap[t.id] || 0;
+        t.accessory_count = aMap[t.id] || 0;
+        t.size_count = sMap[t.id] || 0;
+      }
     }
     res.json(templates);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

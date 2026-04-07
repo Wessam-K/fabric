@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../utils/api';
+import { fmtDateTime } from '../utils/formatters';
 
 const SIZES = ['qty_s', 'qty_m', 'qty_l', 'qty_xl', 'qty_2xl', 'qty_3xl'];
 const SIZE_LABELS = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
@@ -56,7 +57,7 @@ export default function PrintView() {
         <div className="text-left">
           <p className="font-mono text-lg font-bold text-[#1a1a2e]">{model.model_code}</p>
           <p className="font-mono text-xs text-gray-500">{model.serial_number}</p>
-          <p className="text-xs text-gray-400">{new Date(model.created_at).toLocaleDateString('ar-EG')}</p>
+          <p className="text-xs text-gray-400">{fmtDateTime(model.created_at)}</p>
         </div>
       </div>
 

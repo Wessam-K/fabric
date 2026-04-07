@@ -10,6 +10,8 @@ import PermissionGuard from '../components/PermissionGuard';
 import ImportCSV from '../components/ImportCSV';
 import { useAuth } from '../context/AuthContext';
 import { exportFromBackend } from '../utils/exportUtils';
+import { fmtDateTime, downloadCSV } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 
 const TYPE_MAP = { fabric: 'أقمشة', accessory: 'اكسسوارات', both: 'أقمشة واكسسوارات', other: 'أخرى' };
 
@@ -28,6 +30,7 @@ export default function Suppliers() {
   const [showPayment, setShowPayment] = useState(null);
   const [paymentForm, setPaymentForm] = useState({ amount: '', payment_method: 'cash', reference: '', notes: '' });
   const [showImport, setShowImport] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const emptyForm = { code: '', name: '', contact_name: '', phone: '', email: '', address: '', supplier_type: 'fabric', payment_terms: '', rating: 3, notes: '' };
   const [form, setForm] = useState(emptyForm);
@@ -86,8 +89,13 @@ export default function Suppliers() {
   };
 
   const handleExport = async () => {
-    try { await exportFromBackend('/suppliers/export', 'suppliers'); toast.success('تم التصدير'); }
-    catch { toast.error('فشل التصدير'); }
+    if (selectedIds.length) {
+      const rows = suppliers.filter(s => selectedIds.includes(s.id)).map(s => ({ الكود: s.code, الاسم: s.name, النوع: TYPE_MAP[s.supplier_type], الهاتف: s.phone, المستحقات: s.balance }));
+      downloadCSV(rows, 'suppliers');
+    } else {
+      try { await exportFromBackend('/suppliers/export', 'suppliers'); toast.success('تم التصدير'); }
+      catch { toast.error('فشل التصدير'); }
+    }
   };
 
   const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
@@ -147,10 +155,20 @@ export default function Suppliers() {
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           {suppliers.length === 0 ? (
             <div className="text-center py-16 text-gray-400">لا يوجد موردون</div>
-          ) : (
+          ) : (<>
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+                <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+                <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < suppliers.length; }} checked={suppliers.length > 0 && suppliers.every(s => selectedIds.includes(s.id))} onChange={e => setSelectedIds(e.target.checked ? suppliers.map(s => s.id) : [])}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                  </th>
                   <th className="px-4 py-3 text-right text-xs text-gray-500">الكود</th>
                   <th className="px-4 py-3 text-right text-xs text-gray-500">الاسم</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">النوع</th>
@@ -162,7 +180,11 @@ export default function Suppliers() {
               </thead>
               <tbody>
                 {suppliers.map(s => (
-                  <tr key={s.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                  <tr key={s.id} className={`border-t border-gray-100 hover:bg-gray-50/50 ${selectedIds.includes(s.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => setSelectedIds(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs font-bold">{s.code}</td>
                     <td className="px-4 py-3">
                       <Link to={`/suppliers/${s.id}`} className="font-bold text-[#1a1a2e] hover:text-[#c9a84c] transition-colors">{s.name}</Link>
@@ -180,9 +202,9 @@ export default function Suppliers() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        {can('suppliers', 'edit') && <button onClick={() => openEdit(s)} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-600">تعديل</button>}
+                        {can('suppliers', 'edit') && <Tooltip text="تعديل المورد"><button onClick={() => openEdit(s)} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-600">تعديل</button></Tooltip>}
                         {s.balance > 0 && (
-                          <button onClick={() => setShowPayment(s.id)} className="text-xs px-2 py-1 bg-green-50 hover:bg-green-100 rounded text-green-700">دفع</button>
+                          <Tooltip text="تسجيل دفعة"><button onClick={() => setShowPayment(s.id)} className="text-xs px-2 py-1 bg-green-50 hover:bg-green-100 rounded text-green-700">دفع</button></Tooltip>
                         )}
                       </div>
                     </td>
@@ -190,7 +212,7 @@ export default function Suppliers() {
                 ))}
               </tbody>
             </table>
-          )}
+          </>)}
         </div>
       )}
 

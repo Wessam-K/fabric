@@ -139,14 +139,20 @@ router.post('/calculate', requirePermission('mrp', 'create'), (req, res) => {
 // ═══════════════════════════════════════════════
 router.get('/', requirePermission('mrp', 'view'), (req, res) => {
   try {
-    const runs = db.prepare(`
-      SELECT mr.*, u.full_name as created_by_name,
+    const { page, limit } = req.query;
+    const baseQ = `FROM mrp_runs mr LEFT JOIN users u ON u.id=mr.created_by`;
+    const selectQ = `SELECT mr.*, u.full_name as created_by_name,
         (SELECT COUNT(*) FROM mrp_suggestions WHERE mrp_run_id=mr.id) as suggestion_count,
         (SELECT COALESCE(SUM(total_cost),0) FROM mrp_suggestions WHERE mrp_run_id=mr.id) as total_cost
-      FROM mrp_runs mr
-      LEFT JOIN users u ON u.id=mr.created_by
-      ORDER BY mr.created_at DESC
-    `).all();
+      ${baseQ} ORDER BY mr.created_at DESC`;
+    if (page && limit) {
+      const pg = Math.max(1, parseInt(page));
+      const lim = Math.min(200, Math.max(1, parseInt(limit)));
+      const total = db.prepare(`SELECT COUNT(*) as c ${baseQ}`).get().c;
+      const runs = db.prepare(selectQ + ' LIMIT ? OFFSET ?').all(lim, (pg - 1) * lim);
+      return res.json({ data: runs, total, page: pg, pages: Math.ceil(total / lim) });
+    }
+    const runs = db.prepare(selectQ).all();
     res.json(runs);
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });

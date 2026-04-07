@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, Plus, Trash2, Factory, Building2, Cog, DollarSign, Shield } from 'lucide-react';
+import { Save, Plus, Factory, Building2, Cog, DollarSign, Shield } from 'lucide-react';
 import { PageHeader, LoadingState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
@@ -95,16 +95,7 @@ export default function SettingsPage() {
     } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
   };
 
-  const deleteStage = async (id) => {
-    const ok = await confirm({ title: 'حذف المرحلة', message: 'حذف هذه المرحلة؟' });
-    if (!ok) return;
-    try {
-      await api.delete(`/settings/stages/${id}`);
-      const { data } = await api.get('/settings/stages');
-      setStages(data);
-      toast.success('تم الحذف');
-    } catch (err) { toast.error(err.response?.data?.error || 'خطأ'); }
-  };
+  
 
   const toggleStage = async (stage) => {
     try {
@@ -205,9 +196,6 @@ export default function SettingsPage() {
                   <button onClick={() => toggleStage(stage)}
                     className={`text-[10px] px-2 py-1 rounded ${stage.is_default ? 'bg-green-50 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
                     {stage.is_default ? 'مفعّل' : 'معطّل'}
-                  </button>
-                  <button onClick={() => deleteStage(stage.id)} className="text-red-400 hover:text-red-600">
-                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}

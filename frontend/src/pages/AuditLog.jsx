@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Search, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
+import TableFilters from '../components/ui/TableFilters';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/exportExcel';
+import { fmtDateTime } from '../utils/formatters';
 
 const ACTION_COLORS = {
   CREATE: 'bg-green-100 text-green-700',
@@ -21,6 +23,7 @@ export default function AuditLog() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({ action: '', entity_type: '', search: '', date_from: '', date_to: '' });
   const [expanded, setExpanded] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   useEffect(() => { load(); }, [page, filters]);
 
@@ -51,35 +54,40 @@ export default function AuditLog() {
         action={<div className="flex gap-2"><HelpButton pageKey="auditlog" /><button onClick={handleExport} className="btn btn-outline"><Download size={16} /> تصدير Excel</button></div>} />
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="space-y-3">
+        <div className="relative max-w-md">
           <Search size={16} className="absolute right-3 top-3 text-gray-400" />
           <input value={filters.search} onChange={e => { setFilters({ ...filters, search: e.target.value }); setPage(1); }} placeholder="بحث..."
             className="w-full pr-10 pl-4 py-2.5 border rounded-xl text-sm" />
         </div>
-        <select value={filters.action} onChange={e => { setFilters({ ...filters, action: e.target.value }); setPage(1); }}
-          className="px-3 py-2.5 border rounded-xl text-sm">
-          <option value="">جميع الإجراءات</option>
-          {Object.entries(ACTION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select value={filters.entity_type} onChange={e => { setFilters({ ...filters, entity_type: e.target.value }); setPage(1); }}
-          className="px-3 py-2.5 border rounded-xl text-sm">
-          <option value="">جميع الأنواع</option>
-          {['user', 'work_order', 'invoice', 'model', 'fabric', 'accessory', 'supplier', 'po', 'employee', 'attendance_import', 'payroll_period', 'hr_adjustment', 'expenses', 'maintenance_orders', 'machines'].map(t =>
-            <option key={t} value={t}>{t}</option>
-          )}
-        </select>
-        <input type="date" value={filters.date_from} onChange={e => { setFilters({ ...filters, date_from: e.target.value }); setPage(1); }}
-          className="px-3 py-2.5 border rounded-xl text-sm" />
-        <input type="date" value={filters.date_to} onChange={e => { setFilters({ ...filters, date_to: e.target.value }); setPage(1); }}
-          className="px-3 py-2.5 border rounded-xl text-sm" />
+        <TableFilters
+          filters={[
+            { key: 'action', label: 'الإجراء', type: 'select', options: Object.entries(ACTION_LABELS).map(([k, v]) => ({ value: k, label: v })) },
+            { key: 'entity_type', label: 'النوع', type: 'select', options: ['user', 'work_order', 'invoice', 'model', 'fabric', 'accessory', 'supplier', 'po', 'employee', 'attendance_import', 'payroll_period', 'hr_adjustment', 'expenses', 'maintenance_orders', 'machines'].map(t => ({ value: t, label: t })) },
+            { key: 'date_from', label: 'من تاريخ', type: 'date' },
+            { key: 'date_to', label: 'إلى تاريخ', type: 'date' },
+          ]}
+          values={{ action: filters.action, entity_type: filters.entity_type, date_from: filters.date_from, date_to: filters.date_to }}
+          onChange={(key, val) => { setFilters(f => ({ ...f, [key]: val })); setPage(1); }}
+          onClear={() => { setFilters(f => ({ ...f, action: '', entity_type: '', date_from: '', date_to: '' })); setPage(1); }}
+        />
       </div>
 
       {/* Table */}
       <div className="bg-white rounded-2xl border overflow-hidden">
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+            <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+            <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+          </div>
+        )}
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 w-10">
+                <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < logs.length; }} checked={logs.length > 0 && logs.every(l => selectedIds.includes(l.id))} onChange={e => setSelectedIds(e.target.checked ? logs.map(l => l.id) : [])}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+              </th>
               <th className="px-4 py-3 text-right font-medium text-gray-600">التاريخ</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600">المستخدم</th>
               <th className="px-4 py-3 text-right font-medium text-gray-600">الإجراء</th>
@@ -89,8 +97,12 @@ export default function AuditLog() {
           </thead>
           <tbody className="divide-y">
             {logs.map(log => (
-              <tr key={log.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpanded(expanded === log.id ? null : log.id)}>
-                <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{new Date(log.created_at).toLocaleString('ar-EG')}</td>
+              <tr key={log.id} className={`hover:bg-gray-50 cursor-pointer ${selectedIds.includes(log.id) ? 'bg-[#c9a84c]/5' : ''}`} onClick={() => setExpanded(expanded === log.id ? null : log.id)}>
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={selectedIds.includes(log.id)} onChange={() => setSelectedIds(prev => prev.includes(log.id) ? prev.filter(x => x !== log.id) : [...prev, log.id])}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDateTime(log.created_at)}</td>
                 <td className="px-4 py-3">{log.username}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs ${ACTION_COLORS[log.action] || 'bg-gray-100'}`}>
@@ -102,7 +114,7 @@ export default function AuditLog() {
               </tr>
             ))}
             {logs.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">لا توجد سجلات</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">لا توجد سجلات</td></tr>
             )}
           </tbody>
         </table>

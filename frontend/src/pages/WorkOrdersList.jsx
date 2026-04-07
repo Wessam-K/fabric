@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, ClipboardList, Clock, CheckCircle, AlertTriangle, LayoutGrid, List as ListIcon, Download } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { fmtDateTime, downloadCSV } from '../utils/formatters';
+import Tooltip from '../components/Tooltip';
 import { PageHeader, KPIStrip, StatusBadge, LoadingState, EmptyState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import PermissionGuard from '../components/PermissionGuard';
@@ -39,6 +41,7 @@ export default function WorkOrdersList() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [viewMode, setViewMode] = useState('list');
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const load = async () => {
     setLoading(true);
@@ -70,10 +73,17 @@ export default function WorkOrdersList() {
         actions={
           <div className="flex items-center gap-2">
             <HelpButton pageKey="workorders" />
-            <button onClick={() => exportFromBackend('/work-orders/export', 'work-orders').catch(() => {})} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
+            <button onClick={() => {
+              if (selectedIds.length) {
+                const rows = workOrders.filter(w => selectedIds.includes(w.id)).map(w => ({ 'الرقم': w.wo_number, 'الموديل': w.model_code, 'الحالة': w.status, 'الأولوية': w.priority, 'التسليم': w.due_date, 'المسؤول': w.assigned_to }));
+                downloadCSV(rows, 'work-orders');
+              } else {
+                exportFromBackend('/work-orders/export', 'work-orders').catch(() => {});
+              }
+            }} className="btn btn-secondary text-xs"><Download size={14} /> {selectedIds.length ? `تصدير ${selectedIds.length} محدد` : 'تصدير'}</button>
             <div className="flex bg-[var(--color-surface)] rounded-lg p-0.5">
-              <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}><ListIcon size={16} /></button>
-              <button onClick={() => setViewMode('kanban')} className={`p-1.5 rounded-md ${viewMode === 'kanban' ? 'bg-white shadow-sm' : ''}`}><LayoutGrid size={16} /></button>
+              <Tooltip text="عرض قائمة"><button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}><ListIcon size={16} /></button></Tooltip>
+              <Tooltip text="عرض بطاقات"><button onClick={() => setViewMode('kanban')} className={`p-1.5 rounded-md ${viewMode === 'kanban' ? 'bg-white shadow-sm' : ''}`}><LayoutGrid size={16} /></button></Tooltip>
             </div>
             <PermissionGuard module="work_orders" action="create">
               <button onClick={() => navigate('/work-orders/new')} className="btn btn-gold">
@@ -103,13 +113,27 @@ export default function WorkOrdersList() {
       {loading ? <LoadingState /> : viewMode === 'list' ? (
         workOrders.length === 0 ? <EmptyState icon={ClipboardList} message="لا توجد أوامر إنتاج" /> : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-[#c9a84c]/10 border-b border-[#c9a84c]/20">
+                <span className="text-sm text-[#c9a84c] font-bold">{selectedIds.length} محدد</span>
+                <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-red-500">إلغاء التحديد</button>
+              </div>
+            )}
             <table className="data-table">
               <thead><tr>
+                <th style={{width:'40px'}}>
+                  <input type="checkbox" ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < workOrders.length; }} checked={workOrders.length > 0 && workOrders.every(w => selectedIds.includes(w.id))} onChange={e => setSelectedIds(e.target.checked ? workOrders.map(w => w.id) : [])}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                </th>
                 <th>الرقم</th><th>الموديل</th><th>الأولوية</th><th>الحالة</th><th>التقدم</th><th>المرحلة</th><th>التسليم</th><th>المسؤول</th>
               </tr></thead>
               <tbody>
                 {workOrders.map(wo => (
-                  <tr key={wo.id} onClick={() => navigate(`/work-orders/${wo.id}`)} className="cursor-pointer">
+                  <tr key={wo.id} onClick={() => navigate(`/work-orders/${wo.id}`)} className={`cursor-pointer ${selectedIds.includes(wo.id) ? 'bg-[#c9a84c]/5' : ''}`}>
+                    <td onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.includes(wo.id)} onChange={() => setSelectedIds(prev => prev.includes(wo.id) ? prev.filter(x => x !== wo.id) : [...prev, wo.id])}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-[#c9a84c] focus:ring-[#c9a84c] cursor-pointer" />
+                    </td>
                     <td><span className="font-mono text-xs font-bold text-[var(--color-gold)]">{wo.wo_number}</span></td>
                     <td>
                       <span className="font-bold text-[var(--color-navy)]">{wo.model_code}</span>
@@ -120,7 +144,7 @@ export default function WorkOrdersList() {
                     <td className="text-center"><StatusBadge status={wo.status} /></td>
                     <td className="w-32"><StageProgress done={wo.stages_done || 0} total={wo.stages_total || 0} /></td>
                     <td className="text-center text-xs text-[var(--color-muted)]">{wo.last_active_stage_name || '—'}</td>
-                    <td className="text-center text-xs text-[var(--color-muted)]">{wo.due_date ? new Date(wo.due_date).toLocaleDateString('ar-EG') : '—'}</td>
+                    <td className="text-center text-xs text-[var(--color-muted)]">{wo.due_date ? fmtDateTime(wo.due_date) : '—'}</td>
                     <td className="text-center text-xs text-[var(--color-muted)]">{wo.assigned_to || '—'}</td>
                   </tr>
                 ))}
@@ -152,7 +176,7 @@ export default function WorkOrdersList() {
                       {wo.fabric_variant_label && <p className="text-[10px] text-indigo-500 mb-1">{wo.fabric_variant_label}</p>}
                       <StageProgress done={wo.stages_done || 0} total={wo.stages_total || 0} />
                       {wo.last_active_stage_name && <p className="text-[10px] text-emerald-600 mt-1">▶ {wo.last_active_stage_name}</p>}
-                      {wo.due_date && <p className="text-[10px] text-[var(--color-muted)] mt-2">التسليم: {new Date(wo.due_date).toLocaleDateString('ar-EG')}</p>}
+                      {wo.due_date && <p className="text-[10px] text-[var(--color-muted)] mt-2">التسليم: {fmtDateTime(wo.due_date)}</p>}
                     </div>
                   ))}
                   {items.length === 0 && <p className="text-center text-xs text-gray-300 py-8">فارغ</p>}
