@@ -1131,6 +1131,615 @@ function seed() {
     console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM supplier_payments').get().c} supplier payments`);
   } catch (e) { console.log('    ⚠ Skipping supplier payments:', e.message); }
 
+  // ─── 21. STOCK MOVEMENTS ───────────────────────────
+  console.log('  → Seeding stock movements...');
+  try {
+    const insFabMove = db.prepare(`INSERT OR IGNORE INTO fabric_stock_movements (fabric_code, movement_type, qty_meters, batch_id, reference_type, reference_id, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
+    const insAccMove = db.prepare(`INSERT OR IGNORE INTO accessory_stock_movements (accessory_code, movement_type, qty, reference_type, reference_id, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?)`);
+
+    // Fabric receiving from POs
+    for (const po of PO_DEFS) {
+      if (po.status === 'sent') continue;
+      const poRow = db.prepare('SELECT id FROM purchase_orders WHERE po_number=?').get(po.num);
+      if (!poRow) continue;
+      const receiveDate = addDays(SEED_START, po.dayOff + randInt(7, 14));
+      for (const item of po.items) {
+        if (!item.code.startsWith('FAB')) continue;
+        const rcvd = po.status === 'received' ? item.qty : Math.floor(item.qty * 0.6);
+        if (rcvd <= 0) continue;
+        const batch = db.prepare('SELECT id FROM fabric_inventory_batches WHERE fabric_code=? AND po_id=?').get(item.code, poRow.id);
+        insFabMove.run(item.code, 'in', rcvd, batch ? batch.id : null, 'purchase_order', poRow.id, `استلام ${po.num}`, userIds[0], dt(receiveDate));
+      }
+      for (const item of po.items) {
+        if (!item.code.startsWith('ACC')) continue;
+        const rcvd = po.status === 'received' ? item.qty : Math.floor(item.qty * 0.6);
+        if (rcvd <= 0) continue;
+        insAccMove.run(item.code, 'in', rcvd, 'purchase_order', poRow.id, `استلام ${po.num}`, userIds[0], dt(receiveDate));
+      }
+    }
+
+    // Fabric consumption from WOs
+    for (const woNum of Object.keys(woMap)) {
+      const wo = woMap[woNum];
+      if (wo.stageQtys[0] === 0) continue;
+      const fabRows = db.prepare('SELECT fabric_code, actual_meters FROM wo_fabrics WHERE wo_id=?').all(wo.id);
+      for (const fb of fabRows) {
+        if (!fb.actual_meters || fb.actual_meters <= 0) continue;
+        insFabMove.run(fb.fabric_code, 'out', -fb.actual_meters, null, 'work_order', wo.id, `استهلاك ${woNum}`, userIds[0], dt(addDays(wo.startDate, 1)));
+      }
+    }
+
+    // Accessory consumption from WOs
+    for (const woNum of Object.keys(woMap)) {
+      const wo = woMap[woNum];
+      if (wo.stageQtys[0] === 0) continue;
+      const accRows = db.prepare('SELECT accessory_code, quantity FROM wo_accessories WHERE wo_id=?').all(wo.id);
+      for (const ac of accRows) {
+        if (!ac.quantity || ac.quantity <= 0) continue;
+        insAccMove.run(ac.accessory_code, 'out', -ac.quantity, 'work_order', wo.id, `استهلاك ${woNum}`, userIds[0], dt(addDays(wo.startDate, 1)));
+      }
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM fabric_stock_movements').get().c} fabric movements, ${db.prepare('SELECT COUNT(*) as c FROM accessory_stock_movements').get().c} accessory movements`);
+  } catch (e) { console.log('    ⚠ Skipping stock movements:', e.message); }
+
+  // ─── 22. CUSTOMER CONTACTS & NOTES ─────────────────
+  console.log('  → Seeding customer contacts & notes...');
+  try {
+    const insContact = db.prepare(`INSERT OR IGNORE INTO customer_contacts (customer_id, name, title, phone, email, is_primary, created_at) VALUES (?,?,?,?,?,?,?)`);
+    const insNote = db.prepare(`INSERT OR IGNORE INTO customer_notes (customer_id, note, created_by, created_at) VALUES (?,?,?,?)`);
+
+    const contactDefs = [
+      { cust: 1, name: 'محمد سالم', title: 'مدير المشتريات', phone: '01001234567', email: 'mohamed@nile-fashion.com', primary: 1 },
+      { cust: 1, name: 'هدى أحمد', title: 'محاسبة', phone: '01001234568', email: 'hoda@nile-fashion.com', primary: 0 },
+      { cust: 2, name: 'عمرو حسين', title: 'مالك', phone: '01112345678', email: 'amr@delta-clothing.com', primary: 1 },
+      { cust: 3, name: 'ليلى عبدالله', title: 'مديرة المبيعات', phone: '01223456789', email: 'layla@cairo-garments.com', primary: 1 },
+      { cust: 3, name: 'أحمد ماهر', title: 'مدير الجودة', phone: '01223456790', email: 'ahmed@cairo-garments.com', primary: 0 },
+      { cust: 4, name: 'سامي فوزي', title: 'مدير التصدير', phone: '01098765432', email: 'sami@export-co.com', primary: 1 },
+      { cust: 5, name: 'نورا مصطفى', title: 'صاحبة السلسلة', phone: '01287654321', email: 'noura@boutique-stars.com', primary: 1 },
+      { cust: 6, name: 'خالد العتيبي', title: 'مدير المشتريات', phone: '+966501234567', email: 'khaled@gulf-fashion.com', primary: 1 },
+      { cust: 6, name: 'فهد الشمري', title: 'محاسب', phone: '+966501234568', email: 'fahad@gulf-fashion.com', primary: 0 },
+    ];
+    for (const c of contactDefs) {
+      insContact.run(c.cust, c.name, c.title, c.phone, c.email, c.primary, dt(addDays(SEED_START, -40)));
+    }
+
+    const noteDefs = [
+      { cust: 1, note: 'عميل منتظم — يفضل التسليم أيام الأحد والثلاثاء' },
+      { cust: 1, note: 'طلب خصم 5% على الطلبيات فوق 500 قطعة — تمت الموافقة' },
+      { cust: 2, note: 'شحن دائماً عبر شركة النقل السريع — لا يقبل بديل' },
+      { cust: 3, note: 'يطلب شهادة جودة مع كل شحنة' },
+      { cust: 4, note: 'عميل تصدير — يتطلب وثائق جمركية مع كل شحنة' },
+      { cust: 4, note: 'الدفع بالدولار — L/C عبر بنك مصر' },
+      { cust: 5, note: 'تفضل التصميمات الحديثة والألوان الفاتحة' },
+      { cust: 6, note: 'عميل خليجي — الشحن الجوي مطلوب — تحمل تكلفة الشحن' },
+    ];
+    for (const n of noteDefs) {
+      insNote.run(n.cust, n.note, userIds[0], dt(addDays(SEED_START, randInt(-30, 0))));
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM customer_contacts').get().c} contacts, ${db.prepare('SELECT COUNT(*) as c FROM customer_notes').get().c} notes`);
+  } catch (e) { console.log('    ⚠ Skipping customer contacts/notes:', e.message); }
+
+  // ─── 23. HR — LEAVE BALANCES, REQUESTS, ADJUSTMENTS ──
+  console.log('  → Seeding HR leave & adjustments...');
+  try {
+    const insLeaveBalance = db.prepare(`INSERT OR IGNORE INTO leave_balances (employee_id, leave_type, year, entitled_days, used_days, carried_over) VALUES (?,?,?,?,?,?)`);
+    const insLeaveReq = db.prepare(`INSERT OR IGNORE INTO leave_requests (employee_id, leave_type, start_date, end_date, reason, status, reviewed_by, reviewed_at, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
+    const insHRAdjust = db.prepare(`INSERT OR IGNORE INTO hr_adjustments (employee_id, period_id, adj_type, amount, description, applied, created_by, created_at) VALUES (?,?,?,?,?,?,?,?)`);
+
+    for (const empId of employeeIds) {
+      insLeaveBalance.run(empId, 'annual', 2026, 21, randInt(0, 5), randInt(0, 3));
+      insLeaveBalance.run(empId, 'sick', 2026, 7, randInt(0, 2), 0);
+      insLeaveBalance.run(empId, 'casual', 2026, 6, randInt(0, 2), 0);
+    }
+
+    // Some leave requests
+    const leaveTypes = ['annual', 'sick', 'casual'];
+    const leaveReqs = [
+      { emp: 0, type: 'annual', startOff: 20, days: 3, reason: 'إجازة سنوية', status: 'approved' },
+      { emp: 1, type: 'sick', startOff: 35, days: 2, reason: 'مرض — إجازة مرضية', status: 'approved' },
+      { emp: 2, type: 'annual', startOff: 50, days: 5, reason: 'إجازة عيد الفطر', status: 'approved' },
+      { emp: 3, type: 'casual', startOff: 40, days: 1, reason: 'ظرف طارئ', status: 'approved' },
+      { emp: 4, type: 'annual', startOff: 75, days: 4, reason: 'إجازة شخصية', status: 'pending' },
+      { emp: 0, type: 'sick', startOff: 60, days: 1, reason: 'صداع شديد', status: 'approved' },
+    ];
+    for (const lr of leaveReqs) {
+      const empId = employeeIds[lr.emp];
+      if (!empId) continue;
+      const startDate = addDays(SEED_START, lr.startOff);
+      const endDate = addDays(startDate, lr.days - 1);
+      const reviewedAt = lr.status === 'approved' ? dt(addDays(startDate, -1)) : null;
+      insLeaveReq.run(empId, lr.type, dd(startDate), dd(endDate), lr.reason, lr.status, lr.status === 'approved' ? userIds[0] : null, reviewedAt, dt(addDays(startDate, -2)));
+    }
+
+    // HR adjustments (bonuses, deductions)
+    const periodIds = db.prepare('SELECT id, period_month FROM payroll_periods ORDER BY period_month LIMIT 3').all();
+    const adjustDefs = [
+      { emp: 0, type: 'bonus', amount: 500, desc: 'مكافأة إنتاج متميز' },
+      { emp: 1, type: 'bonus', amount: 300, desc: 'مكافأة التزام' },
+      { emp: 2, type: 'deduction', amount: 200, desc: 'خصم غياب بدون إذن' },
+      { emp: 3, type: 'bonus', amount: 400, desc: 'مكافأة جودة — صفر عيوب' },
+      { emp: 4, type: 'deduction', amount: 150, desc: 'خصم تأخير متكرر' },
+      { emp: 5, type: 'bonus', amount: 250, desc: 'مكافأة شحن سريع' },
+    ];
+    for (const adj of adjustDefs) {
+      const empId = employeeIds[adj.emp];
+      const periodId = periodIds.length > 1 ? periodIds[1].id : (periodIds[0] ? periodIds[0].id : null);
+      if (!empId || !periodId) continue;
+      insHRAdjust.run(empId, periodId, adj.type, adj.amount, adj.desc, 1, userIds[0], dt(addDays(SEED_START, 45)));
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM leave_balances').get().c} leave balances, ${db.prepare('SELECT COUNT(*) as c FROM leave_requests').get().c} leave requests, ${db.prepare('SELECT COUNT(*) as c FROM hr_adjustments').get().c} HR adjustments`);
+  } catch (e) { console.log('    ⚠ Skipping HR leave:', e.message); }
+
+  // ─── 24. QC TEMPLATES & INSPECTIONS ────────────────
+  console.log('  → Seeding QC templates & inspections...');
+  try {
+    const insQCT = db.prepare(`INSERT OR IGNORE INTO qc_templates (name, model_code, description, aql_level, inspection_type, is_active, created_at) VALUES (?,?,?,?,?,?,?)`);
+    const insQCTI = db.prepare(`INSERT OR IGNORE INTO qc_template_items (template_id, check_point, category, severity, accept_criteria, sort_order) VALUES (?,?,?,?,?,?)`);
+    const insQCI = db.prepare(`INSERT OR IGNORE INTO qc_inspections (work_order_id, stage_id, template_id, inspection_number, inspector_id, inspection_date, lot_size, sample_size, passed, failed, result, notes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const insQCII = db.prepare(`INSERT OR IGNORE INTO qc_inspection_items (inspection_id, check_point, result, defect_code, defect_count, notes) VALUES (?,?,?,?,?,?)`);
+    const insNCR = db.prepare(`INSERT OR IGNORE INTO qc_ncr (ncr_number, inspection_id, work_order_id, severity, description, root_cause, corrective_action, preventive_action, status, assigned_to, due_date, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+
+    // QC Templates
+    const qcTemplates = [
+      { name: 'فحص قميص رجالي', model: 'MOD-001', desc: 'قالب فحص جودة القمصان الرجالي', aql: 'Level II', type: 'normal' },
+      { name: 'فحص فستان نسائي', model: 'MOD-005', desc: 'قالب فحص جودة الفساتين النسائية', aql: 'Level II', type: 'tightened' },
+      { name: 'فحص عام — ملابس خارجية', model: null, desc: 'قالب فحص عام للملابس الخارجية والجاكيتات', aql: 'Level I', type: 'reduced' },
+    ];
+    for (const t of qcTemplates) {
+      insQCT.run(t.name, t.model, t.desc, t.aql, t.type, 1, dt(addDays(SEED_START, -10)));
+    }
+
+    // QC Template items for first template
+    const tmpl1 = db.prepare("SELECT id FROM qc_templates WHERE name='فحص قميص رجالي'").get();
+    if (tmpl1) {
+      const checkPoints = [
+        { cp: 'خياطة الأكمام', cat: 'sewing', sev: 'major', criteria: 'غرز متساوية — لا خيوط ظاهرة' },
+        { cp: 'تثبيت الأزرار', cat: 'sewing', sev: 'major', criteria: 'مثبتة بإحكام — 4 ثقوب' },
+        { cp: 'الياقة', cat: 'sewing', sev: 'critical', criteria: 'متماثلة — تقوية داخلية' },
+        { cp: 'القياسات', cat: 'measurement', sev: 'critical', criteria: 'ضمن ±1 سم من المواصفات' },
+        { cp: 'نظافة القماش', cat: 'appearance', sev: 'minor', criteria: 'لا بقع — لا خيوط زائدة' },
+        { cp: 'الكي النهائي', cat: 'appearance', sev: 'minor', criteria: 'مكوي بدون تجاعيد' },
+      ];
+      checkPoints.forEach((cp, i) => insQCTI.run(tmpl1.id, cp.cp, cp.cat, cp.sev, cp.criteria, i + 1));
+    }
+
+    // QC Inspections for completed/in-progress WOs
+    let inspNum = 1;
+    const qcInspector = employeeIds.length > 3 ? employeeIds[3] : userIds[0];
+    for (const woNum of Object.keys(woMap)) {
+      const wo = woMap[woNum];
+      if (wo.stageQtys[3] === 0) continue; // No QC data
+      const qcStage = db.prepare("SELECT id FROM wo_stages WHERE wo_id=? AND stage_name='مراجعة جودة'").get(wo.id);
+      if (!qcStage) continue;
+
+      const lotSize = wo.qty;
+      const sampleSize = Math.min(lotSize, Math.max(8, Math.floor(lotSize * 0.1)));
+      const failed = (woNum === 'WO-2026-002' || woNum === 'WO-2026-011') ? randInt(2, 5) : 0;
+      const passed = sampleSize - failed;
+      const result = failed > 0 ? 'conditional' : 'pass';
+      const inspDate = wo.completedDate || addDays(wo.startDate, 15);
+
+      insQCI.run(wo.id, qcStage.id, tmpl1 ? tmpl1.id : null, `QCI-2026-${pad(inspNum)}`, qcInspector,
+        dd(inspDate), lotSize, sampleSize, passed, failed, result, failed > 0 ? 'عيوب بسيطة تم معالجتها' : 'فحص ناجح', dt(inspDate));
+
+      const inspRow = db.prepare('SELECT id FROM qc_inspections WHERE inspection_number=?').get(`QCI-2026-${pad(inspNum)}`);
+      if (inspRow) {
+        insQCII.run(inspRow.id, 'خياطة الأكمام', failed > 0 ? 'fail' : 'pass', failed > 0 ? 'SEW-01' : null, failed > 0 ? failed : 0, null);
+        insQCII.run(inspRow.id, 'الياقة', 'pass', null, 0, null);
+        insQCII.run(inspRow.id, 'القياسات', 'pass', null, 0, null);
+        insQCII.run(inspRow.id, 'نظافة القماش', 'pass', null, 0, null);
+      }
+
+      // NCR for WOs with failures
+      if (failed > 0 && inspRow) {
+        insNCR.run(`NCR-2026-${pad(inspNum)}`, inspRow.id, wo.id, 'minor',
+          'عيوب خياطة في الأكمام — غرز غير متساوية',
+          'سرعة ماكينة الخياطة عالية + خيط رفيع',
+          'إعادة خياطة القطع المعيبة — تم الانتهاء',
+          'تعديل سرعة الماكينة — تغيير الخيط إلى نوع أقوى',
+          'closed', qcInspector, dd(addDays(inspDate, 3)), userIds[0], dt(inspDate));
+      }
+      inspNum++;
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM qc_templates').get().c} QC templates, ${db.prepare('SELECT COUNT(*) as c FROM qc_inspections').get().c} inspections, ${db.prepare('SELECT COUNT(*) as c FROM qc_ncr').get().c} NCRs`);
+  } catch (e) { console.log('    ⚠ Skipping QC:', e.message); }
+
+  // ─── 25. QUOTATIONS & SALES ORDERS ─────────────────
+  console.log('  → Seeding quotations & sales orders...');
+  try {
+    const insQuot = db.prepare(`INSERT OR IGNORE INTO quotations (quotation_number, customer_id, status, valid_until, subtotal, tax_rate, tax_amount, discount, total, notes, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const insQuotItem = db.prepare(`INSERT OR IGNORE INTO quotation_items (quotation_id, model_code, description, quantity, unit_price, total, notes) VALUES (?,?,?,?,?,?,?)`);
+    const insSO = db.prepare(`INSERT OR IGNORE INTO sales_orders (so_number, quotation_id, customer_id, status, order_date, delivery_date, subtotal, tax_rate, tax_amount, discount, total, notes, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const insSOItem = db.prepare(`INSERT OR IGNORE INTO sales_order_items (sales_order_id, model_code, description, quantity, produced_qty, shipped_qty, unit_price, total, work_order_id, notes) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+
+    const quotDefs = [
+      { num: 'QUO-2026-001', cust: 1, status: 'accepted', models: [{ code: 'MOD-001', qty: 500, price: 185 }, { code: 'MOD-002', qty: 200, price: 295 }] },
+      { num: 'QUO-2026-002', cust: 2, status: 'accepted', models: [{ code: 'MOD-003', qty: 300, price: 350 }] },
+      { num: 'QUO-2026-003', cust: 4, status: 'sent', models: [{ code: 'MOD-005', qty: 150, price: 420 }, { code: 'MOD-006', qty: 100, price: 490 }] },
+      { num: 'QUO-2026-004', cust: 5, status: 'draft', models: [{ code: 'MOD-001', qty: 400, price: 180 }] },
+      { num: 'QUO-2026-005', cust: 6, status: 'accepted', models: [{ code: 'MOD-006', qty: 80, price: 490 }, { code: 'MOD-005', qty: 300, price: 420 }] },
+      { num: 'QUO-2026-006', cust: 3, status: 'expired', models: [{ code: 'MOD-004', qty: 600, price: 130 }] },
+    ];
+
+    for (const q of quotDefs) {
+      const subtotal = q.models.reduce((s, m) => s + m.qty * m.price, 0);
+      const taxRate = 14;
+      const taxAmount = +(subtotal * taxRate / 100).toFixed(2);
+      const total = +(subtotal + taxAmount).toFixed(2);
+      const created = dt(addDays(SEED_START, randInt(-10, 20)));
+      const validUntil = dd(addDays(SEED_START, 60));
+
+      insQuot.run(q.num, q.cust, q.status, validUntil, subtotal, taxRate, taxAmount, 0, total, null, userIds[0], created, created);
+
+      const qRow = db.prepare('SELECT id FROM quotations WHERE quotation_number=?').get(q.num);
+      if (!qRow) continue;
+      for (const m of q.models) {
+        const modelRow = db.prepare('SELECT model_name FROM models WHERE model_code=?').get(m.code);
+        insQuotItem.run(qRow.id, m.code, modelRow ? modelRow.model_name : m.code, m.qty, m.price, +(m.qty * m.price).toFixed(2), null);
+      }
+    }
+
+    // Sales orders from accepted quotations
+    const soDefs = [
+      { num: 'SO-2026-001', quot: 'QUO-2026-001', cust: 1, status: 'in_production', dayOff: 5 },
+      { num: 'SO-2026-002', quot: 'QUO-2026-002', cust: 2, status: 'in_production', dayOff: 10 },
+      { num: 'SO-2026-003', quot: 'QUO-2026-005', cust: 6, status: 'confirmed', dayOff: 15 },
+    ];
+    for (const so of soDefs) {
+      const qRow = db.prepare('SELECT * FROM quotations WHERE quotation_number=?').get(so.quot);
+      if (!qRow) continue;
+      const orderDate = addDays(SEED_START, so.dayOff);
+      const deliveryDate = addDays(orderDate, 45);
+      const created = dt(orderDate);
+      insSO.run(so.num, qRow.id, so.cust, so.status, dd(orderDate), dd(deliveryDate), qRow.subtotal, qRow.tax_rate, qRow.tax_amount, 0, qRow.total, null, userIds[0], created, created);
+
+      const soRow = db.prepare('SELECT id FROM sales_orders WHERE so_number=?').get(so.num);
+      if (!soRow) continue;
+      const qItems = db.prepare('SELECT * FROM quotation_items WHERE quotation_id=?').all(qRow.id);
+      for (const qi of qItems) {
+        const woRow = db.prepare('SELECT id FROM work_orders WHERE model_id=(SELECT id FROM models WHERE model_code=?) LIMIT 1').get(qi.model_code);
+        insSOItem.run(soRow.id, qi.model_code, qi.description, qi.quantity, so.status === 'in_production' ? Math.floor(qi.quantity * 0.5) : 0, 0, qi.unit_price, qi.total, woRow ? woRow.id : null, null);
+      }
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM quotations').get().c} quotations, ${db.prepare('SELECT COUNT(*) as c FROM sales_orders').get().c} sales orders`);
+  } catch (e) { console.log('    ⚠ Skipping quotations/SOs:', e.message); }
+
+  // ─── 26. PURCHASE RETURNS ──────────────────────────
+  console.log('  → Seeding purchase returns...');
+  try {
+    const insPR = db.prepare(`INSERT OR IGNORE INTO purchase_returns (return_number, purchase_order_id, supplier_id, return_date, reason, status, subtotal, tax_amount, total, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const insPRI = db.prepare(`INSERT OR IGNORE INTO purchase_return_items (return_id, item_type, item_code, description, quantity, unit_price, total) VALUES (?,?,?,?,?,?,?)`);
+
+    const prDefs = [
+      { num: 'PR-2026-001', po: 'PO-2026-001', reason: 'عيب في القماش — لون مختلف عن العينة', status: 'approved', items: [{ code: 'FAB-001', type: 'fabric', qty: 50, price: 18.50 }] },
+      { num: 'PR-2026-002', po: 'PO-2026-003', reason: 'قماش تالف أثناء الشحن', status: 'draft', items: [{ code: 'FAB-004', type: 'fabric', qty: 30, price: 45.00 }] },
+    ];
+    for (const pr of prDefs) {
+      const poRow = db.prepare('SELECT id, supplier_id FROM purchase_orders WHERE po_number=?').get(pr.po);
+      if (!poRow) continue;
+      const subtotal = pr.items.reduce((s, i) => s + i.qty * i.price, 0);
+      const taxAmount = +(subtotal * 0.14).toFixed(2);
+      const total = +(subtotal + taxAmount).toFixed(2);
+      const returnDate = dd(addDays(SEED_START, randInt(20, 40)));
+      insPR.run(pr.num, poRow.id, poRow.supplier_id, returnDate, pr.reason, pr.status, subtotal, taxAmount, total, null, userIds[0], dt(addDays(SEED_START, randInt(20, 40))));
+
+      const prRow = db.prepare('SELECT id FROM purchase_returns WHERE return_number=?').get(pr.num);
+      if (!prRow) continue;
+      for (const item of pr.items) {
+        insPRI.run(prRow.id, item.type, item.code, item.code, item.qty, item.price, +(item.qty * item.price).toFixed(2));
+      }
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM purchase_returns').get().c} purchase returns`);
+  } catch (e) { console.log('    ⚠ Skipping purchase returns:', e.message); }
+
+  // ─── 27. SALES RETURNS ─────────────────────────────
+  console.log('  → Seeding sales returns...');
+  try {
+    const insSR = db.prepare(`INSERT OR IGNORE INTO sales_returns (return_number, invoice_id, customer_id, return_date, reason, status, subtotal, tax_amount, total, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const insSRI = db.prepare(`INSERT OR IGNORE INTO sales_return_items (return_id, item_type, item_code, description, quantity, unit_price, total) VALUES (?,?,?,?,?,?,?)`);
+
+    // Return 5 pieces from INV-001 (paid, WO-001 MOD-001 @185)
+    const inv1 = db.prepare("SELECT id, customer_id FROM invoices WHERE invoice_number='INV-2026-001'").get();
+    if (inv1) {
+      const qty = 5, price = 185, subtotal = qty * price;
+      const taxAmount = +(subtotal * 0.14).toFixed(2);
+      const total = +(subtotal + taxAmount).toFixed(2);
+      insSR.run('SR-2026-001', inv1.id, inv1.customer_id, dd(addDays(SEED_START, 35)), 'عيب في الخياطة — إرجاع جزئي', 'approved', subtotal, taxAmount, total, null, userIds[0], dt(addDays(SEED_START, 35)));
+      const srRow = db.prepare("SELECT id FROM sales_returns WHERE return_number='SR-2026-001'").get();
+      if (srRow) {
+        insSRI.run(srRow.id, 'other', 'MOD-001', 'قميص قطن رجالي', qty, price, subtotal);
+      }
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM sales_returns').get().c} sales returns`);
+  } catch (e) { console.log('    ⚠ Skipping sales returns:', e.message); }
+
+  // ─── 28. SAMPLES ───────────────────────────────────
+  console.log('  → Seeding samples...');
+  try {
+    const insSample = db.prepare(`INSERT OR IGNORE INTO samples (sample_number, model_code, customer_id, status, description, fabrics_used, accessories_used, cost, requested_date, completion_date, customer_feedback, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+
+    const sampleDefs = [
+      { num: 'SMP-2026-001', model: 'MOD-001', cust: 1, status: 'approved', desc: 'عينة قميص قطن — لون أبيض', cost: 120, feedback: 'ممتاز — موافقة على الإنتاج', dayOff: -5, completeDayOff: 3 },
+      { num: 'SMP-2026-002', model: 'MOD-003', cust: 2, status: 'approved', desc: 'عينة عباءة حرير — لون أسود', cost: 280, feedback: 'جيد جداً مع تعديل طفيف في الطول', dayOff: -3, completeDayOff: 5 },
+      { num: 'SMP-2026-003', model: 'MOD-005', cust: 4, status: 'in_progress', desc: 'عينة فستان كتان — لون بيج', cost: 350, feedback: null, dayOff: 10, completeDayOff: null },
+      { num: 'SMP-2026-004', model: 'MOD-006', cust: 6, status: 'rejected', desc: 'عينة جاكيت صوف — لون رمادي', cost: 420, feedback: 'اللون غير مطابق — يرجى إعادة بلون أغمق', dayOff: 5, completeDayOff: 12 },
+      { num: 'SMP-2026-005', model: 'MOD-002', cust: 5, status: 'requested', desc: 'عينة بنطلون كتان — لون كحلي', cost: 180, feedback: null, dayOff: 20, completeDayOff: null },
+    ];
+    for (const s of sampleDefs) {
+      const reqDate = dd(addDays(SEED_START, s.dayOff));
+      const compDate = s.completeDayOff ? dd(addDays(SEED_START, s.completeDayOff)) : null;
+      const created = dt(addDays(SEED_START, s.dayOff));
+      insSample.run(s.num, s.model, s.cust, s.status, s.desc, JSON.stringify([s.model]), JSON.stringify([]), s.cost, reqDate, compDate, s.feedback, userIds[0], created, created);
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM samples').get().c} samples`);
+  } catch (e) { console.log('    ⚠ Skipping samples:', e.message); }
+
+  // ─── 29. MAINTENANCE ORDERS ────────────────────────
+  console.log('  → Seeding maintenance orders...');
+  try {
+    const insMO = db.prepare(`INSERT OR IGNORE INTO maintenance_orders (machine_id, maintenance_type, title, description, priority, status, scheduled_date, completed_date, performed_by, cost, notes, barcode, created_by, is_deleted, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`);
+    const insMOP = db.prepare(`INSERT OR IGNORE INTO maintenance_parts (mo_id, part_name, part_number, quantity, unit_cost, supplier, notes) VALUES (?,?,?,?,?,?,?)`);
+
+    const moDefs = [
+      { machine: 1, type: 'preventive', title: 'صيانة دورية — ماكينة خياطة', desc: 'تنظيف وتزييت — تغيير إبر', priority: 'medium', status: 'completed', schedOff: 15, compOff: 16, cost: 350, by: 'فني صيانة داخلي',
+        parts: [{ name: 'إبر خياطة صناعية', pn: 'NDL-001', qty: 10, cost: 15 }, { name: 'زيت ماكينات', pn: 'OIL-001', qty: 2, cost: 45 }] },
+      { machine: 2, type: 'corrective', title: 'إصلاح قاطع الخيط', desc: 'قاطع الخيط لا يعمل — تم الاستبدال', priority: 'high', status: 'completed', schedOff: 30, compOff: 31, cost: 600, by: 'فني صيانة خارجي',
+        parts: [{ name: 'قاطع خيط أوفرلوك', pn: 'CUT-002', qty: 1, cost: 400 }] },
+      { machine: 3, type: 'preventive', title: 'صيانة دورية — مكواة', desc: 'تنظيف سطح المكواة — فحص ثرموستات', priority: 'low', status: 'completed', schedOff: 45, compOff: 45, cost: 200, by: 'فني صيانة داخلي', parts: [] },
+      { machine: 4, type: 'corrective', title: 'إصلاح موتور طاولة القص', desc: 'تعطل الموتور — قيد الإصلاح', priority: 'critical', status: 'in_progress', schedOff: 70, compOff: null, cost: 3500, by: 'فني صيانة خارجي',
+        parts: [{ name: 'موتور كهربائي 2HP', pn: 'MOT-004', qty: 1, cost: 2800 }, { name: 'حزام نقل', pn: 'BLT-001', qty: 2, cost: 120 }] },
+      { machine: 1, type: 'preventive', title: 'صيانة ربع سنوية', desc: 'صيانة شاملة — فحص جميع الأجزاء', priority: 'medium', status: 'pending', schedOff: 85, compOff: null, cost: 0, by: null, parts: [] },
+    ];
+    for (const mo of moDefs) {
+      const schedDate = dd(addDays(SEED_START, mo.schedOff));
+      const compDate = mo.compOff ? dd(addDays(SEED_START, mo.compOff)) : null;
+      const created = dt(addDays(SEED_START, mo.schedOff - 2));
+      insMO.run(mo.machine, mo.type, mo.title, mo.desc, mo.priority, mo.status, schedDate, compDate, mo.by, mo.cost, mo.notes || null, `MO-${pad(moDefs.indexOf(mo) + 1)}`, userIds[0], created, created);
+
+      if (mo.parts.length > 0) {
+        const moRow = db.prepare("SELECT id FROM maintenance_orders WHERE barcode=?").get(`MO-${pad(moDefs.indexOf(mo) + 1)}`);
+        if (moRow) {
+          for (const p of mo.parts) {
+            insMOP.run(moRow.id, p.name, p.pn, p.qty, p.cost, null, null);
+          }
+        }
+      }
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM maintenance_orders').get().c} maintenance orders, ${db.prepare('SELECT COUNT(*) as c FROM maintenance_parts').get().c} parts`);
+  } catch (e) { console.log('    ⚠ Skipping maintenance orders:', e.message); }
+
+  // ─── 30. PRODUCTION SCHEDULE ───────────────────────
+  console.log('  → Seeding production schedule...');
+  try {
+    const insSched = db.prepare(`INSERT OR IGNORE INTO production_schedule (work_order_id, production_line_id, machine_id, stage_id, planned_start, planned_end, actual_start, actual_end, priority, status, notes, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const prodLine = db.prepare('SELECT id FROM production_lines LIMIT 1').get();
+
+    for (const woNum of Object.keys(woMap)) {
+      const wo = woMap[woNum];
+      const stages = db.prepare('SELECT id, stage_name, sort_order, status FROM wo_stages WHERE wo_id=? ORDER BY sort_order').all(wo.id);
+      for (const stage of stages) {
+        const planStart = addDays(wo.startDate, stage.sort_order * 2);
+        const planEnd = addDays(planStart, 2);
+        const machineId = stage.sort_order <= 2 ? (machineIds[stage.sort_order - 1] || null) : (stage.sort_order === 3 ? (machineIds[2] || null) : null);
+        const actualStart = stage.status !== 'pending' ? dd(planStart) : null;
+        const actualEnd = stage.status === 'completed' ? dd(planEnd) : null;
+        const status = stage.status === 'completed' ? 'completed' : (stage.status === 'in_progress' ? 'in_progress' : 'planned');
+        const created = dt(addDays(wo.startDate, -1));
+
+        insSched.run(wo.id, prodLine ? prodLine.id : null, machineId, stage.id, dd(planStart), dd(planEnd), actualStart, actualEnd, wo.stageQtys[0] > 0 ? 1 : 5, status, null, userIds[0], created, created);
+      }
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM production_schedule').get().c} schedule entries`);
+  } catch (e) { console.log('    ⚠ Skipping production schedule:', e.message); }
+
+  // ─── 31. STAGE MOVEMENT LOG ────────────────────────
+  console.log('  → Seeding stage movement log...');
+  try {
+    const insMove = db.prepare(`INSERT OR IGNORE INTO stage_movement_log (wo_id, from_stage_id, to_stage_id, from_stage_name, to_stage_name, qty_moved, qty_rejected, rejection_reason, moved_by_user_id, moved_by_name, moved_at, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const stageNames = ['قص', 'خياطة', 'كي', 'مراجعة جودة', 'تغليف', 'تسليم'];
+
+    for (const woNum of Object.keys(woMap)) {
+      const wo = woMap[woNum];
+      const stages = db.prepare('SELECT id, stage_name, sort_order FROM wo_stages WHERE wo_id=? ORDER BY sort_order').all(wo.id);
+      if (stages.length < 2) continue;
+
+      for (let i = 0; i < stages.length - 1; i++) {
+        const qtyMoved = wo.stageQtys[i + 1]; // qty that reached the next stage
+        if (qtyMoved <= 0) break;
+        const rejected = (i === 1 && (woNum === 'WO-2026-002' || woNum === 'WO-2026-011')) ? randInt(2, 5) : 0;
+        const moveDate = addDays(wo.startDate, (i + 1) * 2);
+        insMove.run(wo.id, stages[i].id, stages[i + 1].id, stages[i].stage_name, stages[i + 1].stage_name, qtyMoved, rejected, rejected > 0 ? 'عيوب خياطة' : null, userIds[0], 'مدير النظام', dt(moveDate), null);
+      }
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM stage_movement_log').get().c} stage movements`);
+  } catch (e) { console.log('    ⚠ Skipping stage movement log:', e.message); }
+
+  // ─── 32. WO EXTRA EXPENSES, WASTE, SIZES ───────────
+  console.log('  → Seeding WO details (expenses, waste, sizes)...');
+  try {
+    const insWoExp = db.prepare(`INSERT OR IGNORE INTO wo_extra_expenses (wo_id, description, amount, stage_id, recorded_at, notes) VALUES (?,?,?,?,?,?)`);
+    const insWoWaste = db.prepare(`INSERT OR IGNORE INTO wo_waste (work_order_id, waste_meters, price_per_meter, waste_cost, notes, recorded_by_user_id, recorded_at) VALUES (?,?,?,?,?,?,?)`);
+    const insWoInv = db.prepare(`INSERT OR IGNORE INTO wo_invoices (work_order_id, invoice_id, qty_invoiced, unit_price, created_at) VALUES (?,?,?,?,?)`);
+
+    // Extra expenses on some WOs
+    const extraExpDefs = [
+      { wo: 'WO-2026-002', desc: 'طباعة لوجو إضافي', amount: 450 },
+      { wo: 'WO-2026-003', desc: 'تطريز يدوي إضافي', amount: 1200 },
+      { wo: 'WO-2026-008', desc: 'نقل خارجي للمقاول', amount: 800 },
+      { wo: 'WO-2026-011', desc: 'مواد تغليف فاخرة', amount: 600 },
+      { wo: 'WO-2026-016', desc: 'أجرة عمالة إضافية — وردية ليلية', amount: 2500 },
+    ];
+    for (const exp of extraExpDefs) {
+      const woRow = db.prepare('SELECT id FROM work_orders WHERE wo_number=?').get(exp.wo);
+      if (!woRow) continue;
+      insWoExp.run(woRow.id, exp.desc, exp.amount, null, dt(addDays(SEED_START, 30)), null);
+    }
+
+    // Fabric waste from completed/in-progress WOs that have cutting done
+    for (const woNum of Object.keys(woMap)) {
+      const wo = woMap[woNum];
+      if (wo.stageQtys[0] === 0) continue; // no cutting = no waste
+      const fabs = db.prepare('SELECT fabric_code, actual_meters FROM wo_fabrics WHERE wo_id=?').all(wo.id);
+      for (const fb of fabs) {
+        if (!fb.actual_meters || fb.actual_meters <= 0) continue;
+        const wastePct = randFloat(3, 8);
+        const wasteMeters = +(fb.actual_meters * wastePct / 100).toFixed(2);
+        const priceRow = db.prepare('SELECT price_per_m FROM fabrics WHERE code=?').get(fb.fabric_code);
+        const pricePerMeter = priceRow ? priceRow.price_per_m : 20;
+        const wasteCost = +(wasteMeters * pricePerMeter).toFixed(2);
+        insWoWaste.run(wo.id, wasteMeters, pricePerMeter, wasteCost, 'هدر قص عادي', userIds[0], dt(addDays(wo.startDate, 2)));
+      }
+    }
+
+    // WO-Invoice links
+    for (const inv of INVOICES) {
+      const woData = woMap[inv.wo];
+      if (!woData) continue;
+      const invRow = db.prepare('SELECT id FROM invoices WHERE invoice_number=?').get(inv.num);
+      if (!invRow) continue;
+      const mm = MODELS.find(m => m.code === woData.modelCode);
+      const qtyInv = inv.shipped > 0 ? inv.shipped : woData.qty;
+      insWoInv.run(woData.id, invRow.id, qtyInv, mm ? mm.unitPrice : 100, dt(addDays(SEED_START, 30)));
+    }
+
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM wo_extra_expenses').get().c} WO expenses, ${db.prepare('SELECT COUNT(*) as c FROM wo_waste').get().c} waste records, ${db.prepare('SELECT COUNT(*) as c FROM wo_invoices').get().c} WO-invoice links`);
+  } catch (e) { console.log('    ⚠ Skipping WO details:', e.message); }
+
+  // ─── 32b. WO FABRIC & ACCESSORY CONSUMPTION ───────
+  console.log('  → Seeding WO consumption records...');
+  try {
+    const insFC = db.prepare(`INSERT OR IGNORE INTO wo_fabric_consumption (work_order_id, fabric_id, fabric_code, po_id, batch_id, planned_meters, actual_meters, price_per_meter, total_cost, notes, recorded_by_user_id, recorded_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const insAC = db.prepare(`INSERT OR IGNORE INTO wo_accessory_consumption (work_order_id, accessory_id, accessory_code, planned_qty, actual_qty, unit_price, total_cost, recorded_at) VALUES (?,?,?,?,?,?,?,?)`);
+
+    for (const woNum of Object.keys(woMap)) {
+      const wo = woMap[woNum];
+      if (wo.stageQtys[0] === 0) continue;
+      const recordDate = dt(addDays(wo.startDate, 2));
+
+      // Fabric consumption
+      const woFabs = db.prepare('SELECT wf.*, f.id as fid FROM wo_fabrics wf JOIN fabrics f ON f.code=wf.fabric_code WHERE wf.wo_id=?').all(wo.id);
+      for (const wf of woFabs) {
+        if (!wf.actual_meters || wf.actual_meters <= 0) continue;
+        const batch = db.prepare('SELECT id, po_id FROM fabric_inventory_batches WHERE fabric_code=? LIMIT 1').get(wf.fabric_code);
+        const priceRow = db.prepare('SELECT price_per_m FROM fabrics WHERE code=?').get(wf.fabric_code);
+        const ppm = priceRow ? priceRow.price_per_m : 20;
+        insFC.run(wo.id, wf.fid, wf.fabric_code, batch ? batch.po_id : null, batch ? batch.id : null,
+          +(wf.actual_meters * 1.05).toFixed(2), wf.actual_meters,
+          ppm, +(wf.actual_meters * ppm).toFixed(2), null, userIds[0], recordDate, recordDate);
+      }
+
+      // Accessory consumption
+      const woAccs = db.prepare('SELECT wa.*, a.id as aid FROM wo_accessories wa JOIN accessories a ON a.code=wa.accessory_code WHERE wa.wo_id=?').all(wo.id);
+      for (const wa of woAccs) {
+        if (!wa.quantity || wa.quantity <= 0) continue;
+        const priceRow = db.prepare('SELECT unit_price FROM accessories WHERE code=?').get(wa.accessory_code);
+        const up = priceRow ? priceRow.unit_price : 1;
+        insAC.run(wo.id, wa.aid, wa.accessory_code, Math.ceil(wa.quantity * 1.05), wa.quantity, up, +(wa.quantity * up).toFixed(2), recordDate);
+      }
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM wo_fabric_consumption').get().c} fabric consumption, ${db.prepare('SELECT COUNT(*) as c FROM wo_accessory_consumption').get().c} accessory consumption`);
+  } catch (e) { console.log('    ⚠ Skipping WO consumption:', e.message); }
+
+  // ─── 32c. WO SIZES ────────────────────────────────
+  console.log('  → Seeding WO sizes...');
+  try {
+    const insWS = db.prepare(`INSERT OR IGNORE INTO wo_sizes (wo_id, color_label, qty_s, qty_m, qty_l, qty_xl, qty_2xl, qty_3xl) VALUES (?,?,?,?,?,?,?,?)`);
+    for (const woNum of Object.keys(woMap)) {
+      const wo = woMap[woNum];
+      const q = wo.qty;
+      // Distribute sizes (rough realistic bell-curve)
+      const s = Math.round(q * 0.10), m = Math.round(q * 0.25), l = Math.round(q * 0.25);
+      const xl = Math.round(q * 0.20), xxl = Math.round(q * 0.12);
+      const xxxl = q - s - m - l - xl - xxl;
+      insWS.run(wo.id, 'لون أساسي', s, m, l, xl, xxl, xxxl);
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM wo_sizes').get().c} WO size records`);
+  } catch (e) { console.log('    ⚠ Skipping WO sizes:', e.message); }
+
+  // ─── 32d. PARTIAL INVOICES ────────────────────────
+  console.log('  → Seeding partial invoices...');
+  try {
+    const insPI = db.prepare(`INSERT OR IGNORE INTO partial_invoices (wo_id, invoice_id, pieces_invoiced, cost_per_piece, invoice_price_per_piece, notes, created_at) VALUES (?,?,?,?,?,?,?)`);
+    // For some completed WOs that have invoices, add partial invoice records
+    for (const inv of INVOICES) {
+      const woData = woMap[inv.wo];
+      if (!woData) continue;
+      const invRow = db.prepare('SELECT id FROM invoices WHERE invoice_number=?').get(inv.num);
+      if (!invRow) continue;
+      const mm = MODELS.find(m => m.code === woData.modelCode);
+      const costPP = mm ? +(mm.unitPrice * 0.65).toFixed(2) : 60;
+      const invPricePP = mm ? mm.unitPrice : 100;
+      const pieces = inv.shipped > 0 ? inv.shipped : woData.qty;
+      insPI.run(woData.id, invRow.id, pieces, costPP, invPricePP, null, dt(addDays(SEED_START, 30)));
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM partial_invoices').get().c} partial invoices`);
+  } catch (e) { console.log('    ⚠ Skipping partial invoices:', e.message); }
+
+  // ─── 33. WAREHOUSE ZONES ───────────────────────────
+  console.log('  → Seeding warehouse zones...');
+  try {
+    const whRow = db.prepare('SELECT id FROM warehouses LIMIT 1').get();
+    if (whRow) {
+      const insZone = db.prepare(`INSERT OR IGNORE INTO warehouse_zones (warehouse_id, code, name, zone_type, created_at) VALUES (?,?,?,?,?)`);
+      const zones = [
+        { code: 'Z-FAB', name: 'منطقة الأقمشة', type: 'raw_material' },
+        { code: 'Z-ACC', name: 'منطقة الإكسسوارات', type: 'raw_material' },
+        { code: 'Z-WIP', name: 'منطقة تحت التشغيل', type: 'wip' },
+        { code: 'Z-FG', name: 'منطقة المنتجات الجاهزة', type: 'finished_goods' },
+        { code: 'Z-SHIP', name: 'منطقة الشحن', type: 'shipping' },
+      ];
+      for (const z of zones) {
+        insZone.run(whRow.id, z.code, z.name, z.type, dt(addDays(SEED_START, -60)));
+      }
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM warehouse_zones').get().c} warehouse zones`);
+  } catch (e) { console.log('    ⚠ Skipping warehouse zones:', e.message); }
+
+  // ─── 34. DOCUMENTS ─────────────────────────────────
+  console.log('  → Seeding documents...');
+  try {
+    const insDoc = db.prepare(`INSERT OR IGNORE INTO documents (entity_type, entity_id, file_name, file_path, file_type, file_size, category, description, uploaded_by, created_at, title) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+    const docDefs = [
+      { entity: 'purchase_order', id: 1, name: 'PO-2026-001.pdf', path: '/uploads/documents/PO-2026-001.pdf', type: 'application/pdf', size: 45000, cat: 'purchase_order', desc: 'أمر شراء — نسيج النيل', title: 'أمر شراء PO-2026-001' },
+      { entity: 'invoice', id: 1, name: 'INV-2026-001.pdf', path: '/uploads/documents/INV-2026-001.pdf', type: 'application/pdf', size: 32000, cat: 'invoice', desc: 'فاتورة بيع', title: 'فاتورة INV-2026-001' },
+      { entity: 'work_order', id: 1, name: 'WO-spec-001.pdf', path: '/uploads/documents/WO-spec-001.pdf', type: 'application/pdf', size: 128000, cat: 'specification', desc: 'مواصفات أمر شغل', title: 'مواصفات WO-2026-001' },
+      { entity: 'customer', id: 4, name: 'export-license.pdf', path: '/uploads/documents/export-license.pdf', type: 'application/pdf', size: 95000, cat: 'license', desc: 'رخصة تصدير — شركة تصدير الملابس', title: 'رخصة تصدير' },
+      { entity: 'supplier', id: 1, name: 'supplier-contract.pdf', path: '/uploads/documents/supplier-contract.pdf', type: 'application/pdf', size: 78000, cat: 'contract', desc: 'عقد توريد سنوي', title: 'عقد توريد — نسيج النيل' },
+    ];
+    for (const d of docDefs) {
+      insDoc.run(d.entity, d.id, d.name, d.path, d.type, d.size, d.cat, d.desc, userIds[0], dt(addDays(SEED_START, randInt(0, 30))), d.title);
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM documents').get().c} documents`);
+  } catch (e) { console.log('    ⚠ Skipping documents:', e.message); }
+
+  // ─── 35. BOM TEMPLATE SIZES ────────────────────────
+  console.log('  → Seeding BOM template sizes...');
+  try {
+    const insBomSize = db.prepare(`INSERT OR IGNORE INTO bom_template_sizes (template_id, color_label, qty_s, qty_m, qty_l, qty_xl, qty_2xl, qty_3xl) VALUES (?,?,?,?,?,?,?,?)`);
+    // Add size breakdown for MOD-001 (shirt) and MOD-002 (pants)
+    const tmplMod1 = db.prepare("SELECT bt.id FROM bom_templates bt JOIN models m ON bt.model_id=m.id WHERE m.model_code='MOD-001' LIMIT 1").get();
+    const tmplMod2 = db.prepare("SELECT bt.id FROM bom_templates bt JOIN models m ON bt.model_id=m.id WHERE m.model_code='MOD-002' LIMIT 1").get();
+    if (tmplMod1) {
+      insBomSize.run(tmplMod1.id, 'أبيض', 30, 50, 40, 30, 20, 10);
+      insBomSize.run(tmplMod1.id, 'أزرق فاتح', 20, 40, 35, 25, 15, 5);
+    }
+    if (tmplMod2) {
+      insBomSize.run(tmplMod2.id, 'كحلي', 25, 45, 40, 30, 20, 10);
+      insBomSize.run(tmplMod2.id, 'بيج', 20, 35, 30, 25, 15, 5);
+    }
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM bom_template_sizes').get().c} BOM sizes`);
+  } catch (e) { console.log('    ⚠ Skipping BOM sizes:', e.message); }
+
+  // ─── 36. REPORT SCHEDULES ─────────────────────────
+  console.log('  → Seeding report schedules...');
+  try {
+    const insRS = db.prepare(`INSERT OR IGNORE INTO report_schedules (name, report_type, frequency, day_of_week, day_of_month, hour, recipients, filters, format, enabled, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+    insRS.run('تقرير المبيعات الأسبوعي', 'sales', 'weekly', 0, null, 9, JSON.stringify(['admin@fabric.local', 'wessam@fabric.local']), null, 'xlsx', 1, userIds[0], dt(addDays(SEED_START, 5)));
+    insRS.run('تقرير المخزون الشهري', 'inventory', 'monthly', null, 1, 8, JSON.stringify(['admin@fabric.local']), null, 'xlsx', 1, userIds[0], dt(addDays(SEED_START, 5)));
+    insRS.run('تقرير الإنتاج اليومي', 'production', 'daily', null, null, 18, JSON.stringify(['manager@fabric.local']), null, 'csv', 1, userIds[0], dt(addDays(SEED_START, 5)));
+    console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM report_schedules').get().c} report schedules`);
+  } catch (e) { console.log('    ⚠ Skipping report schedules:', e.message); }
+
   // ─── CURRENT-MONTH DATA ─────────────────────────
   // Move some completed WOs and paid invoices into the current month
   // so dashboard KPIs (monthly_revenue, completed_this_month) show real data
