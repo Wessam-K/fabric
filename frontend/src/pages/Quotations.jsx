@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, FileText, ShoppingCart, Eye, X, ArrowLeftRight, Download } from 'lucide-react';
+import { Plus, Search, FileText, ShoppingCart, Eye, X, ArrowLeftRight, Download, Printer } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -235,6 +235,9 @@ export default function Quotations() {
                 <p className="text-sm text-gray-500">{selected.customer_name}</p>
               </div>
               <div className="flex gap-2">
+                <button onClick={() => window.print()} className="flex items-center gap-1 border px-3 py-1.5 rounded-lg text-sm hover:bg-gray-100">
+                  <Printer size={14} /> طباعة
+                </button>
                 {(selected.status === 'draft' || selected.status === 'sent') && can('sales_orders', 'create') && (
                   <button onClick={() => convertToSO(selected.id)} className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-green-700">
                     <ArrowLeftRight size={14} /> تحويل لأمر بيع

@@ -206,6 +206,8 @@ function PurchaseReturnsTab() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
+  const [selected, setSelected] = useState(null);
   const [suppliers, setSuppliers] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -235,8 +237,13 @@ function PurchaseReturnsTab() {
   };
 
   const approve = async (id) => {
-    try { await api.patch(`/returns/purchases/${id}/approve`); toast.success('تم الاعتماد'); load(); }
+    try { await api.patch(`/returns/purchases/${id}/approve`); toast.success('تم الاعتماد'); load(); setShowDetail(false); }
     catch (err) { toast.error(err.response?.data?.error || 'فشل'); }
+  };
+
+  const viewDetail = async (id) => {
+    try { const { data } = await api.get(`/returns/purchases/${id}`); setSelected(data); setShowDetail(true); }
+    catch { toast.error('فشل التحميل'); }
   };
 
   return (
@@ -286,7 +293,8 @@ function PurchaseReturnsTab() {
                   <td className="p-3 text-center font-bold">{Number(r.total_amount || 0).toLocaleString()}</td>
                   <td className="p-3 text-center"><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[r.status]}`}>{STATUS_LABELS[r.status]}</span></td>
                   <td className="p-3 text-center">
-                    {r.status === 'pending' && can('returns', 'edit') && <Tooltip text="اعتماد"><button onClick={() => approve(r.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded"><CheckCircle size={16} /></button></Tooltip>}
+                    <Tooltip text="عرض التفاصيل"><button onClick={() => viewDetail(r.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} /></button></Tooltip>
+                    {r.status === 'pending' && can('returns', 'edit') && <Tooltip text="اعتماد"><button onClick={() => approve(r.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded ml-1"><CheckCircle size={16} /></button></Tooltip>}
                   </td>
                 </tr>
               ))}
@@ -323,6 +331,30 @@ function PurchaseReturnsTab() {
             <div className="flex justify-end gap-3 p-5 border-t">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">إلغاء</button>
               <button onClick={save} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#1a1a2e] rounded-lg font-bold hover:bg-[#b8973f]">حفظ</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDetail && selected && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowDetail(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b bg-gray-50">
+              <h2 className="text-lg font-bold">{selected.return_number}</h2>
+              <button onClick={() => setShowDetail(false)} className="p-1.5 hover:bg-gray-200 rounded-lg"><X size={20} /></button>
+            </div>
+            <div className="p-5 overflow-y-auto max-h-[65vh]">
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="bg-gray-50 p-3 rounded-lg"><p className="text-xs text-gray-500">المورد</p><p className="font-bold">{selected.supplier_name || '-'}</p></div>
+                <div className="bg-gray-50 p-3 rounded-lg"><p className="text-xs text-gray-500">الحالة</p><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[selected.status]}`}>{STATUS_LABELS[selected.status]}</span></div>
+                <div className="bg-gray-50 p-3 rounded-lg"><p className="text-xs text-gray-500">المبلغ</p><p className="font-bold">{Number(selected.total_amount || 0).toLocaleString()}</p></div>
+              </div>
+              {selected.reason && <div className="mb-4 bg-gray-50 p-3 rounded-lg"><p className="text-xs text-gray-500">السبب</p><p>{selected.reason}</p></div>}
+              {selected.items?.length > 0 && (
+                <table className="w-full text-sm"><thead className="bg-gray-50"><tr><th className="p-2 text-right">الوصف</th><th className="p-2 text-center">الكمية</th><th className="p-2 text-center">السعر</th><th className="p-2 text-center">الإجمالي</th></tr></thead>
+                  <tbody className="divide-y">{selected.items.map(it => (<tr key={it.id}><td className="p-2">{it.product_description}</td><td className="p-2 text-center">{it.quantity}</td><td className="p-2 text-center">{Number(it.unit_price).toLocaleString()}</td><td className="p-2 text-center font-bold">{Number(it.total_price).toLocaleString()}</td></tr>))}</tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

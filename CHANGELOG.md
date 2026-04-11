@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Session 6 Polish (2026-04-12)
+- **Backend returns search**: GET `/returns/sales` and `/returns/purchases` now support `search` query param (return_number, customer/supplier name)
+- **Purchase Returns Detail**: Added detail view modal with supplier info, reason, items table (mirrors sales returns)
+- **Quotations Print**: Added print button (Printer icon) in quotation detail modal header
+
 ### Added — Session 5 Overhaul (2026-04-12)
 - **Returns Page**: Search input, status filter dropdown, CSV export button for both sales and purchase returns tabs
 - **Shipping Page**: CSV export button with shipment details (number, type, customer, carrier, tracking, status)

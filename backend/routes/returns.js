@@ -12,11 +12,12 @@ const { round2, safeAdd, safeMultiply } = require('../utils/money');
 // GET /api/returns/sales
 router.get('/sales', requirePermission('returns', 'view'), (req, res) => {
   try {
-    const { status, page = 1, limit: rawLimit = 25 } = req.query;
+    const { status, search, page = 1, limit: rawLimit = 25 } = req.query;
     const limit = Math.min(Math.max(parseInt(rawLimit) || 25, 1), 500);
     const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     let where = '1=1'; const params = [];
     if (status) { where += ' AND sr.status=?'; params.push(status); }
+    if (search) { where += ' AND (sr.return_number LIKE ? OR c.name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
     const total = db.prepare(`SELECT COUNT(*) as c FROM sales_returns sr WHERE ${where}`).get(...params).c;
     const rows = db.prepare(`SELECT sr.*, c.name as customer_name, i.invoice_number
       FROM sales_returns sr LEFT JOIN customers c ON c.id=sr.customer_id LEFT JOIN invoices i ON i.id=sr.invoice_id
@@ -107,11 +108,12 @@ router.patch('/sales/:id/approve', requirePermission('returns', 'edit'), (req, r
 // GET /api/returns/purchases
 router.get('/purchases', requirePermission('returns', 'view'), (req, res) => {
   try {
-    const { status, page = 1, limit: rawLimit = 25 } = req.query;
+    const { status, search, page = 1, limit: rawLimit = 25 } = req.query;
     const limit = Math.min(Math.max(parseInt(rawLimit) || 25, 1), 500);
     const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
     let where = '1=1'; const params = [];
     if (status) { where += ' AND pr.status=?'; params.push(status); }
+    if (search) { where += ' AND (pr.return_number LIKE ? OR s.name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
     const total = db.prepare(`SELECT COUNT(*) as c FROM purchase_returns pr WHERE ${where}`).get(...params).c;
     const rows = db.prepare(`SELECT pr.*, s.name as supplier_name, po.po_number
       FROM purchase_returns pr LEFT JOIN suppliers s ON s.id=pr.supplier_id LEFT JOIN purchase_orders po ON po.id=pr.purchase_order_id
