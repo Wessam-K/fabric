@@ -2,6 +2,7 @@
 const router = express.Router();
 const db = require('../database');
 const { requirePermission } = require('../middleware/auth');
+const { round2, safeAdd, safeSubtract } = require('../utils/money');
 
 // Phase 2.4: Configurable max rows for report queries to prevent memory issues
 const MAX_REPORT_ROWS = parseInt(process.env.MAX_REPORT_ROWS) || 5000;
@@ -34,12 +35,12 @@ router.get('/summary', requirePermission('reports', 'view'), (req, res) => {
       total_suppliers: totalSuppliers,
       active_work_orders: activeWO,
       completed_work_orders: completedWO,
-      avg_cost_per_piece: Math.round((costStats.avg_cost || 0) * 100) / 100,
+      avg_cost_per_piece: round2(costStats.avg_cost || 0),
       total_pieces: costStats.total_pieces || 0,
-      total_cost: Math.round((costStats.total_cost || 0) * 100) / 100,
-      min_cost_per_piece: Math.round((costStats.min_cost || 0) * 100) / 100,
-      max_cost_per_piece: Math.round((costStats.max_cost || 0) * 100) / 100,
-      outstanding_payables: Math.round(outstandingPayables * 100) / 100,
+      total_cost: round2(costStats.total_cost || 0),
+      min_cost_per_piece: round2(costStats.min_cost || 0),
+      max_cost_per_piece: round2(costStats.max_cost || 0),
+      outstanding_payables: round2(outstandingPayables),
       pending_invoices: pendingInvoices,
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -480,8 +481,8 @@ router.get('/hr-summary', requirePermission('reports', 'view'), (req, res) => {
 
     res.json({
       total_employees: totalEmployees,
-      total_payroll: Math.round(totalPayroll * 100) / 100,
-      avg_salary: Math.round(avgSalary * 100) / 100,
+      total_payroll: round2(totalPayroll),
+      avg_salary: round2(avgSalary),
       dept_breakdown: deptBreakdown,
       type_breakdown: typeBreakdown,
     });
@@ -613,8 +614,8 @@ router.get('/customer-summary', requirePermission('reports', 'view'), (req, res)
     `).all();
     const totals = {
       total_customers: customers.length,
-      total_revenue: Math.round(customers.reduce((s, c) => s + c.total_revenue, 0) * 100) / 100,
-      total_outstanding: Math.round(customers.reduce((s, c) => s + c.outstanding, 0) * 100) / 100,
+      total_revenue: round2(customers.reduce((s, c) => s + c.total_revenue, 0)),
+      total_outstanding: round2(customers.reduce((s, c) => s + c.outstanding, 0)),
     };
     res.json({ customers, totals });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -807,7 +808,7 @@ router.get('/machine-utilization', requirePermission('reports', 'view'), (req, r
       FROM machines m WHERE m.status='active' ORDER BY maintenance_cost DESC`).all();
     const totalMachines = machines.length;
     const totalMaintenanceCost = machines.reduce((s, m) => s + (m.maintenance_cost || 0), 0);
-    const avgMaintenancePerMachine = totalMachines ? Math.round(totalMaintenanceCost / totalMachines * 100) / 100 : 0;
+    const avgMaintenancePerMachine = totalMachines ? round2(totalMaintenanceCost / totalMachines) : 0;
     const needsMaintenance = machines.filter(m => m.next_maintenance_date && m.next_maintenance_date <= new Date().toISOString().slice(0, 10)).length;
     res.json({ machines, summary: { total_machines: totalMachines, total_maintenance_cost: totalMaintenanceCost, avg_maintenance_per_machine: avgMaintenancePerMachine, needs_maintenance: needsMaintenance } });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -925,13 +926,13 @@ router.get('/financial/pl', requirePermission('reports', 'view'), (req, res) => 
       months.push({
         month: m,
         label: `${yearStr}-${mm}`,
-        revenue: Math.round(revenue * 100) / 100,
-        material_cost: Math.round(materialCost * 100) / 100,
-        operating_expenses: Math.round(opex * 100) / 100,
-        maintenance_cost: Math.round(maintenance * 100) / 100,
-        payroll_cost: Math.round(payroll * 100) / 100,
-        total_cost: Math.round(totalCost * 100) / 100,
-        profit: Math.round(profit * 100) / 100,
+        revenue: round2(revenue),
+        material_cost: round2(materialCost),
+        operating_expenses: round2(opex),
+        maintenance_cost: round2(maintenance),
+        payroll_cost: round2(payroll),
+        total_cost: round2(totalCost),
+        profit: round2(profit),
         margin_pct: revenue > 0 ? Math.round((profit / revenue) * 10000) / 100 : 0,
       });
     }
@@ -1035,9 +1036,9 @@ router.get('/cash-flow', requirePermission('reports', 'view'), (req, res) => {
       const label = sd.slice(0, 7);
       data.push({
         month: label,
-        inflows: Math.round(inflows * 100) / 100,
-        outflows: Math.round((poPayments + expenses + payroll) * 100) / 100,
-        net: Math.round((inflows - poPayments - expenses - payroll) * 100) / 100,
+        inflows: round2(inflows),
+        outflows: round2(safeAdd(safeAdd(poPayments, expenses), payroll)),
+        net: round2(safeSubtract(inflows, safeAdd(safeAdd(poPayments, expenses), payroll))),
       });
     }
     res.json({ months: data });
@@ -1058,7 +1059,7 @@ router.get('/tax-summary', requirePermission('reports', 'view'), (req, res) => {
       const me = m < 12 ? `${year}-${String(m + 1).padStart(2, '0')}-01` : `${year + 1}-01-01`;
       const collected = db.prepare(`SELECT COALESCE(SUM(total - subtotal),0) as v FROM invoices WHERE status IN ('paid','partial','sent') AND created_at >= ? AND created_at < ?`).get(ms, me).v;
       const paid = db.prepare(`SELECT COALESCE(SUM(total_amount * ? / (1 + ?)),0) as v FROM purchase_orders WHERE status NOT IN ('cancelled','draft') AND order_date >= ? AND order_date < ?`).get(vr, vr, ms, me).v;
-      months.push({ month: `${year}-${mm}`, vat_collected: Math.round(collected * 100) / 100, vat_paid: Math.round(paid * 100) / 100, net_vat: Math.round((collected - paid) * 100) / 100 });
+      months.push({ month: `${year}-${mm}`, vat_collected: round2(collected), vat_paid: round2(paid), net_vat: round2(safeSubtract(collected, paid)) });
     }
     const totals = months.reduce((a, m) => ({ vat_collected: a.vat_collected + m.vat_collected, vat_paid: a.vat_paid + m.vat_paid, net_vat: a.net_vat + m.net_vat }), { vat_collected: 0, vat_paid: 0, net_vat: 0 });
     res.json({ year, months, summary: { total_output_vat: totals.vat_collected, total_input_vat: totals.vat_paid, net_vat: totals.net_vat, tax_rate: taxRate } });

@@ -22,6 +22,7 @@ export default function SalesOrders() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [showDetail, setShowDetail] = useState(false);
   const [selected, setSelected] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -29,14 +30,14 @@ export default function SalesOrders() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/quotations/sales-orders/list', { params: { page, limit: 25, status: statusFilter } });
+      const { data } = await api.get('/quotations/sales-orders/list', { params: { page, limit: 25, status: statusFilter, search } });
       setOrders(data.data || []);
       setTotal(data.total || 0);
     } catch { toast.error('فشل تحميل أوامر البيع'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [page, statusFilter]);
+  useEffect(() => { load(); }, [page, statusFilter, search]);
 
   const viewDetail = async (id) => {
     try { const { data } = await api.get(`/quotations/sales-orders/${id}`); setSelected(data); setShowDetail(true); }
@@ -66,6 +67,8 @@ export default function SalesOrders() {
       <PageHeader title="أوامر البيع" icon={ShoppingCart} count={total} action={<HelpButton pageKey="salesorders" />} />
 
       <div className="flex flex-wrap gap-3 mb-6 items-center">
+        <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="بحث بالرقم أو العميل..."
+          className="border rounded-lg px-3 py-2 text-sm flex-1 min-w-[200px]" />
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="border rounded-lg px-3 py-2 text-sm">
           <option value="">كل الحالات</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}

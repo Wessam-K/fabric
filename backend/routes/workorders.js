@@ -257,12 +257,13 @@ function getFullWO(id) {
 // ═══════════════════════════════════════════════
 router.get('/', requirePermission('work_orders', 'view'), (req, res) => {
   try {
-    const { search, status, priority, model_code, date_from, date_to } = req.query;
+    const { search, status, priority, model_code, date_from, date_to, customer_id } = req.query;
     let where = 'WHERE 1=1';
     const p = [];
     if (status) { where += ' AND wo.status=?'; p.push(status); }
     if (priority) { where += ' AND wo.priority=?'; p.push(priority); }
     if (model_code) { where += ' AND m.model_code=?'; p.push(model_code); }
+    if (customer_id) { where += ' AND wo.customer_id=?'; p.push(customer_id); }
     if (date_from) { where += ' AND wo.created_at >= ?'; p.push(date_from); }
     if (date_to) { where += ' AND wo.created_at <= ?'; p.push(date_to); }
     if (search) { const s = `%${search}%`; where += ' AND (wo.wo_number LIKE ? OR m.model_code LIKE ? OR m.model_name LIKE ? OR wo.assigned_to LIKE ?)'; p.push(s, s, s, s); }

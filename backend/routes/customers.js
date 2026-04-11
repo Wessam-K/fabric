@@ -4,6 +4,7 @@ const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
 const { fireWebhook } = require('../utils/webhooks');
+const { round2, safeSubtract } = require('../utils/money');
 
 // ═══════════════════════════════════════════════
 // GET /api/customers — list with search & filter
@@ -90,9 +91,9 @@ router.get('/:id', requirePermission('customers', 'view'), (req, res) => {
     `).get(customer.id);
 
     customer.invoice_count = invoiceSummary.invoice_count;
-    customer.total_invoiced = Math.round(invoiceSummary.total_invoiced * 100) / 100;
-    customer.total_paid = Math.round(invoiceSummary.total_paid * 100) / 100;
-    customer.outstanding = Math.round((invoiceSummary.total_invoiced - invoiceSummary.total_paid) * 100) / 100;
+    customer.total_invoiced = round2(invoiceSummary.total_invoiced);
+    customer.total_paid = round2(invoiceSummary.total_paid);
+    customer.outstanding = round2(safeSubtract(invoiceSummary.total_invoiced, invoiceSummary.total_paid));
 
     res.json(customer);
   } catch (err) {
@@ -122,9 +123,9 @@ router.get('/:id/invoices', requirePermission('customers', 'view'), (req, res) =
 
     res.json({
       invoices,
-      total_invoiced: Math.round(totals.total_invoiced * 100) / 100,
-      total_paid: Math.round(totals.total_paid * 100) / 100,
-      outstanding: Math.round((totals.total_invoiced - totals.total_paid) * 100) / 100,
+      total_invoiced: round2(totals.total_invoiced),
+      total_paid: round2(totals.total_paid),
+      outstanding: round2(safeSubtract(totals.total_invoiced, totals.total_paid)),
     });
   } catch (err) {
     console.error('Customer invoices error:', err);
@@ -149,9 +150,9 @@ router.get('/:id/balance', requirePermission('customers', 'view'), (req, res) =>
     res.json({
       customer_id: customer.id,
       customer_name: customer.name,
-      total_invoiced: Math.round(totals.total_invoiced * 100) / 100,
-      total_paid: Math.round(totals.total_paid * 100) / 100,
-      outstanding: Math.round((totals.total_invoiced - totals.total_paid) * 100) / 100,
+      total_invoiced: round2(totals.total_invoiced),
+      total_paid: round2(totals.total_paid),
+      outstanding: round2(safeSubtract(totals.total_invoiced, totals.total_paid)),
     });
   } catch (err) {
     console.error('Customer balance error:', err);
@@ -288,7 +289,7 @@ router.get('/:id/payments', requirePermission('customers', 'view'), (req, res) =
       FROM customer_payments WHERE customer_id = ?
     `).get(customer.id);
 
-    res.json({ payments, total_paid: Math.round(totals.total_paid * 100) / 100 });
+    res.json({ payments, total_paid: round2(totals.total_paid) });
   } catch (err) {
     res.status(500).json({ error: 'حدث خطأ أثناء تحميل المدفوعات' });
   }

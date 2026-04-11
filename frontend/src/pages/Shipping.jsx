@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Truck, Eye, X, MapPin, Package } from 'lucide-react';
+import { Plus, Search, Truck, Eye, X, MapPin, Package, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
-import { fmtDateTime } from '../utils/formatters';
+import { fmtDateTime, downloadCSV } from '../utils/formatters';
 import Tooltip from '../components/Tooltip';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
@@ -105,6 +105,7 @@ export default function Shipping() {
           <option value="">كل الحالات</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
+        <button onClick={() => { if (!shipments.length) return; downloadCSV(shipments.map(s => ({ 'الرقم': s.shipment_number, 'النوع': s.shipment_type === 'inbound' ? 'وارد' : 'صادر', 'العميل': s.customer_name || '', 'الناقل': s.carrier || '', 'التتبع': s.tracking_number || '', 'الحالة': STATUS_LABELS[s.status] || s.status, 'التاريخ': s.created_at || '' })), 'شحنات'); }} className="flex items-center gap-1.5 border rounded-lg px-3 py-2 text-sm hover:bg-gray-50" title="تصدير CSV"><Download size={16} /> تصدير</button>
         <PermissionGuard module="shipping" action="create">
           <button onClick={openNew} className="flex items-center gap-2 bg-[#c9a84c] text-[#1a1a2e] px-4 py-2 rounded-lg font-bold hover:bg-[#b8973f]">
             <Plus size={18} /> شحنة جديدة

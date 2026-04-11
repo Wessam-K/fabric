@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { requirePermission } = require('../middleware/auth');
 const { fireWebhook } = require('../utils/webhooks');
+const { round2, safeAdd } = require('../utils/money');
 
 // GET /api/inventory/fabric-stock — aggregated fabric inventory
 router.get('/fabric-stock', requirePermission('inventory', 'view'), (req, res) => {
@@ -307,9 +308,9 @@ router.get('/stock-valuation', requirePermission('inventory', 'view'), (req, res
       fabrics: fabricVal,
       accessories: accessoryVal,
       summary: {
-        fabric_value: Math.round(fabricTotal * 100) / 100,
-        accessory_value: Math.round(accessoryTotal * 100) / 100,
-        total_inventory_value: Math.round((fabricTotal + accessoryTotal) * 100) / 100,
+        fabric_value: round2(fabricTotal),
+        accessory_value: round2(accessoryTotal),
+        total_inventory_value: round2(safeAdd(fabricTotal, accessoryTotal)),
       },
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

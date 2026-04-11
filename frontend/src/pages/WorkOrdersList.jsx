@@ -18,6 +18,13 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'مكتمل' },
   { value: 'cancelled', label: 'ملغي' },
 ];
+const PRIORITY_OPTIONS = [
+  { value: '', label: 'كل الأولويات' },
+  { value: 'low', label: 'منخفض' },
+  { value: 'normal', label: 'عادي' },
+  { value: 'high', label: 'عالي' },
+  { value: 'urgent', label: 'عاجل' },
+];
 
 function StageProgress({ done, total }) {
   if (!total) return null;
@@ -40,10 +47,17 @@ export default function WorkOrdersList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [customers, setCustomers] = useState([]);
   const [viewMode, setViewMode] = useState('list');
   const [selectedIds, setSelectedIds] = useState([]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
+
+  useEffect(() => { api.get('/customers').then(r => setCustomers(r.data?.customers || r.data || [])).catch(() => {}); }, []);
 
   const load = async () => {
     setLoading(true);
@@ -51,6 +65,10 @@ export default function WorkOrdersList() {
       const params = { page, limit: 50 };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
+      if (priorityFilter) params.priority = priorityFilter;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+      if (customerFilter) params.customer_id = customerFilter;
       const { data } = await api.get('/work-orders', { params });
       setWorkOrders(data.work_orders || []);
       setPagination(data.pagination || { total: 0, pages: 1 });
@@ -61,7 +79,7 @@ export default function WorkOrdersList() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [search, statusFilter, page]);
+  useEffect(() => { load(); }, [search, statusFilter, priorityFilter, dateFrom, dateTo, customerFilter, page]);
 
   const kanbanCols = [
     { key: 'draft', label: 'مسودة', color: 'border-gray-300' },
@@ -106,11 +124,20 @@ export default function WorkOrdersList() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث..."
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالرقم أو الموديل أو العميل..."
           className="form-input flex-1 min-w-[200px]" />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="form-select">
           {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} className="form-select">
+          {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select value={customerFilter} onChange={e => setCustomerFilter(e.target.value)} className="form-select">
+          <option value="">كل العملاء</option>
+          {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-input w-36" title="من تاريخ" />
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-input w-36" title="إلى تاريخ" />
       </div>
 
       {loading ? <LoadingState /> : viewMode === 'list' ? (

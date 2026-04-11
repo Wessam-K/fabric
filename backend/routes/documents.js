@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../database');
 const { logAudit, requirePermission } = require('../middleware/auth');
+const { round2 } = require('../utils/money');
 
 const uploadDir = path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), 'uploads', 'documents');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -179,7 +180,7 @@ router.get('/template/invoice/:id', requirePermission('invoices', 'view'), (req,
     });
     html += `</tbody></table>`;
     html += `<table><tr class="total-row"><td colspan="4">الإجمالي</td><td>${inv.total}</td></tr>`;
-    if (inv.tax_pct) html += `<tr><td colspan="4">الضريبة (${inv.tax_pct}%)</td><td>${Math.round((inv.subtotal - (inv.discount || 0)) * inv.tax_pct / 100)}</td></tr>`;
+    if (inv.tax_pct) html += `<tr><td colspan="4">الضريبة (${inv.tax_pct}%)</td><td>${round2((inv.subtotal - (inv.discount || 0)) * inv.tax_pct / 100)}</td></tr>`;
     html += `</table>`;
     html += templateFooter;
 

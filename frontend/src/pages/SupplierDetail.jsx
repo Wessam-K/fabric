@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Phone, Mail, MapPin, DollarSign, ShoppingCart, Star, CreditCard } from 'lucide-react';
+import { ArrowRight, Phone, Mail, MapPin, DollarSign, ShoppingCart, Star, CreditCard, FileText, History } from 'lucide-react';
 import { PageHeader, LoadingState, Tabs } from '../components/ui';
 import api from '../utils/api';
 import { fmtDateTime } from '../utils/formatters';
@@ -14,25 +14,34 @@ export default function SupplierDetail() {
   const [supplier, setSupplier] = useState(null);
   const [pos, setPOs] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [ledger, setLedger] = useState([]);
+  const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
 
-  useEffect(() => {
-    const load = async () => {
+  const loadData = async () => {
+    try {
+      const { data } = await api.get(`/suppliers/${id}`);
+      setSupplier(data);
+      setPayments(data.payments || []);
+      setNotes(data.notes || '');
       try {
-        const suppRes = await api.get('/suppliers');
-        const s = suppRes.data.find(x => x.id === parseInt(id));
-        if (!s) { toast.error('المورد غير موجود'); navigate('/suppliers'); return; }
-        setSupplier(s);
-        try {
-          const poRes = await api.get('/purchase-orders', { params: { supplier_id: id } });
-          setPOs(Array.isArray(poRes.data) ? poRes.data : poRes.data.data || []);
-        } catch {}
-      } catch { toast.error('فشل تحميل البيانات'); navigate('/suppliers'); }
-      finally { setLoading(false); }
-    };
-    load();
-  }, [id]);
+        const poRes = await api.get('/purchase-orders', { params: { supplier_id: id } });
+        setPOs(Array.isArray(poRes.data) ? poRes.data : poRes.data.data || []);
+      } catch {}
+      try { const lr = await api.get(`/suppliers/${id}/ledger`); setLedger(lr.data || []); } catch {}
+    } catch { toast.error('فشل تحميل البيانات'); navigate('/suppliers'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { loadData(); }, [id]);
+
+  const saveNotes = async () => {
+    try {
+      await api.put(`/suppliers/${id}`, { notes });
+      toast.success('تم حفظ الملاحظات');
+    } catch { toast.error('فشل حفظ الملاحظات'); }
+  };
 
   const fmt = (v) => (Math.round((v || 0) * 100) / 100).toLocaleString('ar-EG');
   const fmtDate = (d) => fmtDateTime(d);
@@ -40,6 +49,7 @@ export default function SupplierDetail() {
   const TYPE_MAP = { fabric: 'أقمشة', accessory: 'اكسسوارات', both: 'أقمشة واكسسوارات', other: 'أخرى' };
   const PO_STATUS = { draft: 'مسودة', sent: 'مُرسل', partial: 'جزئي', received: 'مُستلم', cancelled: 'ملغي' };
   const PO_COLORS = { draft: 'bg-gray-100 text-gray-600', sent: 'bg-blue-100 text-blue-700', partial: 'bg-yellow-100 text-yellow-700', received: 'bg-green-100 text-green-700', cancelled: 'bg-gray-200 text-gray-500' };
+  const PAY_METHODS = { cash: 'كاش', bank: 'بنك', cheque: 'شيك', transfer: 'تحويل' };
 
   if (loading) return <LoadingState />;
   if (!supplier) return null;
@@ -78,6 +88,9 @@ export default function SupplierDetail() {
       <Tabs tabs={[
         { value: 'overview', label: 'نظرة عامة' },
         { value: 'orders', label: 'أوامر الشراء', count: supplierPOs.length },
+        { value: 'payments', label: 'المدفوعات', count: payments.length },
+        { value: 'ledger', label: 'كشف الحساب' },
+        { value: 'notes', label: 'الملاحظات' },
       ]} active={tab} onChange={setTab} />
 
       {tab === 'overview' && (
@@ -127,6 +140,66 @@ export default function SupplierDetail() {
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'payments' && (
+        <div className="card">
+          <div className="card-body" style={{ padding: 0 }}>
+            {payments.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">لا توجد مدفوعات مسجلة</div>
+            ) : (
+              <table className="data-table">
+                <thead><tr><th>التاريخ</th><th>المبلغ</th><th>الطريقة</th><th>المرجع</th><th>ملاحظات</th></tr></thead>
+                <tbody>
+                  {payments.map((p, i) => (
+                    <tr key={p.id || i}>
+                      <td className="text-xs">{fmtDate(p.payment_date || p.created_at)}</td>
+                      <td className="font-mono text-green-600">{fmt(p.amount)} ج</td>
+                      <td className="text-xs">{PAY_METHODS[p.payment_method] || p.payment_method || '—'}</td>
+                      <td className="text-xs font-mono">{p.reference || '—'}</td>
+                      <td className="text-xs text-gray-500">{p.notes || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot><tr className="font-bold bg-gray-50"><td>الإجمالي</td><td className="font-mono text-green-700">{fmt(payments.reduce((s, p) => s + (p.amount || 0), 0))} ج</td><td colSpan="3"></td></tr></tfoot>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'ledger' && (
+        <div className="card">
+          <div className="card-body" style={{ padding: 0 }}>
+            {ledger.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">لا توجد حركات مالية</div>
+            ) : (
+              <table className="data-table">
+                <thead><tr><th>التاريخ</th><th>البيان</th><th>مدين</th><th>دائن</th><th>الرصيد</th></tr></thead>
+                <tbody>
+                  {ledger.map((entry, i) => (
+                    <tr key={i}>
+                      <td className="text-xs">{fmtDate(entry.date || entry.created_at)}</td>
+                      <td className="text-sm">{entry.description || entry.reference || '—'}</td>
+                      <td className="font-mono text-red-600">{entry.debit ? fmt(entry.debit) : '—'}</td>
+                      <td className="font-mono text-green-600">{entry.credit ? fmt(entry.credit) : '—'}</td>
+                      <td className={`font-mono font-bold ${(entry.balance || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>{fmt(entry.balance)} ج</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'notes' && (
+        <div className="card">
+          <div className="card-body space-y-4">
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="ملاحظات حول المورد..." className="form-input w-full" rows={5} />
+            <button onClick={saveNotes} className="btn btn-gold">حفظ الملاحظات</button>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ const db = require('../database');
 const { requirePermission, logAudit } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
 const { fireWebhook } = require('../utils/webhooks');
+const { round2, safeAdd, safeSubtract } = require('../utils/money');
 
 // ═══════════════════════════════════════════
 //  Chart of Accounts
@@ -248,8 +249,8 @@ router.get('/vat-summary', requirePermission('accounting', 'view'), (req, res) =
 
     res.json({
       sales_vat: sales.tax,
-      purchase_vat: Math.round(purchaseVat * 100) / 100,
-      net_vat: Math.round((sales.tax - purchaseVat) * 100) / 100,
+      purchase_vat: round2(purchaseVat),
+      net_vat: round2(safeSubtract(sales.tax, purchaseVat)),
       sales_total: sales.total,
       purchases_total: purchases.total,
       period: { from: from || 'all', to: to || 'all' },
@@ -295,11 +296,11 @@ router.get('/income-statement', requirePermission('accounting', 'view'), (req, r
 
     res.json({
       period: { from: fromDate, to: toDate },
-      revenue: { accounts: revenue, total: Math.round(totalRevenue * 100) / 100 },
-      cogs: { accounts: cogsAccounts, total: Math.round(totalCOGS * 100) / 100 },
-      gross_profit: Math.round(grossProfit * 100) / 100,
-      expenses: { accounts: operatingExpenses, total: Math.round(totalExpenses * 100) / 100 },
-      net_profit: Math.round(netProfit * 100) / 100,
+      revenue: { accounts: revenue, total: round2(totalRevenue) },
+      cogs: { accounts: cogsAccounts, total: round2(totalCOGS) },
+      gross_profit: round2(grossProfit),
+      expenses: { accounts: operatingExpenses, total: round2(totalExpenses) },
+      net_profit: round2(netProfit),
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
@@ -340,10 +341,10 @@ router.get('/balance-sheet', requirePermission('accounting', 'view'), (req, res)
 
     res.json({
       as_of: asOf,
-      assets: { accounts: assets, total: Math.round(totalAssets * 100) / 100 },
-      liabilities: { accounts: liabilities, total: Math.round(totalLiabilities * 100) / 100 },
-      equity: { accounts: equity, total: Math.round(totalEquity * 100) / 100, retained_earnings: Math.round(retainedEarnings * 100) / 100 },
-      total_liabilities_equity: Math.round((totalLiabilities + totalEquity + retainedEarnings) * 100) / 100,
+      assets: { accounts: assets, total: round2(totalAssets) },
+      liabilities: { accounts: liabilities, total: round2(totalLiabilities) },
+      equity: { accounts: equity, total: round2(totalEquity), retained_earnings: round2(retainedEarnings) },
+      total_liabilities_equity: round2(safeAdd(safeAdd(totalLiabilities, totalEquity), retainedEarnings)),
       balanced: Math.abs(totalAssets - (totalLiabilities + totalEquity + retainedEarnings)) < 0.01,
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -383,7 +384,7 @@ router.get('/general-ledger', requirePermission('accounting', 'view'), (req, res
       WHERE jl.account_id = ? AND je.status='posted' ${from ? "AND je.entry_date < ?" : ''}
     `).get(parseInt(account_id), ...(from ? [from] : [])).v;
 
-    res.json({ account, entries, opening_balance: Math.round(openingBalance * 100) / 100, total, page: pageNum, pages: Math.ceil(total / perPage) });
+    res.json({ account, entries, opening_balance: round2(openingBalance), total, page: pageNum, pages: Math.ceil(total / perPage) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
@@ -503,15 +504,15 @@ router.get('/cash-flow', requirePermission('accounting', 'view'), (req, res) => 
 
     res.json({
       period: { from: fromDate, to: toDate },
-      net_income: Math.round(netIncome * 100) / 100,
+      net_income: round2(netIncome),
       operating: {
         working_capital_changes: workingCapitalChanges,
-        total_working_capital: Math.round(totalWorkingCapital * 100) / 100,
-        total: Math.round(cashFromOperations * 100) / 100,
+        total_working_capital: round2(totalWorkingCapital),
+        total: round2(cashFromOperations),
       },
-      investing: { accounts: fixedAssets, total: Math.round(totalInvesting * 100) / 100 },
-      financing: { accounts: equityChanges, total: Math.round(totalFinancing * 100) / 100 },
-      net_cash_change: Math.round((cashFromOperations + totalInvesting + totalFinancing) * 100) / 100,
+      investing: { accounts: fixedAssets, total: round2(totalInvesting) },
+      financing: { accounts: equityChanges, total: round2(totalFinancing) },
+      net_cash_change: round2(safeAdd(safeAdd(cashFromOperations, totalInvesting), totalFinancing)),
       cash_accounts: cashAccounts,
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }

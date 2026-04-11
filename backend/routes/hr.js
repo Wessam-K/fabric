@@ -8,6 +8,7 @@ const router = express.Router();
 const db = require('../database');
 const { requirePermission, logAudit } = require('../middleware/auth');
 const { generateNextNumber } = require('../utils/numberGenerator');
+const { round2 } = require('../utils/money');
 
 const upload = multer({
   dest: path.join(process.env.WK_DB_DIR || path.join(__dirname, '..'), 'uploads', 'attendance'),
@@ -714,7 +715,7 @@ router.post('/payroll/:periodId/calculate', requirePermission('payroll', 'manage
       db.prepare(`
         UPDATE payroll_periods SET status='calculated', total_gross=?, total_net=?, total_deductions=?, calculated_at=datetime('now')
         WHERE id=?
-      `).run(Math.round(totalGross * 100) / 100, Math.round(totalNet * 100) / 100, Math.round(totalDeductions * 100) / 100, period.id);
+      `).run(round2(totalGross), round2(totalNet), round2(totalDeductions), period.id);
     });
 
     calculate();
@@ -770,18 +771,18 @@ function calculateEmployeePay(employee, attendanceSummary, adjustments, settings
   const net_pay = Math.max(0, gross_pay - total_deductions);
 
   return {
-    base_pay: Math.round(base_pay * 100) / 100,
-    overtime_pay: Math.round(overtime_pay * 100) / 100,
+    base_pay: round2(base_pay),
+    overtime_pay: round2(overtime_pay),
     housing_allowance: housing, transport_allowance: transport,
     food_allowance: food, other_allowances: other_allow,
-    bonuses: Math.round(bonuses * 100) / 100,
-    gross_pay: Math.round(gross_pay * 100) / 100,
-    absence_deduction: Math.round(absence_deduction * 100) / 100,
-    late_deduction: Math.round(late_deduction * 100) / 100,
+    bonuses: round2(bonuses),
+    gross_pay: round2(gross_pay),
+    absence_deduction: round2(absence_deduction),
+    late_deduction: round2(late_deduction),
     social_insurance: social, tax_deduction: tax,
     loans_deduction: loan_repayments, other_deductions: extra_deductions + employee.other_deductions_fixed,
-    total_deductions: Math.round(total_deductions * 100) / 100,
-    net_pay: Math.round(net_pay * 100) / 100,
+    total_deductions: round2(total_deductions),
+    net_pay: round2(net_pay),
     days_worked: attendanceSummary.days_worked,
     hours_worked: attendanceSummary.total_hours,
     overtime_hours: attendanceSummary.overtime_hours,

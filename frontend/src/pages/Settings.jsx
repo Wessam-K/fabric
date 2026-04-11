@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, Plus, Factory, Building2, Cog, DollarSign, Shield } from 'lucide-react';
+import { Save, Plus, Factory, Building2, Cog, DollarSign, Shield, Bell, Lock } from 'lucide-react';
 import { PageHeader, LoadingState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import api from '../utils/api';
@@ -12,6 +12,8 @@ const TABS = [
   { key: 'production', label: 'إعدادات الإنتاج', icon: Factory },
   { key: 'finance', label: 'إعدادات المالية', icon: DollarSign },
   { key: 'system', label: 'إعدادات النظام', icon: Cog },
+  { key: 'security', label: 'الأمان', icon: Lock },
+  { key: 'notifications', label: 'الإشعارات', icon: Bell },
   { key: 'permissions', label: 'الصلاحيات', icon: Shield },
 ];
 
@@ -49,6 +51,23 @@ const SYSTEM_FIELDS = [
   { key: 'date_format', label: 'تنسيق التاريخ', type: 'select', options: [['DD/MM/YYYY', 'DD/MM/YYYY'], ['YYYY-MM-DD', 'YYYY-MM-DD']] },
   { key: 'backup_enabled', label: 'النسخ الاحتياطي', type: 'select', options: [['1', 'مفعّل'], ['0', 'معطّل']] },
   { key: 'backup_frequency', label: 'تكرار النسخ', type: 'select', options: [['daily', 'يومي'], ['weekly', 'أسبوعي'], ['monthly', 'شهري']] },
+];
+
+const SECURITY_FIELDS = [
+  { key: 'jwt_expiry_hours', label: 'مدة صلاحية التوكن (ساعة)', type: 'number', placeholder: '24' },
+  { key: 'max_login_attempts', label: 'الحد الأقصى لمحاولات الدخول', type: 'number', placeholder: '5' },
+  { key: 'lockout_duration_minutes', label: 'مدة القفل (دقيقة)', type: 'number', placeholder: '15' },
+  { key: 'password_min_length', label: 'الحد الأدنى لطول كلمة المرور', type: 'number', placeholder: '10' },
+  { key: 'require_password_complexity', label: 'تعقيد كلمة المرور', type: 'select', options: [['1', 'مطلوب (حروف + أرقام + رموز)'], ['0', 'غير مطلوب']] },
+];
+
+const NOTIFICATION_FIELDS = [
+  { key: 'low_stock_alert_enabled', label: 'تنبيه المخزون المنخفض', type: 'select', options: [['1', 'مفعّل'], ['0', 'معطّل']] },
+  { key: 'invoice_overdue_reminder_days', label: 'تذكير الفواتير المتأخرة (أيام)', type: 'number', placeholder: '3' },
+  { key: 'wo_completion_notify', label: 'إشعار إتمام أوامر الإنتاج', type: 'select', options: [['1', 'مفعّل'], ['0', 'معطّل']] },
+  { key: 'maintenance_due_notify', label: 'إشعار صيانة الماكينات', type: 'select', options: [['1', 'مفعّل'], ['0', 'معطّل']] },
+  { key: 'leave_request_notify', label: 'إشعار طلبات الإجازة', type: 'select', options: [['1', 'مفعّل'], ['0', 'معطّل']] },
+  { key: 'payroll_ready_notify', label: 'إشعار جاهزية الرواتب', type: 'select', options: [['1', 'مفعّل'], ['0', 'معطّل']] },
 ];
 
 export default function SettingsPage() {
@@ -234,6 +253,28 @@ export default function SettingsPage() {
             إعدادات الجلسة والنسخ الاحتياطي وتنسيق التاريخ
           </div>
           {SYSTEM_FIELDS.map(renderField)}
+        </div>
+      )}
+
+      {/* Tab: Security */}
+      {tab === 'security' && (
+        <div className="card card-body space-y-5">
+          <h3 className="section-title">إعدادات الأمان</h3>
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-800">
+            تحكم في سياسات كلمات المرور ومدة الجلسات وحماية الحسابات
+          </div>
+          {SECURITY_FIELDS.map(renderField)}
+        </div>
+      )}
+
+      {/* Tab: Notifications */}
+      {tab === 'notifications' && (
+        <div className="card card-body space-y-5">
+          <h3 className="section-title">إعدادات الإشعارات</h3>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-sm text-yellow-800">
+            تفعيل أو تعطيل إشعارات النظام المختلفة
+          </div>
+          {NOTIFICATION_FIELDS.map(renderField)}
         </div>
       )}
 

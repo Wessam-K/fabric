@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Beaker, Eye, X, Factory, CheckCircle } from 'lucide-react';
+import { Plus, Search, Beaker, Eye, X, Factory, CheckCircle, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
-import { fmtDateTime } from '../utils/formatters';
+import { fmtDateTime, downloadCSV } from '../utils/formatters';
 import Tooltip from '../components/Tooltip';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
@@ -92,6 +92,7 @@ export default function Samples() {
           <option value="">كل الحالات</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
+        <button onClick={() => { if (!samples.length) return; downloadCSV(samples.map(s => ({ 'الرقم': s.sample_number, 'العميل': s.customer_name || '', 'المنتج': s.product_name || '', 'الكمية': s.quantity, 'الحالة': STATUS_LABELS[s.status] || s.status, 'الموعد': s.deadline || '', 'التاريخ': s.created_at || '' })), 'عينات'); }} className="flex items-center gap-1.5 border rounded-lg px-3 py-2 text-sm hover:bg-gray-50" title="تصدير CSV"><Download size={16} /> تصدير</button>
         <PermissionGuard module="samples" action="create">
           <button onClick={openNew} className="flex items-center gap-2 bg-[#c9a84c] text-[#1a1a2e] px-4 py-2 rounded-lg font-bold hover:bg-[#b8973f]">
             <Plus size={18} /> عينة جديدة

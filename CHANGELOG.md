@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Session 5 Overhaul (2026-04-12)
+- **Returns Page**: Search input, status filter dropdown, CSV export button for both sales and purchase returns tabs
+- **Shipping Page**: CSV export button with shipment details (number, type, customer, carrier, tracking, status)
+- **Samples Page**: CSV export button with sample details (number, customer, product, quantity, status, deadline)
+- **SalesOrders Page**: Search by order number/customer (added in previous session, continued here)
+- **WorkOrders Filters**: Priority, date range (from/to), and customer dropdown filters on list page
+- **SupplierDetail Enhancement**: Major expansion from 2 to 5 tabs (overview, orders, payments, ledger, notes)
+- **ChartOfAccounts**: Search bar, tree view with parent-child indentation, collapse/expand on parent nodes
+- **JournalEntries**: Date range filter (from/to), CSV export button
+- **Settings**: Security tab (JWT expiry, login attempts, lockout, password min length, complexity) and Notifications tab (stock alerts, overdue reminders, WO/maintenance/leave/payroll notifications)
+
+### Fixed — Money.js Centralization (2026-04-12)
+- **Centralized money rounding**: Replaced ~65 raw `Math.round(…*100)/100` patterns across 6 backend route files with `round2()` from `utils/money.js`
+- **Safe arithmetic**: Replaced raw `+`/`-` on money values with `safeAdd()`/`safeSubtract()` in accounting.js, customers.js, reports.js, inventory.js
+- **Files migrated**: accounting.js (19→0), reports.js (21→0), customers.js (10→0), hr.js (11→0), inventory.js (3→0), documents.js (1→0)
+
 ### Added — Comprehensive ERP Overhaul (2026-04-11)
 - **Financial Statements**: Income Statement, Balance Sheet, Cash Flow Statement — full frontend pages with KPI cards, date filtering, and Excel export
 - **Cash Flow Backend**: `GET /api/accounting/cash-flow` endpoint — indirect method with operating, investing, and financing activity sections

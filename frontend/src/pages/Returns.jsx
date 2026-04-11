@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, RotateCcw, Eye, X, CheckCircle } from 'lucide-react';
+import { Plus, Search, RotateCcw, Eye, X, CheckCircle, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -7,7 +7,7 @@ import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
 import HelpButton from '../components/HelpButton';
-import { fmtDateTime } from '../utils/formatters';
+import { fmtDateTime, downloadCSV } from '../utils/formatters';
 import Tooltip from '../components/Tooltip';
 
 const STATUS_COLORS = { pending: 'bg-yellow-100 text-yellow-700', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' };
@@ -43,17 +43,24 @@ function SalesReturnsTab() {
   const [showModal, setShowModal] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [customers, setCustomers] = useState([]);
   const [form, setForm] = useState({ customer_id: '', invoice_id: '', reason: '', notes: '', items: [{ product_description: '', quantity: 1, unit_price: 0, reason: '' }] });
   const [selectedIds, setSelectedIds] = useState([]);
 
   const load = async () => {
     setLoading(true);
-    try { const { data } = await api.get('/returns/sales', { params: { page, limit: 25 } }); setReturns(data.data || []); setTotal(data.total || 0); }
+    try { const { data } = await api.get('/returns/sales', { params: { page, limit: 25, search, status: statusFilter } }); setReturns(data.data || []); setTotal(data.total || 0); }
     catch { toast.error('فشل التحميل'); } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [page]);
+  const exportCSV = () => {
+    if (!returns.length) return;
+    downloadCSV(returns.map(r => ({ 'الرقم': r.return_number, 'العميل': r.customer_name || '', 'الفاتورة': r.invoice_number || '', 'المبلغ': r.total_amount || 0, 'الحالة': STATUS_LABELS[r.status] || r.status, 'التاريخ': r.created_at || '' })), 'مرتجعات-مبيعات');
+  };
+
+  useEffect(() => { load(); }, [page, search, statusFilter]);
   useEffect(() => { api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(e => console.error('Customers load failed:', e.message)); }, []);
 
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { product_description: '', quantity: 1, unit_price: 0, reason: '' }] }));
@@ -76,7 +83,16 @@ function SalesReturnsTab() {
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="بحث بالرقم أو العميل..." className="w-full pr-9 pl-3 py-2 border rounded-lg text-sm" />
+        </div>
+        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="border rounded-lg px-3 py-2 text-sm min-w-[140px]">
+          <option value="">كل الحالات</option>
+          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <button onClick={exportCSV} className="flex items-center gap-1.5 border rounded-lg px-3 py-2 text-sm hover:bg-gray-50" title="تصدير CSV"><Download size={16} /> تصدير</button>
         <PermissionGuard module="returns" action="create">
           <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-[#c9a84c] text-[#1a1a2e] px-4 py-2 rounded-lg font-bold hover:bg-[#b8973f]"><Plus size={18} /> مرتجع مبيعات جديد</button>
         </PermissionGuard>
@@ -191,16 +207,23 @@ function PurchaseReturnsTab() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [form, setForm] = useState({ supplier_id: '', reason: '', notes: '', items: [{ product_description: '', quantity: 1, unit_price: 0, reason: '' }] });
   const [selectedIds, setSelectedIds] = useState([]);
 
   const load = async () => {
     setLoading(true);
-    try { const { data } = await api.get('/returns/purchases', { params: { page, limit: 25 } }); setReturns(data.data || []); setTotal(data.total || 0); }
+    try { const { data } = await api.get('/returns/purchases', { params: { page, limit: 25, search, status: statusFilter } }); setReturns(data.data || []); setTotal(data.total || 0); }
     catch { toast.error('فشل التحميل'); } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [page]);
+  const exportCSV = () => {
+    if (!returns.length) return;
+    downloadCSV(returns.map(r => ({ 'الرقم': r.return_number, 'المورد': r.supplier_name || '', 'أمر الشراء': r.po_number || '', 'المبلغ': r.total_amount || 0, 'الحالة': STATUS_LABELS[r.status] || r.status, 'التاريخ': r.created_at || '' })), 'مرتجعات-مشتريات');
+  };
+
+  useEffect(() => { load(); }, [page, search, statusFilter]);
   useEffect(() => { api.get('/suppliers').then(r => setSuppliers(r.data?.data || r.data || [])).catch(e => console.error('Suppliers load failed:', e.message)); }, []);
 
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { product_description: '', quantity: 1, unit_price: 0, reason: '' }] }));
@@ -218,7 +241,16 @@ function PurchaseReturnsTab() {
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="بحث بالرقم أو المورد..." className="w-full pr-9 pl-3 py-2 border rounded-lg text-sm" />
+        </div>
+        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="border rounded-lg px-3 py-2 text-sm min-w-[140px]">
+          <option value="">كل الحالات</option>
+          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <button onClick={exportCSV} className="flex items-center gap-1.5 border rounded-lg px-3 py-2 text-sm hover:bg-gray-50" title="تصدير CSV"><Download size={16} /> تصدير</button>
         <PermissionGuard module="returns" action="create">
           <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-[#c9a84c] text-[#1a1a2e] px-4 py-2 rounded-lg font-bold hover:bg-[#b8973f]"><Plus size={18} /> مرتجع مشتريات جديد</button>
         </PermissionGuard>

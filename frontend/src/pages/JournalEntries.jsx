@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Plus, Eye, CheckCircle, XCircle, Search, FileText } from 'lucide-react';
+import { Plus, Eye, CheckCircle, XCircle, Search, FileText, Download } from 'lucide-react';
 import api from '../utils/api';
 import { PageHeader, LoadingState } from '../components/ui';
 import HelpButton from '../components/HelpButton';
 import { useToast } from '../components/Toast';
 import Tooltip from '../components/Tooltip';
-import { fmtDate } from '../utils/formatters';
+import { fmtDate, downloadCSV } from '../utils/formatters';
 
 const STATUS_MAP = { draft: { label: 'مسودة', color: 'bg-gray-100 text-gray-600' }, posted: { label: 'مرحّل', color: 'bg-green-100 text-green-600' }, void: { label: 'ملغى', color: 'bg-red-100 text-red-600' } };
 
@@ -15,6 +15,8 @@ export default function JournalEntries() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [view, setView] = useState(null); // entry detail
   const [showForm, setShowForm] = useState(false);
@@ -27,6 +29,8 @@ export default function JournalEntries() {
       const params = {};
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
       const [entriesRes, coaRes] = await Promise.all([api.get('/accounting/journal', { params }), api.get('/accounting/coa')]);
       const eData = entriesRes.data;
       setEntries(Array.isArray(eData) ? eData : (eData.data || []));
@@ -34,7 +38,7 @@ export default function JournalEntries() {
     } catch { toast.error('فشل التحميل'); }
     finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, [search, statusFilter]);
+  useEffect(() => { load(); }, [search, statusFilter, dateFrom, dateTo]);
 
   const openNew = async () => {
     try {
@@ -224,6 +228,15 @@ export default function JournalEntries() {
           <option value="posted">مرحّل</option>
           <option value="void">ملغى</option>
         </select>
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-input text-xs w-36" title="من تاريخ" />
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-input text-xs w-36" title="إلى تاريخ" />
+        <button onClick={() => {
+          const rows = entries.map(e => ({
+            'رقم القيد': e.entry_number, 'التاريخ': e.entry_date, 'الوصف': e.description,
+            'الحالة': STATUS_MAP[e.status]?.label || e.status, 'المدين': e.total_debit || 0, 'الدائن': e.total_credit || 0
+          }));
+          downloadCSV(rows, 'journal-entries');
+        }} className="btn btn-secondary text-xs"><Download size={14} /> تصدير</button>
       </div>
 
       {selectedIds.length > 0 && (
