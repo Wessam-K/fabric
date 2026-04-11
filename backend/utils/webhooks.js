@@ -2,10 +2,43 @@
  * Phase 3.6: Webhook event system
  * Stores webhook subscriptions in DB and fires HTTP callbacks on events
  * Phase 5.2: Exponential backoff retry for failed deliveries
+ * V59: SSRF protection — blocks private/internal IPs
  */
 const crypto = require('crypto');
+const dns = require('dns');
 const db = require('../database');
 const logger = require('./logger');
+
+// V59: SSRF protection — validate webhook URLs against private IP ranges
+const BLOCKED_IP_PATTERNS = [
+  /^127\./,                           // loopback
+  /^10\./,                            // RFC1918
+  /^192\.168\./,                      // RFC1918
+  /^172\.(1[6-9]|2\d|3[01])\./,      // RFC1918
+  /^169\.254\./,                      // link-local
+  /^0\./,                             // unspecified
+  /^::1$/,                            // IPv6 loopback
+  /^fd/i,                             // IPv6 ULA
+  /^fe80/i,                           // IPv6 link-local
+];
+
+async function validateWebhookUrl(urlString) {
+  let parsed;
+  try { parsed = new URL(urlString); } catch { throw new Error('عنوان URL غير صالح'); }
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('يُسمح فقط بـ HTTP/HTTPS');
+  if (/^localhost$/i.test(parsed.hostname) || parsed.hostname === '[::]') {
+    throw new Error('عنوان IP خاص غير مسموح');
+  }
+  const { address } = await new Promise((resolve, reject) => {
+    dns.lookup(parsed.hostname, (err, addr, fam) => {
+      if (err) return reject(new Error('فشل في حل اسم المضيف'));
+      resolve({ address: addr, family: fam });
+    });
+  });
+  if (BLOCKED_IP_PATTERNS.some(r => r.test(address))) {
+    throw new Error('عنوان IP خاص غير مسموح');
+  }
+}
 
 // ── AES-256-GCM helpers for webhook secret encryption ──
 function _getEncryptionKey() {
@@ -124,6 +157,12 @@ async function fireWebhook(event, payload) {
     });
 
     for (const hook of hooks) {
+      // V59: SSRF check before delivery
+      try { await validateWebhookUrl(hook.url); } catch (ssrfErr) {
+        logger.warn('Webhook blocked by SSRF check', { webhookId: hook.id, url: hook.url, reason: ssrfErr.message });
+        continue;
+      }
+
       const body = JSON.stringify({ event, timestamp: new Date().toISOString(), data: payload });
       const headers = { 'Content-Type': 'application/json' };
 
@@ -156,10 +195,17 @@ async function fireWebhook(event, payload) {
  * CRUD helpers for webhook management
  */
 function createWebhook(name, url, events, secret, createdBy) {
+  // V59: Validate URL is not SSRF target (sync wrapper — caller must await)
   const encryptedSecret = encryptSecret(secret);
   const result = db.prepare('INSERT INTO webhooks (name, url, events, secret, created_by) VALUES (?,?,?,?,?)')
     .run(name, url, JSON.stringify(events), encryptedSecret, createdBy);
   return result.lastInsertRowid;
+}
+
+// V59: Async version with SSRF check — use this for new webhook creation
+async function createWebhookSafe(name, url, events, secret, createdBy) {
+  await validateWebhookUrl(url);
+  return createWebhook(name, url, events, secret, createdBy);
 }
 
 function listWebhooks() {
@@ -184,4 +230,4 @@ function getWebhookLogs(webhookId, limit = 50) {
   return db.prepare('SELECT * FROM webhook_logs WHERE webhook_id=? ORDER BY created_at DESC LIMIT ?').all(webhookId, limit);
 }
 
-module.exports = { fireWebhook, createWebhook, updateWebhook, listWebhooks, deleteWebhook, getWebhookLogs };
+module.exports = { fireWebhook, createWebhook, createWebhookSafe, updateWebhook, listWebhooks, deleteWebhook, getWebhookLogs };

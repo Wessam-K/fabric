@@ -46,6 +46,16 @@ function cleanExpiredResetTokens() {
   } catch { return 0; }
 }
 
+// V59: Clean old webhook delivery logs
+function cleanOldWebhookLogs() {
+  const days = getRetentionSetting('webhook_log_retention_days', 30);
+  try {
+    const result = db.prepare("DELETE FROM webhook_logs WHERE created_at < datetime('now', '-' || ? || ' days')").run(days);
+    if (result.changes > 0) logger.info('Cleanup: purged old webhook logs', { count: result.changes, retentionDays: days });
+    return result.changes;
+  } catch (err) { logger.error('Cleanup: webhook log purge failed', { error: err.message }); return 0; }
+}
+
 function runAllCleanups() {
   logger.info('Data retention cleanup started');
   const results = {
@@ -53,9 +63,10 @@ function runAllCleanups() {
     notifications: cleanOldNotifications(),
     revokedTokens: cleanOldRevokedTokens(),
     resetTokens: cleanExpiredResetTokens(),
+    webhookLogs: cleanOldWebhookLogs(),
   };
   logger.info('Data retention cleanup completed', results);
   return results;
 }
 
-module.exports = { runAllCleanups, cleanOldAuditLogs, cleanOldNotifications, cleanOldRevokedTokens, cleanExpiredResetTokens };
+module.exports = { runAllCleanups, cleanOldAuditLogs, cleanOldNotifications, cleanOldRevokedTokens, cleanExpiredResetTokens, cleanOldWebhookLogs };

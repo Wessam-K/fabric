@@ -42,15 +42,18 @@ export default function WorkOrdersList() {
   const [statusFilter, setStatusFilter] = useState('');
   const [viewMode, setViewMode] = useState('list');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, pages: 1 });
 
   const load = async () => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { page, limit: 50 };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
       const { data } = await api.get('/work-orders', { params });
       setWorkOrders(data.work_orders || []);
+      setPagination(data.pagination || { total: 0, pages: 1 });
       const s = data.stats || {};
       s.total = (s.draft || 0) + (s.pending || 0) + (s.in_progress || 0) + (s.completed || 0) + (s.cancelled || 0);
       setStats(s);
@@ -58,7 +61,7 @@ export default function WorkOrdersList() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [search, statusFilter]);
+  useEffect(() => { load(); }, [search, statusFilter, page]);
 
   const kanbanCols = [
     { key: 'draft', label: 'مسودة', color: 'border-gray-300' },
@@ -184,6 +187,28 @@ export default function WorkOrdersList() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pagination.pages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-6">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="btn btn-ghost text-xs disabled:opacity-30">السابق</button>
+          {Array.from({ length: Math.min(pagination.pages, 7) }, (_, i) => {
+            let p;
+            if (pagination.pages <= 7) p = i + 1;
+            else if (page <= 4) p = i + 1;
+            else if (page >= pagination.pages - 3) p = pagination.pages - 6 + i;
+            else p = page - 3 + i;
+            return (
+              <button key={p} onClick={() => setPage(p)}
+                className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${p === page ? 'bg-[#1a1a2e] text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
+                {p}
+              </button>
+            );
+          })}
+          <button onClick={() => setPage(p => Math.min(pagination.pages, p + 1))} disabled={page >= pagination.pages} className="btn btn-ghost text-xs disabled:opacity-30">التالي</button>
+          <span className="text-xs text-gray-400 mr-2">{pagination.total} أمر إنتاج</span>
         </div>
       )}
     </div>

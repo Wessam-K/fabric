@@ -59,15 +59,15 @@ export default function UsersPage() {
   useEffect(() => { load(); loadPermissions(); }, []);
 
   function load() {
-    api.get('/users').then(r => setUsers(r.data)).catch(() => {});
+    api.get('/users').then(r => setUsers(r.data)).catch(e => console.error('Users load failed:', e.message));
   }
 
   function loadPermissions() {
     api.get('/permissions/definitions').then(r => {
       setPermDefs(r.data.definitions);
       setPermGrouped(r.data.grouped);
-    }).catch(() => {});
-    api.get('/permissions/roles').then(r => setRolePerms(r.data)).catch(() => {});
+    }).catch(e => console.error('Permission defs load failed:', e.message));
+    api.get('/permissions/roles').then(r => setRolePerms(r.data)).catch(e => console.error('Role perms load failed:', e.message));
   }
 
   function openCreate() {

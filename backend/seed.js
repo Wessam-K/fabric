@@ -813,14 +813,27 @@ function seed() {
   // Ensure chart of accounts exists
   const insCoA = db.prepare(`INSERT OR IGNORE INTO chart_of_accounts (code, name_ar, type, is_active, created_at) VALUES (?,?,?,1,datetime('now'))`);
   const accounts = [
-    { code: '1100', name: 'المخزون — أقمشة', type: 'asset' },
-    { code: '1200', name: 'المخزون — إكسسوارات', type: 'asset' },
+    { code: '1100', name: 'النقدية والبنوك', type: 'asset' },
+    { code: '1110', name: 'الصندوق', type: 'asset' },
+    { code: '1120', name: 'البنك', type: 'asset' },
+    { code: '1200', name: 'المخزون — أقمشة', type: 'asset' },
+    { code: '1210', name: 'المخزون — إكسسوارات', type: 'asset' },
     { code: '1300', name: 'الحسابات المدينة (العملاء)', type: 'asset' },
-    { code: '1400', name: 'النقدية والبنوك', type: 'asset' },
+    { code: '1400', name: 'مصروفات مدفوعة مقدماً', type: 'asset' },
+    { code: '1500', name: 'الأصول الثابتة — معدات', type: 'asset' },
+    { code: '1510', name: 'الأصول الثابتة — مركبات', type: 'asset' },
     { code: '2100', name: 'الحسابات الدائنة (الموردين)', type: 'liability' },
+    { code: '2200', name: 'إيرادات مؤجلة', type: 'liability' },
+    { code: '2300', name: 'ضريبة القيمة المضافة المستحقة', type: 'liability' },
+    { code: '3100', name: 'رأس المال', type: 'equity' },
+    { code: '3200', name: 'الأرباح المحتجزة', type: 'equity' },
     { code: '4100', name: 'إيرادات المبيعات', type: 'revenue' },
+    { code: '4200', name: 'إيرادات خدمات', type: 'revenue' },
     { code: '5100', name: 'تكلفة البضاعة المباعة', type: 'expense' },
-    { code: '5200', name: 'مصروفات عمومية', type: 'expense' },
+    { code: '5200', name: 'مصروفات عمومية وإدارية', type: 'expense' },
+    { code: '5300', name: 'مصروفات الرواتب والأجور', type: 'expense' },
+    { code: '5400', name: 'مصروفات الإيجار', type: 'expense' },
+    { code: '5500', name: 'مصروفات الصيانة', type: 'expense' },
   ];
   for (const a of accounts) { insCoA.run(a.code, a.name, a.type); }
 
@@ -857,9 +870,8 @@ function seed() {
       const jeRow = db.prepare('SELECT id FROM journal_entries WHERE entry_number=?').get(entryNum);
       if (jeRow) {
         const insJELine = db.prepare(`INSERT OR IGNORE INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?,?,?,?,?)`);
-        const invAcctCode = po.type === 'fabric' ? '1300' : '1300';
-        const invAcct = acctId(invAcctCode);
-        const apAcct = acctId('2100') || acctId('2000');
+        const invAcct = acctId(po.type === 'fabric' ? '1200' : '1210');
+        const apAcct = acctId('2100');
         if (invAcct) insJELine.run(jeRow.id, invAcct, totalAmt, 0, `مخزون — ${po.num}`);
         if (apAcct) insJELine.run(jeRow.id, apAcct, 0, totalAmt, `دائنون — ${po.num}`);
       }
@@ -885,8 +897,8 @@ function seed() {
       const jeRow = db.prepare('SELECT id FROM journal_entries WHERE entry_number=?').get(entryNum);
       if (jeRow) {
         const insJELine = db.prepare(`INSERT OR IGNORE INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?,?,?,?,?)`);
-        const arAcct = acctId('1200') || acctId('1300');
-        const revAcct = acctId('4000') || acctId('4100');
+        const arAcct = acctId('1300');
+        const revAcct = acctId('4100');
         if (arAcct) insJELine.run(jeRow.id, arAcct, total, 0, `عملاء — ${inv.num}`);
         if (revAcct) insJELine.run(jeRow.id, revAcct, 0, total, `إيرادات — ${inv.num}`);
       }
@@ -913,13 +925,58 @@ function seed() {
       const jeRow = db.prepare('SELECT id FROM journal_entries WHERE entry_number=?').get(entryNum);
       if (jeRow) {
         const insJELine = db.prepare(`INSERT OR IGNORE INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?,?,?,?,?)`);
-        const cashAcct = acctId('1000') || acctId('1100');
-        const arAcct = acctId('1200') || acctId('1300');
+        const cashAcct = acctId('1110');
+        const arAcct = acctId('1300');
         if (cashAcct) insJELine.run(jeRow.id, cashAcct, payAmount, 0, `نقدية — ${inv.num}`);
         if (arAcct) insJELine.run(jeRow.id, arAcct, 0, payAmount, `عملاء — ${inv.num}`);
       }
     }
   }
+
+  // JE for operating expenses (monthly rent, salaries, maintenance)
+  const expenseEntries = [
+    { desc: 'إيجار المصنع — يناير', acct: '5400', amount: 15000, day: 5 },
+    { desc: 'إيجار المصنع — فبراير', acct: '5400', amount: 15000, day: 35 },
+    { desc: 'إيجار المصنع — مارس', acct: '5400', amount: 15000, day: 63 },
+    { desc: 'رواتب يناير', acct: '5300', amount: 45000, day: 28 },
+    { desc: 'رواتب فبراير', acct: '5300', amount: 45000, day: 56 },
+    { desc: 'رواتب مارس', acct: '5300', amount: 47000, day: 84 },
+    { desc: 'صيانة معدات', acct: '5500', amount: 3500, day: 22 },
+    { desc: 'مصروفات إدارية — يناير', acct: '5200', amount: 8000, day: 10 },
+    { desc: 'مصروفات إدارية — فبراير', acct: '5200', amount: 7500, day: 40 },
+    { desc: 'مصروفات إدارية — مارس', acct: '5200', amount: 9000, day: 70 },
+  ];
+  if (hasJELines) {
+    for (const exp of expenseEntries) {
+      const entryNum = `JE-2026-${pad(jeNum++)}`;
+      const expDate = addDays(SEED_START, exp.day);
+      insJE.run(entryNum, dd(expDate), exp.desc, '', 'posted', userIds[0], dt(expDate));
+      const jeRow = db.prepare('SELECT id FROM journal_entries WHERE entry_number=?').get(entryNum);
+      if (jeRow) {
+        const insJELine = db.prepare(`INSERT OR IGNORE INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?,?,?,?,?)`);
+        const expAcct = acctId(exp.acct);
+        const cashAcct = acctId('1110');
+        if (expAcct) insJELine.run(jeRow.id, expAcct, exp.amount, 0, exp.desc);
+        if (cashAcct) insJELine.run(jeRow.id, cashAcct, 0, exp.amount, `دفع — ${exp.desc}`);
+      }
+    }
+  }
+
+  // JE for initial capital injection
+  if (hasJELines) {
+    const capEntry = `JE-2026-${pad(jeNum++)}`;
+    const capDate = addDays(SEED_START, 0);
+    insJE.run(capEntry, dd(capDate), 'رأس المال المؤسس', '', 'posted', userIds[0], dt(capDate));
+    const jeRow = db.prepare('SELECT id FROM journal_entries WHERE entry_number=?').get(capEntry);
+    if (jeRow) {
+      const insJELine = db.prepare(`INSERT OR IGNORE INTO journal_entry_lines (entry_id, account_id, debit, credit, description) VALUES (?,?,?,?,?)`);
+      const cashAcct = acctId('1110');
+      const capAcct = acctId('3100');
+      if (cashAcct) insJELine.run(jeRow.id, cashAcct, 500000, 0, 'إيداع رأس المال');
+      if (capAcct) insJELine.run(jeRow.id, capAcct, 0, 500000, 'رأس المال المؤسس');
+    }
+  }
+
   console.log(`    ✓ ${db.prepare('SELECT COUNT(*) as c FROM journal_entries').get().c} journal entries`);
 
   // ─── 14. QUALITY CHECKS ───────────────────────────

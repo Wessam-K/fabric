@@ -24,7 +24,7 @@
 
 ---
 
-## Permission Modules (26 modules, ~80 permissions)
+## Permission Modules (26 modules + V59 exports/deletes, ~130 permissions)
 
 | Module | Actions | Seeded in | Role Permissions Seeded |
 |---|---|---|---|
@@ -63,6 +63,45 @@
 | documents | view, create, edit, delete | V22 | ✅ |
 | backups | view, create, edit, delete | V22 | ✅ |
 
+### V59 — Export Permissions (13 definitions)
+
+| Module | Action | Roles Granted |
+|---|---|---|
+| exports | execute | superadmin, manager, accountant, production, hr |
+| models | export | superadmin, manager, production |
+| fabrics | export | superadmin, manager, production |
+| accessories | export | superadmin, manager, production |
+| work_orders | export | superadmin, manager, production |
+| invoices | export | superadmin, manager, accountant |
+| suppliers | export | superadmin, manager, accountant |
+| purchase_orders | export | superadmin, manager, accountant |
+| inventory | export | superadmin, manager, production |
+| hr | export | superadmin, manager, hr |
+| payroll | export | superadmin, manager, hr |
+| customers | export | superadmin, manager, accountant |
+| expenses | export | superadmin, manager, accountant |
+
+### V59 — Delete Permissions (16 definitions)
+
+| Module | Action | Roles Granted |
+|---|---|---|
+| models | delete | superadmin, manager |
+| fabrics | delete | superadmin, manager |
+| accessories | delete | superadmin, manager |
+| work_orders | delete | superadmin, manager |
+| invoices | delete | superadmin, manager |
+| suppliers | delete | superadmin, manager |
+| purchase_orders | delete | superadmin, manager |
+| customers | delete | superadmin, manager |
+| hr | delete | superadmin, manager, hr |
+| expenses | delete | superadmin, manager, accountant |
+| maintenance | delete | superadmin, manager |
+| mrp | delete | superadmin, manager |
+| shipping | delete | superadmin, manager |
+| scheduling | delete | superadmin, manager |
+| quality | delete | superadmin, manager |
+| quotations | delete | superadmin, manager |
+
 ---
 
 ## Issues Found & Fixed
@@ -95,6 +134,15 @@
 | Endpoints with inline role check | 8 | ⚠️ Functional but inconsistent |
 | Endpoints with `requireAuth` only | 6 | ⚠️ Own-data only (safe) |
 | **Total API endpoints** | **310+** | **99%+ protected** |
+
+---
+
+## V59 Changes Summary
+
+- **Export guard**: `router.use(requirePermission('exports', 'execute'))` on all 19 export endpoints
+- **Granular export permissions**: 10 module-level `export` actions, role-appropriate assignments
+- **Delete permissions**: 16 modules seeded with `delete` action, replaces global DELETE-blocking middleware
+- **Frontend integration**: ExportsCenter.jsx filters by permission with lock icons; Permissions.jsx shows new actions
 
 ---
 

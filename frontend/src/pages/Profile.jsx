@@ -29,8 +29,8 @@ export default function Profile() {
   const [prefs, setPrefs] = useState({ language: 'ar', notifications_enabled: 'true', items_per_page: '25' });
 
   useEffect(() => {
-    api.get('/auth/profile').then(r => setProfile(r.data)).catch(() => {}).finally(() => setLoading(false));
-    api.get('/sessions').then(r => setSessions(r.data)).catch(() => {}).finally(() => setSessionsLoading(false));
+    api.get('/auth/profile').then(r => setProfile(r.data)).catch(e => console.error('Profile load failed:', e.message)).finally(() => setLoading(false));
+    api.get('/sessions').then(r => setSessions(r.data)).catch(e => console.error('Sessions load failed:', e.message)).finally(() => setSessionsLoading(false));
     // Load preferences
     Promise.all(['language', 'notifications_enabled', 'items_per_page'].map(k =>
       api.get(`/users/preferences/${k}`).then(r => [k, r.data.value]).catch(() => [k, null])
@@ -42,11 +42,11 @@ export default function Profile() {
   }, []);
 
   const revokeSession = (id) => {
-    api.delete(`/sessions/${id}`).then(() => setSessions(prev => prev.filter(s => s.id !== id))).catch(() => {});
+    api.delete(`/sessions/${id}`).then(() => setSessions(prev => prev.filter(s => s.id !== id))).catch(e => console.error('Session revoke failed:', e.message));
   };
 
   const revokeAllSessions = () => {
-    api.delete('/sessions').then(() => setSessions([])).catch(() => {});
+    api.delete('/sessions').then(() => setSessions([])).catch(e => console.error('Sessions revoke failed:', e.message));
   };
 
   const savePref = async (key, value) => {

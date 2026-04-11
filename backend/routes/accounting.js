@@ -441,6 +441,82 @@ router.get('/aged-payables', requirePermission('accounting', 'view'), (req, res)
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 
+// GET /api/accounting/cash-flow — Cash Flow Statement (indirect method)
+router.get('/cash-flow', requirePermission('accounting', 'view'), (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromDate = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    const toDate = to || new Date().toISOString().slice(0, 10);
+
+    // Net income from income statement
+    const revTotal = db.prepare(`
+      SELECT COALESCE(SUM(jl.credit - jl.debit), 0) as v
+      FROM journal_entry_lines jl JOIN chart_of_accounts c ON c.id=jl.account_id
+      JOIN journal_entries je ON je.id=jl.entry_id
+      WHERE c.type='revenue' AND je.status='posted' AND je.entry_date BETWEEN ? AND ?
+    `).get(fromDate, toDate).v;
+    const expTotal = db.prepare(`
+      SELECT COALESCE(SUM(jl.debit - jl.credit), 0) as v
+      FROM journal_entry_lines jl JOIN chart_of_accounts c ON c.id=jl.account_id
+      JOIN journal_entries je ON je.id=jl.entry_id
+      WHERE c.type='expense' AND je.status='posted' AND je.entry_date BETWEEN ? AND ?
+    `).get(fromDate, toDate).v;
+    const netIncome = revTotal - expTotal;
+
+    // Operating activities: changes in current asset/liability accounts (codes starting with 1 or 2)
+    const getAccountChanges = (codePrefix, type) => db.prepare(`
+      SELECT c.id, c.code, c.name_ar,
+        COALESCE(SUM(jl.debit), 0) as total_debit,
+        COALESCE(SUM(jl.credit), 0) as total_credit
+      FROM chart_of_accounts c
+      LEFT JOIN journal_entry_lines jl ON c.id = jl.account_id
+        AND jl.entry_id IN (SELECT id FROM journal_entries WHERE status='posted' AND entry_date BETWEEN ? AND ?)
+      WHERE c.type = ? AND c.code LIKE ? AND c.is_active = 1
+      GROUP BY c.id HAVING (total_debit != 0 OR total_credit != 0)
+      ORDER BY c.code
+    `).all(fromDate, toDate, type, codePrefix + '%');
+
+    const currentAssets = getAccountChanges('1', 'asset').filter(a => !a.code.startsWith('15')); // exclude fixed assets
+    const currentLiabilities = getAccountChanges('2', 'liability');
+
+    // Changes in working capital
+    const workingCapitalChanges = [
+      ...currentAssets.map(a => ({ ...a, change: -(a.total_debit - a.total_credit) })),
+      ...currentLiabilities.map(a => ({ ...a, change: a.total_credit - a.total_debit })),
+    ];
+    const totalWorkingCapital = workingCapitalChanges.reduce((s, a) => s + a.change, 0);
+
+    // Cash from operations
+    const cashFromOperations = netIncome + totalWorkingCapital;
+
+    // Investing activities: fixed asset accounts (code starting with 15)
+    const fixedAssets = getAccountChanges('15', 'asset');
+    const totalInvesting = fixedAssets.reduce((s, a) => s + -(a.total_debit - a.total_credit), 0);
+
+    // Financing: equity account changes
+    const equityChanges = getAccountChanges('3', 'equity');
+    const totalFinancing = equityChanges.reduce((s, a) => s + (a.total_credit - a.total_debit), 0);
+
+    // Cash movement from bank/cash accounts (1xxx accounts that are actual cash/bank)
+    const cashAccounts = getAccountChanges('11', 'asset');
+    const netCashChange = cashAccounts.reduce((s, a) => s + (a.total_debit - a.total_credit), 0);
+
+    res.json({
+      period: { from: fromDate, to: toDate },
+      net_income: Math.round(netIncome * 100) / 100,
+      operating: {
+        working_capital_changes: workingCapitalChanges,
+        total_working_capital: Math.round(totalWorkingCapital * 100) / 100,
+        total: Math.round(cashFromOperations * 100) / 100,
+      },
+      investing: { accounts: fixedAssets, total: Math.round(totalInvesting * 100) / 100 },
+      financing: { accounts: equityChanges, total: Math.round(totalFinancing * 100) / 100 },
+      net_cash_change: Math.round((cashFromOperations + totalInvesting + totalFinancing) * 100) / 100,
+      cash_accounts: cashAccounts,
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
+});
+
 // POST /api/accounting/period-close — Close accounting period
 router.post('/period-close', requirePermission('accounting', 'post'), (req, res) => {
   try {

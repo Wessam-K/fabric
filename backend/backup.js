@@ -30,6 +30,25 @@ function backup() {
   } catch {}
 
   fs.copyFileSync(DB_PATH, backupFile);
+
+  // V59: Verify backup integrity
+  try {
+    const BetterSqlite3 = require('better-sqlite3');
+    const backupDb = new BetterSqlite3(backupFile, { readonly: true });
+    const check = backupDb.pragma('quick_check');
+    backupDb.close();
+    if (!check || !check.length || check[0].quick_check !== 'ok') {
+      console.error('Backup integrity check FAILED — removing corrupt backup');
+      fs.unlinkSync(backupFile);
+      process.exit(1);
+    }
+    console.log('Backup integrity verified: OK');
+  } catch (err) {
+    console.error('Backup integrity check error:', err.message);
+    fs.unlinkSync(backupFile);
+    process.exit(1);
+  }
+
   console.log(`Backup created: ${backupFile}`);
 
   // Copy WAL file if exists

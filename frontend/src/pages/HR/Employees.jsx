@@ -43,7 +43,7 @@ export default function Employees() {
     api.get('/hr/employees', { params }).then(r => {
       setEmployees(r.data.data || r.data.employees);
       setKpi(r.data.kpi);
-    }).catch(() => {});
+    }).catch(e => console.error('Employees load failed:', e.message));
   }
 
   async function openCreate() {

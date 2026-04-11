@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowRight, Play, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker, Printer, XCircle } from 'lucide-react';
+import { ArrowRight, Play, Edit2, Scissors, Package, DollarSign, Layers, FileText, Receipt, Plus, CheckCircle, AlertTriangle, History, Beaker, Printer, XCircle, ClipboardCheck } from 'lucide-react';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
@@ -35,6 +35,7 @@ function ConfirmModal({ open, title, message, confirmLabel = 'تأكيد', confi
 }
 const TABS = [
   { key: 'stages', label: 'المراحل / WIP', icon: Layers },
+  { key: 'qc', label: 'فحص الجودة', icon: ClipboardCheck },
   { key: 'materials', label: 'المواد والتكلفة', icon: Beaker },
   { key: 'fabrics', label: 'الأقمشة والدفعات', icon: Scissors },
   { key: 'accessories', label: 'الاكسسوارات', icon: Package },
@@ -364,6 +365,106 @@ export default function WorkOrderDetail() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === 'qc' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl shadow-sm p-5">
+                <h3 className="text-sm font-bold text-[#1a1a2e] mb-4 flex items-center gap-2">
+                  <ClipboardCheck size={16} className="text-green-500" /> ملخص فحص الجودة
+                </h3>
+                {wo.stages?.length > 0 ? (
+                  <div className="space-y-3">
+                    {/* Overall QC summary */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      <div className="bg-green-50 rounded-xl p-3 text-center">
+                        <p className="text-xs text-gray-500">القطع المقبولة</p>
+                        <p className="text-lg font-bold font-mono text-green-600">
+                          {wo.stages.reduce((s, st) => s + (st.quantity_completed || 0), 0)}
+                        </p>
+                      </div>
+                      <div className="bg-red-50 rounded-xl p-3 text-center">
+                        <p className="text-xs text-gray-500">القطع المرفوضة</p>
+                        <p className="text-lg font-bold font-mono text-red-600">
+                          {wo.stages.reduce((s, st) => s + (st.quantity_rejected || 0), 0)}
+                        </p>
+                      </div>
+                      <div className="bg-blue-50 rounded-xl p-3 text-center">
+                        <p className="text-xs text-gray-500">نسبة القبول</p>
+                        <p className="text-lg font-bold font-mono text-blue-600">
+                          {(() => {
+                            const total = wo.stages.reduce((s, st) => s + (st.quantity_completed || 0) + (st.quantity_rejected || 0), 0);
+                            const passed = wo.stages.reduce((s, st) => s + (st.quantity_completed || 0), 0);
+                            return total > 0 ? `${((passed / total) * 100).toFixed(1)}%` : '—';
+                          })()}
+                        </p>
+                      </div>
+                      <div className="bg-yellow-50 rounded-xl p-3 text-center">
+                        <p className="text-xs text-gray-500">قيد الفحص</p>
+                        <p className="text-lg font-bold font-mono text-yellow-600">
+                          {wo.stages.reduce((s, st) => s + (st.quantity_in_stage || 0), 0)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Per-stage QC table */}
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-right text-xs text-gray-500">المرحلة</th>
+                          <th className="px-4 py-2 text-center text-xs text-gray-500">الكمية الكلية</th>
+                          <th className="px-4 py-2 text-center text-xs text-gray-500">مكتمل</th>
+                          <th className="px-4 py-2 text-center text-xs text-gray-500">مرفوض</th>
+                          <th className="px-4 py-2 text-center text-xs text-gray-500">في المرحلة</th>
+                          <th className="px-4 py-2 text-center text-xs text-gray-500">نسبة القبول</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {wo.stages.map(st => {
+                          const total = (st.quantity_completed || 0) + (st.quantity_rejected || 0);
+                          const passRate = total > 0 ? ((st.quantity_completed || 0) / total * 100).toFixed(1) : null;
+                          return (
+                            <tr key={st.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                              <td className="px-4 py-2 font-bold text-[#1a1a2e]">{st.stage_name}</td>
+                              <td className="px-4 py-2 text-center font-mono">{st.quantity_assigned || 0}</td>
+                              <td className="px-4 py-2 text-center font-mono text-green-600">{st.quantity_completed || 0}</td>
+                              <td className="px-4 py-2 text-center font-mono text-red-600">{st.quantity_rejected || 0}</td>
+                              <td className="px-4 py-2 text-center font-mono text-blue-600">{st.quantity_in_stage || 0}</td>
+                              <td className="px-4 py-2 text-center">
+                                {passRate !== null ? (
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${parseFloat(passRate) >= 95 ? 'bg-green-100 text-green-700' : parseFloat(passRate) >= 80 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                                    {passRate}%
+                                  </span>
+                                ) : <span className="text-gray-300">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+
+                    {/* Rejection reasons from movement log */}
+                    {wo.movement_log?.filter(l => l.qty_rejected > 0).length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-xs font-bold text-red-600 mb-2">سجل الرفض</h4>
+                        <div className="space-y-1">
+                          {wo.movement_log.filter(l => l.qty_rejected > 0).map(l => (
+                            <div key={l.id} className="flex items-center gap-2 text-xs bg-red-50 rounded-lg p-2">
+                              <span className="font-bold">{l.from_stage_name}</span>
+                              <span className="font-mono text-red-600">-{l.qty_rejected}</span>
+                              {l.rejection_reason && <span className="text-gray-500">({l.rejection_reason})</span>}
+                              <span className="mr-auto text-[10px] text-gray-400">{new Date(l.moved_at).toLocaleString('ar-EG')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm text-center py-8">لا توجد مراحل حتى الآن</p>
+                )}
+              </div>
             </div>
           )}
 

@@ -21,6 +21,15 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    # V59: Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '2.0'
+        reservations:
+          memory: 256m
+          cpus: '0.5'
 
   nginx:
     image: nginx:alpine
@@ -35,6 +44,12 @@ services:
       wk-factory:
         condition: service_healthy
     restart: unless-stopped
+    # V59: Nginx resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
 
 volumes:
   wk-data:

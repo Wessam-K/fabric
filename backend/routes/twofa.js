@@ -1,10 +1,12 @@
 /**
  * Phase 1.7: Two-Factor Authentication (TOTP) routes
  * Uses otplib for TOTP generation/verification and qrcode for QR code generation
+ * V59: Backup codes are bcrypt-hashed before storage
  */
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const db = require('../database');
 const { requireAuth, logAudit } = require('../middleware/auth');
 
@@ -39,9 +41,10 @@ router.post('/setup', requireAuth, async (req, res) => {
       qrDataUrl = await QRCode.toDataURL(otpauth);
     }
 
-    // Generate backup codes
+    // Generate backup codes — show plaintext to user, store hashed
     const backupCodes = Array.from({ length: 8 }, () => crypto.randomBytes(4).toString('hex'));
-    db.prepare('UPDATE users SET totp_backup_codes = ? WHERE id = ?').run(JSON.stringify(backupCodes), user.id);
+    const hashedCodes = await Promise.all(backupCodes.map(c => bcrypt.hash(c, 10)));
+    db.prepare('UPDATE users SET totp_backup_codes = ? WHERE id = ?').run(JSON.stringify(hashedCodes), user.id);
 
     res.json({ secret, otpauth, qr: qrDataUrl, backup_codes: backupCodes });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
@@ -68,7 +71,7 @@ router.post('/verify', requireAuth, (req, res) => {
 });
 
 // POST /api/auth/2fa/disable — disable 2FA
-router.post('/disable', requireAuth, (req, res) => {
+router.post('/disable', requireAuth, async (req, res) => {
   if (!authenticator) return res.status(501).json({ error: '2FA not available' });
   try {
     const { code, password } = req.body;
@@ -87,13 +90,15 @@ router.post('/disable', requireAuth, (req, res) => {
     if (code && authenticator.check(code, user.totp_secret)) {
       valid = true;
     } else if (code) {
-      // Check backup codes
+      // Check backup codes (hashed with bcrypt)
       const backups = JSON.parse(user.totp_backup_codes || '[]');
-      const idx = backups.indexOf(code);
-      if (idx !== -1) {
-        backups.splice(idx, 1);
-        db.prepare('UPDATE users SET totp_backup_codes = ? WHERE id = ?').run(JSON.stringify(backups), user.id);
-        valid = true;
+      for (let i = 0; i < backups.length; i++) {
+        if (await bcrypt.compare(code, backups[i])) {
+          backups.splice(i, 1);
+          db.prepare('UPDATE users SET totp_backup_codes = ? WHERE id = ?').run(JSON.stringify(backups), user.id);
+          valid = true;
+          break;
+        }
       }
     }
     if (!valid) return res.status(400).json({ error: 'رمز التحقق غير صحيح' });

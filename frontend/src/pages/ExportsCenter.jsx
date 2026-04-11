@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Download, FileSpreadsheet, FileText, Search, Calendar, Loader2, CheckCircle, AlertTriangle, Users, Scissors, Package, DollarSign, TrendingUp, Warehouse, CreditCard, UserCheck, Receipt, Settings, Layers, Factory } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Search, Calendar, Loader2, CheckCircle, AlertTriangle, Users, Scissors, Package, DollarSign, TrendingUp, Warehouse, CreditCard, UserCheck, Receipt, Settings, Layers, Factory, Lock } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 import HelpButton from '../components/HelpButton';
 
 const ICON_MAP = {
@@ -33,8 +34,31 @@ const CATEGORY_MAP = {
 
 const CATEGORIES = ['الإنتاج', 'المخزون والمواد', 'الموردين والمشتريات', 'المالية', 'المبيعات', 'الجودة', 'الموارد البشرية', 'الماكينات', 'شامل'];
 
+// V59: Map export keys to required granular permissions
+const EXPORT_PERM_MAP = {
+  'suppliers': 'exports_suppliers',
+  'fabric-usage': 'exports_fabrics',
+  'accessory-usage': 'exports_accessories',
+  'inventory-valuation': 'exports_fabrics',
+  'wo-cost-breakdown': 'exports_workorders',
+  'model-profitability': 'exports_reports',
+  'stage-progress': 'exports_workorders',
+  'production-timeline': 'exports_workorders',
+  'waste-analysis': 'exports_workorders',
+  'po-by-supplier': 'exports_purchaseorders',
+  'purchase-summary': 'exports_purchaseorders',
+  'financial-summary': 'exports_accounting',
+  'customers': 'exports_customers',
+  'quality-report': 'exports_reports',
+  'payroll': 'exports_payroll',
+  'employees': 'exports_hr',
+  'machines': 'exports_reports',
+  'full-export': 'exports_accounting',
+};
+
 export default function ExportsCenter() {
   const toast = useToast();
+  const { can } = useAuth();
   const [catalog, setCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState({});
@@ -85,6 +109,10 @@ export default function ExportsCenter() {
     if (search && !item.label.includes(search) && !item.description.includes(search) && !item.key.includes(search)) return false;
     if (activeCategory && CATEGORY_MAP[item.key] !== activeCategory) return false;
     return true;
+  }).map(item => {
+    const permModule = EXPORT_PERM_MAP[item.key];
+    const hasPermission = !permModule || can(permModule, 'execute');
+    return { ...item, hasPermission };
   });
 
   const grouped = {};
@@ -148,27 +176,28 @@ export default function ExportsCenter() {
               const IconComp = ICON_MAP[item.icon] || FileText;
               const csvKey = `${item.key}-csv`;
               const xlsxKey = `${item.key}-xlsx`;
+              const locked = !item.hasPermission;
               return (
-                <div key={item.key} className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition group">
+                <div key={item.key} className={`bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition group ${locked ? 'opacity-60' : ''}`}>
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#c9a84c]/10 text-[#c9a84c] flex items-center justify-center flex-shrink-0">
-                      <IconComp size={20} />
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${locked ? 'bg-gray-100 text-gray-400' : 'bg-[#c9a84c]/10 text-[#c9a84c]'}`}>
+                      {locked ? <Lock size={20} /> : <IconComp size={20} />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-[#1a1a2e] text-sm">{item.label}</h3>
-                      <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{item.description}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{locked ? 'يتطلب صلاحية التصدير' : item.description}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-50">
                     {!item.excelOnly && (
-                      <button onClick={() => handleDownload(item.key, 'csv')} disabled={downloading[csvKey]}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-xl text-xs font-medium text-gray-600 transition disabled:opacity-40">
+                      <button onClick={() => handleDownload(item.key, 'csv')} disabled={downloading[csvKey] || locked}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-xl text-xs font-medium text-gray-600 transition disabled:opacity-40 disabled:cursor-not-allowed">
                         {downloading[csvKey] ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
                         CSV
                       </button>
                     )}
-                    <button onClick={() => handleDownload(item.key, 'xlsx')} disabled={downloading[xlsxKey]}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#c9a84c]/10 hover:bg-[#c9a84c]/20 rounded-xl text-xs font-medium text-[#c9a84c] transition disabled:opacity-40">
+                    <button onClick={() => handleDownload(item.key, 'xlsx')} disabled={downloading[xlsxKey] || locked}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#c9a84c]/10 hover:bg-[#c9a84c]/20 rounded-xl text-xs font-medium text-[#c9a84c] transition disabled:opacity-40 disabled:cursor-not-allowed">
                       {downloading[xlsxKey] ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
                       Excel
                     </button>

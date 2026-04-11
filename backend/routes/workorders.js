@@ -116,8 +116,15 @@ function calculateWOCost(woId) {
 // ═══════════════════════════════════════════════
 // HELPER: get full work order with all nested data
 // ═══════════════════════════════════════════════
+// V59: Cached prepared statements for getFullWO (avoids re-parsing SQL each call)
+const _woStmts = {};
+function woStmt(key, sql) {
+  if (!_woStmts[key]) _woStmts[key] = db.prepare(sql);
+  return _woStmts[key];
+}
+
 function getFullWO(id) {
-  const wo = db.prepare(`
+  const wo = woStmt('main', `
     SELECT wo.*, m.model_code, m.model_name, m.model_image, m.category,
       bt.template_name
     FROM work_orders wo
@@ -127,19 +134,19 @@ function getFullWO(id) {
   `).get(id);
   if (!wo) return null;
 
-  wo.fabrics = db.prepare(`
+  wo.fabrics = woStmt('fabrics', `
     SELECT wf.*, f.name as fabric_name, f.price_per_m, f.fabric_type, f.image_path as fabric_image, f.color as fabric_color
     FROM wo_fabrics wf LEFT JOIN fabrics f ON f.code = wf.fabric_code
     WHERE wf.wo_id=? ORDER BY wf.sort_order, wf.role
   `).all(id);
 
-  wo.accessories = db.prepare(`
+  wo.accessories = woStmt('accessories', `
     SELECT wa.*, a.name as registry_name, a.unit as registry_unit
     FROM wo_accessories wa LEFT JOIN accessories a ON a.code = wa.accessory_code
     WHERE wa.wo_id=?
   `).all(id);
 
-  wo.fabric_batches = db.prepare(`
+  wo.fabric_batches = woStmt('fabric_batches', `
     SELECT wfb.*, f.name as fabric_name, f.fabric_type, f.image_path as fabric_image,
       fib.batch_code, fib.available_meters as batch_available, fib.batch_status,
       s.name as supplier_name, po.po_number
@@ -151,29 +158,29 @@ function getFullWO(id) {
     WHERE wfb.wo_id=? ORDER BY wfb.sort_order, wfb.role
   `).all(id);
 
-  wo.accessories_detail = db.prepare(`
+  wo.accessories_detail = woStmt('acc_detail', `
     SELECT wad.*, a.name as registry_name, a.unit as registry_unit
     FROM wo_accessories_detail wad LEFT JOIN accessories a ON a.code = wad.accessory_code
     WHERE wad.wo_id=?
   `).all(id);
 
-  wo.sizes = db.prepare('SELECT * FROM wo_sizes WHERE wo_id=?').all(id);
-  wo.stages = db.prepare(`
+  wo.sizes = woStmt('sizes', 'SELECT * FROM wo_sizes WHERE wo_id=?').all(id);
+  wo.stages = woStmt('stages', `
     SELECT ws.*, st.color as stage_color, mac.name as machine_name, mac.barcode as machine_barcode
     FROM wo_stages ws
     LEFT JOIN stage_templates st ON st.name = ws.stage_name
     LEFT JOIN machines mac ON mac.id = ws.machine_id
     WHERE ws.wo_id=? ORDER BY ws.sort_order
   `).all(id);
-  wo.extra_expenses = db.prepare('SELECT * FROM wo_extra_expenses WHERE wo_id=? ORDER BY recorded_at').all(id);
-  wo.partial_invoices = db.prepare('SELECT * FROM partial_invoices WHERE wo_id=? ORDER BY created_at').all(id);
+  wo.extra_expenses = woStmt('expenses', 'SELECT * FROM wo_extra_expenses WHERE wo_id=? ORDER BY recorded_at').all(id);
+  wo.partial_invoices = woStmt('partials', 'SELECT * FROM partial_invoices WHERE wo_id=? ORDER BY created_at').all(id);
   wo.cost_summary = calculateWOCost(id);
 
   // V7: Movement log
-  wo.movement_log = db.prepare('SELECT * FROM stage_movement_log WHERE wo_id=? ORDER BY moved_at DESC').all(id);
+  wo.movement_log = woStmt('movelog', 'SELECT * FROM stage_movement_log WHERE wo_id=? ORDER BY moved_at DESC').all(id);
 
   // V8: Fabric consumption
-  wo.fabric_consumption = db.prepare(`
+  wo.fabric_consumption = woStmt('fab_consume', `
     SELECT wfc.*, f.name as fabric_name, f.color as fabric_color, f.fabric_type,
       po.po_number, fib.batch_code
     FROM wo_fabric_consumption wfc
@@ -185,7 +192,7 @@ function getFullWO(id) {
   `).all(id);
 
   // V8: Accessory consumption
-  wo.accessory_consumption = db.prepare(`
+  wo.accessory_consumption = woStmt('acc_consume', `
     SELECT wac.*, a.name as accessory_name, a.unit as accessory_unit
     FROM wo_accessory_consumption wac
     LEFT JOIN accessories a ON a.id = wac.accessory_id OR a.code = wac.accessory_code
@@ -193,20 +200,26 @@ function getFullWO(id) {
   `).all(id);
 
   // V8: Waste records
-  wo.waste_records = db.prepare('SELECT * FROM wo_waste WHERE work_order_id=? ORDER BY recorded_at DESC').all(id);
+  wo.waste_records = woStmt('waste', 'SELECT * FROM wo_waste WHERE work_order_id=? ORDER BY recorded_at DESC').all(id);
 
   // V8: WO invoices bridge
-  wo.wo_invoices = db.prepare(`
+  wo.wo_invoices = woStmt('wo_inv', `
     SELECT wi.*, i.invoice_number, i.status as invoice_status, i.total as invoice_total
     FROM wo_invoices wi LEFT JOIN invoices i ON i.id = wi.invoice_id
     WHERE wi.work_order_id = ?
     ORDER BY wi.created_at
   `).all(id);
 
-  // V8: Consumption cost summaries
-  wo.total_fabric_consumption_cost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_fabric_consumption WHERE work_order_id=?').get(id).v;
-  wo.total_accessory_consumption_cost = db.prepare('SELECT COALESCE(SUM(total_cost),0) as v FROM wo_accessory_consumption WHERE work_order_id=?').get(id).v;
-  wo.total_waste_cost = db.prepare('SELECT COALESCE(SUM(waste_cost),0) as v FROM wo_waste WHERE work_order_id=?').get(id).v;
+  // V59: Consolidated consumption cost summaries (3 queries → 1)
+  const costs = woStmt('costs', `
+    SELECT
+      (SELECT COALESCE(SUM(total_cost),0) FROM wo_fabric_consumption WHERE work_order_id=?) as fab,
+      (SELECT COALESCE(SUM(total_cost),0) FROM wo_accessory_consumption WHERE work_order_id=?) as acc,
+      (SELECT COALESCE(SUM(waste_cost),0) FROM wo_waste WHERE work_order_id=?) as wst
+  `).get(id, id, id);
+  wo.total_fabric_consumption_cost = costs.fab;
+  wo.total_accessory_consumption_cost = costs.acc;
+  wo.total_waste_cost = costs.wst;
 
   wo.stage_wip_summary = wo.stages.map(s => ({
     stage_id: s.id,
@@ -371,8 +384,14 @@ router.post('/', requirePermission('work_orders', 'create'), (req, res) => {
           totalPieces = useSizes.reduce((s, r) => s + (r.qty_s||0) + (r.qty_m||0) + (r.qty_l||0) + (r.qty_xl||0) + (r.qty_2xl||0) + (r.qty_3xl||0), 0);
         }
         const ins = db.prepare(`INSERT INTO wo_fabric_batches (wo_id,batch_id,fabric_code,role,planned_meters_per_piece,planned_total_meters,waste_pct,price_per_meter,planned_cost,color_note,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+        // V59: Batch-load all fabric batches at once (fixes N+1 query)
+        const batchIds = fabric_batches.map(fb => fb.batch_id);
+        const ph = batchIds.map(() => '?').join(',');
+        const batchMap = new Map(
+          db.prepare(`SELECT * FROM fabric_inventory_batches WHERE id IN (${ph})`).all(...batchIds).map(b => [b.id, b])
+        );
         for (const [i, fb] of fabric_batches.entries()) {
-          const batch = db.prepare('SELECT * FROM fabric_inventory_batches WHERE id=?').get(fb.batch_id);
+          const batch = batchMap.get(fb.batch_id);
           if (!batch) throw new Error(`الدفعة ${fb.batch_id} غير موجودة`);
           const plannedMPP = fb.planned_meters_per_piece || 1;
           const plannedTotal = plannedMPP * (totalPieces || 1);

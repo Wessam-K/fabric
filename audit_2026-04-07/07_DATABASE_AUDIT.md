@@ -10,7 +10,7 @@
 | ON DELETE CASCADE | 36 |
 | REAL monetary columns | 90+ |
 | SQL injection vulnerabilities | **0** |
-| Schema version | V54 (V55 added by this audit) |
+| Schema version | V59 (V55 from audit, V59 from security hardening) |
 
 ---
 
@@ -75,4 +75,24 @@ All 409 API endpoints use parameterized queries via `better-sqlite3`. Zero SQL i
 
 ## Migration Architecture
 
-Schema is managed inline in `initializeDatabase()` (V1-V54 with version checks), not traditional migration files. The 11 files in `/migrations/` are mostly baseline markers. This makes rollback impossible but simplifies fresh database creation.
+Schema is managed inline in `initializeDatabase()` (V1-V59 with version checks), not traditional migration files. The 11 files in `/migrations/` are mostly baseline markers. This makes rollback impossible but simplifies fresh database creation.
+
+---
+
+## V59 Migration (2026-04-10)
+
+Added in the V59 security hardening pass:
+
+| # | Change | Tables Affected |
+|---|---|---|
+| 1 | 13 export permission definitions (exports + 10 granular modules) | permission_definitions |
+| 2 | 16 delete permission definitions (all deletable modules) | permission_definitions |
+| 3 | Export role_permissions — per-role assignments (superadmin, manager, accountant, production, hr) | role_permissions |
+| 4 | Delete role_permissions — per-module assignments (superadmin, manager + module-appropriate roles) | role_permissions |
+| 5 | sales_orders permission definitions and role assignments | permission_definitions, role_permissions |
+
+**Characteristics:** All `INSERT OR IGNORE` — idempotent, no destructive changes, no schema DDL.
+
+**Startup checks added:**
+- `PRAGMA quick_check` at database open — exits if corrupt
+- Backup integrity verification via `PRAGMA quick_check` in readonly mode after copy

@@ -21,15 +21,22 @@ router.get('/', requirePermission('purchase_orders', 'view'), (req, res) => {
     if (search) { const s = `%${search}%`; q += ' AND (po.po_number LIKE ? OR s.name LIKE ?)'; p.push(s, s); }
     q += ' ORDER BY po.created_at DESC';
 
-    // Compute totals from full result set (using a lightweight query)
-    const countQ = q.replace(/SELECT po\.\*, s\.name as supplier_name, s\.code as supplier_code/, 'SELECT po.status, po.total_amount, po.paid_amount');
-    const allForTotals = db.prepare(countQ).all(...p);
+    // V59: Compute totals via SQL GROUP BY instead of JS reduce
+    const totalsQ = q.replace(
+      /SELECT po\.\*, s\.name as supplier_name, s\.code as supplier_code/,
+      `SELECT COUNT(*) as cnt,
+        COALESCE(SUM(CASE WHEN po.status='draft' THEN po.total_amount ELSE 0 END),0) as draft_total,
+        COALESCE(SUM(CASE WHEN po.status IN ('sent','partial') THEN po.total_amount ELSE 0 END),0) as pending_total,
+        COALESCE(SUM(CASE WHEN po.status='received' THEN po.total_amount ELSE 0 END),0) as received_total,
+        COALESCE(SUM(CASE WHEN po.status NOT IN ('cancelled','draft') THEN (po.total_amount - po.paid_amount) ELSE 0 END),0) as outstanding`
+    ).replace(/ ORDER BY po\.created_at DESC/, '');
+    const t = db.prepare(totalsQ).get(...p);
     const totals = {
-      total: allForTotals.length,
-      draft_total: allForTotals.filter(o => o.status === 'draft').reduce((s, o) => s + (o.total_amount || 0), 0),
-      pending_total: allForTotals.filter(o => o.status === 'sent' || o.status === 'partial').reduce((s, o) => s + (o.total_amount || 0), 0),
-      received_total: allForTotals.filter(o => o.status === 'received').reduce((s, o) => s + (o.total_amount || 0), 0),
-      outstanding: allForTotals.filter(o => o.status !== 'cancelled' && o.status !== 'draft').reduce((s, o) => s + (o.total_amount || 0) - (o.paid_amount || 0), 0),
+      total: t.cnt,
+      draft_total: t.draft_total,
+      pending_total: t.pending_total,
+      received_total: t.received_total,
+      outstanding: t.outstanding,
     };
 
     const { page, limit: lim } = req.query;

@@ -12,10 +12,17 @@ if (!JWT_SECRET || JWT_SECRET === 'wk-hub-secret-2026-change-in-prod') {
   } else {
     JWT_SECRET = crypto.randomBytes(64).toString('hex');
     try { fs.writeFileSync(secretFile, JWT_SECRET, { mode: 0o600 }); } catch {}
-    console.log('Generated new JWT_SECRET and saved to .jwt_secret');
+    console.warn('Generated new JWT_SECRET and saved to .jwt_secret');
   }
 }
-const JWT_EXPIRES = '24h';
+// Read JWT expiry from settings table, fallback to 24h
+function getJwtExpiry() {
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'jwt_expiry_hours'").get();
+    const hours = row ? parseInt(row.value, 10) : 24;
+    return (hours > 0 && hours <= 720) ? `${hours}h` : '24h';
+  } catch { return '24h'; }
+}
 
 // ── Phase 1.3: Persistent token blacklist (SQLite table) ──
 // Create revoked_tokens table if not exists
@@ -49,6 +56,7 @@ function isTokenRevoked(token) {
 }
 
 function generateToken(user) {
+  const JWT_EXPIRES = getJwtExpiry();
   return jwt.sign(
     { id: user.id, username: user.username, role: user.role, full_name: user.full_name },
     JWT_SECRET,
@@ -58,14 +66,21 @@ function generateToken(user) {
 
 // ── Phase 1.2: httpOnly cookie helpers ──
 const COOKIE_NAME = 'wk_token';
-const COOKIE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h — matches JWT_EXPIRES
+// Cookie max-age reads from settings too
+function getCookieMaxAge() {
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'jwt_expiry_hours'").get();
+    const hours = row ? parseInt(row.value, 10) : 24;
+    return (hours > 0 && hours <= 720) ? hours * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  } catch { return 24 * 60 * 60 * 1000; }
+}
 
 function setAuthCookie(res, token) {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production' && process.env.ELECTRON_APP !== '1',
     sameSite: 'lax',
-    maxAge: COOKIE_MAX_AGE,
+    maxAge: getCookieMaxAge(),
     path: '/',
   });
 }

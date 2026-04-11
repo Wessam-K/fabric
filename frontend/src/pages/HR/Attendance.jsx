@@ -82,8 +82,8 @@ export default function Attendance() {
   };
 
   function loadSummary() {
-    api.get(`/hr/attendance/summary/${month}`).then(r => setSummary(r.data)).catch(() => {});
-    api.get('/hr/attendance', { params: { month } }).then(r => setAttendance(r.data)).catch(() => {});
+    api.get(`/hr/attendance/summary/${month}`).then(r => setSummary(r.data)).catch(e => console.error('Attendance summary failed:', e.message));
+    api.get('/hr/attendance', { params: { month } }).then(r => setAttendance(r.data)).catch(e => console.error('Attendance load failed:', e.message));
   }
 
   async function handleImport(e) {

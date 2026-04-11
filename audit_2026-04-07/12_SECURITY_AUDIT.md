@@ -78,3 +78,17 @@
 | 6 | V55: Seeded inventory:edit permission | `database.js` | MEDIUM |
 | 7 | V55: Seeded reports:create/edit/delete permissions | `database.js` | MEDIUM |
 | 8 | V55: Seeded accounting role_permissions | `database.js` | MEDIUM |
+
+## V59 Security Fixes (2026-04-10)
+
+| # | Fix | File | Severity |
+|---|---|---|---|
+| 9 | 2FA backup codes: plaintext → bcrypt(10) hashing | `routes/twofa.js`, `routes/auth.js` | CRITICAL |
+| 10 | Webhook SSRF protection: validateWebhookUrl() with DNS + IP blocklist | `utils/webhooks.js`, `server.js` | CRITICAL |
+| 11 | WebSocket dev auth bypass removed (always requires JWT) | `utils/websocket.js` | HIGH |
+| 12 | Export endpoints gated with granular requirePermission | `routes/exports.js` | HIGH |
+| 13 | DELETE blocking replaced with 16 delete permission defs | `server.js`, `database.js` | HIGH |
+| 14 | EXPORT_MAX_ROWS limit (default 10,000) + X-Export-Truncated header | `routes/exports.js` | MEDIUM |
+| 15 | WebSocket message rate limiting (30 msgs/min) | `utils/websocket.js` | MEDIUM |
+| 16 | Database PRAGMA quick_check at startup | `database.js` | MEDIUM |
+| 17 | Backup integrity verification (PRAGMA quick_check in readonly) | `backup.js` | MEDIUM |

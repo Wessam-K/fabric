@@ -40,7 +40,7 @@ export default function Samples() {
   };
 
   useEffect(() => { load(); }, [page, statusFilter]);
-  useEffect(() => { api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(() => {}); }, []);
+  useEffect(() => { api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(e => console.error('Customers load failed:', e.message)); }, []);
 
   const openNew = async () => {
     try {

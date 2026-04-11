@@ -249,10 +249,10 @@ function InvoiceForm({ invoice, onClose, onSaved }) {
   useEffect(() => {
     if (!invoice) {
       api.get('/invoices/next-number').then(r => setNumber(r.data.next_number));
-      api.get('/settings').then(r => { const tax = r.data?.tax_rate; if (tax) setTaxPct(String(tax)); }).catch(() => {});
+      api.get('/settings').then(r => { const tax = r.data?.tax_rate; if (tax) setTaxPct(String(tax)); }).catch(e => console.error('Settings load failed:', e.message));
     }
     api.get('/models').then(r => setModels(r.data));
-    api.get('/customers').then(r => setCustomersList(r.data.customers || r.data || [])).catch(() => {});
+    api.get('/customers').then(r => setCustomersList(r.data.customers || r.data || [])).catch(e => console.error('Customers load failed:', e.message));
   }, []);
 
   const subtotal = items.reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0), 0);

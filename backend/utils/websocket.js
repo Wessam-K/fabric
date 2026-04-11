@@ -11,6 +11,7 @@ const jwt = require('jsonwebtoken');
 const AUTH_TIMEOUT_MS = 5000;      // 5 seconds to authenticate
 const MAX_CONN_PER_IP = 10;        // max connections per minute per IP
 const RATE_WINDOW_MS = 60 * 1000;  // 1 minute
+const MAX_MSG_PER_MIN = 30;        // V59: max messages per client per minute
 
 let wss = null;
 const clients = new Map(); // ws -> { userId, username, connectedAt, clientId, authenticated }
@@ -54,7 +55,7 @@ function initWebSocket(server) {
     }
 
     const clientId = crypto.randomUUID();
-    clients.set(ws, { clientId, connectedAt: new Date().toISOString(), authenticated: false, ip });
+    clients.set(ws, { clientId, connectedAt: new Date().toISOString(), authenticated: false, ip, msgCount: 0, msgWindowStart: Date.now() });
 
     // 5-second auth timeout — close if not authenticated
     const authTimer = setTimeout(() => {
@@ -67,6 +68,18 @@ function initWebSocket(server) {
     }, AUTH_TIMEOUT_MS);
 
     ws.on('message', (data) => {
+      // V59: Per-client message rate limiting
+      const client = clients.get(ws);
+      if (client) {
+        const now = Date.now();
+        if (now - client.msgWindowStart > RATE_WINDOW_MS) { client.msgCount = 0; client.msgWindowStart = now; }
+        client.msgCount++;
+        if (client.msgCount > MAX_MSG_PER_MIN) {
+          logger.warn('WebSocket message rate limit exceeded', { clientId, ip });
+          ws.close(1008, 'Message rate limit exceeded');
+          return;
+        }
+      }
       try {
         const msg = JSON.parse(data.toString());
         // Handle auth message — require JWT token, not just userId
@@ -85,15 +98,8 @@ function initWebSocket(server) {
                 ws.close(1008, 'Invalid token');
               }
             } else if (msg.userId) {
-              // Fallback: accept userId only in test/dev mode
-              if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
-                client.userId = msg.userId;
-                client.username = msg.username;
-                client.authenticated = true;
-                clearTimeout(authTimer);
-              } else {
-                ws.close(1008, 'Authentication token required');
-              }
+              // V59: Always require JWT — no plaintext userId fallback
+              ws.close(1008, 'Authentication token required');
             }
           }
         }

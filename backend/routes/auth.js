@@ -12,7 +12,7 @@ const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { e
 const resetPwLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: 'تم تجاوز عدد المحاولات المسموح، حاول لاحقًا' } });
 
 // POST /api/auth/login
-router.post('/login', loginLimiter, (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
@@ -64,13 +64,16 @@ router.post('/login', loginLimiter, (req, res) => {
         return res.status(500).json({ error: 'خطأ في نظام المصادقة الثنائية' });
       }
       if (!totpValid) {
-        // Check backup codes
+        // Check backup codes (V59: bcrypt-hashed)
         const backups = JSON.parse(user.totp_backup_codes || '[]');
-        const idx = backups.indexOf(totp_code);
-        if (idx !== -1) {
-          backups.splice(idx, 1);
-          db.prepare('UPDATE users SET totp_backup_codes = ? WHERE id = ?').run(JSON.stringify(backups), user.id);
-          totpValid = true;
+        const bcryptCheck = require('bcryptjs');
+        for (let i = 0; i < backups.length; i++) {
+          if (await bcryptCheck.compare(totp_code, backups[i])) {
+            backups.splice(i, 1);
+            db.prepare('UPDATE users SET totp_backup_codes = ? WHERE id = ?').run(JSON.stringify(backups), user.id);
+            totpValid = true;
+            break;
+          }
         }
       }
       if (!totpValid) {

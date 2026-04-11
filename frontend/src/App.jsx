@@ -21,6 +21,9 @@ const InvoiceView = lazy(() => import('./pages/InvoiceView'));
 const ChartOfAccounts = lazy(() => import('./pages/ChartOfAccounts'));
 const JournalEntries = lazy(() => import('./pages/JournalEntries'));
 const TrialBalance = lazy(() => import('./pages/TrialBalance'));
+const IncomeStatement = lazy(() => import('./pages/IncomeStatement'));
+const BalanceSheet = lazy(() => import('./pages/BalanceSheet'));
+const CashFlowStatement = lazy(() => import('./pages/CashFlowStatement'));
 const WorkOrdersList = lazy(() => import('./pages/WorkOrdersList'));
 const WorkOrderForm = lazy(() => import('./pages/WorkOrderForm'));
 const WorkOrderDetail = lazy(() => import('./pages/WorkOrderDetail'));
@@ -139,6 +142,9 @@ function RouteAwareHelpButton() {
     '/accounting/coa': 'chartofaccounts',
     '/accounting/journal': 'journalentries',
     '/accounting/trial-balance': 'trialbalance',
+    '/accounting/income-statement': 'income-statement',
+    '/accounting/balance-sheet': 'balance-sheet',
+    '/accounting/cash-flow': 'cash-flow',
     '/documents': 'documents',
     '/backups': 'backups',
     '/profile': 'profile',
@@ -207,12 +213,15 @@ function AppLayout() {
           <Route path="/expenses" element={<ProtectedRoute perm={['expenses','view']}><Expenses /></ProtectedRoute>} />
           <Route path="/purchase-orders" element={<ProtectedRoute perm={['purchase_orders','view']}><PurchaseOrders /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute perm={['reports','view']}><Reports /></ProtectedRoute>} />
-          <Route path="/exports" element={<ProtectedRoute perm={['reports','view']}><ExportsCenter /></ProtectedRoute>} />
+          <Route path="/exports" element={<ProtectedRoute perm={['exports','execute']}><ExportsCenter /></ProtectedRoute>} />
           <Route path="/import" element={<ProtectedRoute perm={['settings','view']}><ImportWizard /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute perm={['invoices','view']}><Invoices /></ProtectedRoute>} />
           <Route path="/accounting/coa" element={<ProtectedRoute perm={['accounting','view']}><ChartOfAccounts /></ProtectedRoute>} />
           <Route path="/accounting/journal" element={<ProtectedRoute perm={['accounting','view']}><JournalEntries /></ProtectedRoute>} />
           <Route path="/accounting/trial-balance" element={<ProtectedRoute perm={['accounting','view']}><TrialBalance /></ProtectedRoute>} />
+          <Route path="/accounting/income-statement" element={<ProtectedRoute perm={['accounting','view']}><IncomeStatement /></ProtectedRoute>} />
+          <Route path="/accounting/balance-sheet" element={<ProtectedRoute perm={['accounting','view']}><BalanceSheet /></ProtectedRoute>} />
+          <Route path="/accounting/cash-flow" element={<ProtectedRoute perm={['accounting','view']}><CashFlowStatement /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute perm={['settings','view']}><SettingsPage /></ProtectedRoute>} />
           <Route path="/users" element={<ProtectedRoute perm={['users','manage']}><UsersPage /></ProtectedRoute>} />
           <Route path="/permissions" element={<ProtectedRoute perm={['users','manage']}><Permissions /></ProtectedRoute>} />

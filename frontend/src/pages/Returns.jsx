@@ -54,7 +54,7 @@ function SalesReturnsTab() {
   };
 
   useEffect(() => { load(); }, [page]);
-  useEffect(() => { api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(() => {}); }, []);
+  useEffect(() => { api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(e => console.error('Customers load failed:', e.message)); }, []);
 
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { product_description: '', quantity: 1, unit_price: 0, reason: '' }] }));
   const removeItem = (i) => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
@@ -201,7 +201,7 @@ function PurchaseReturnsTab() {
   };
 
   useEffect(() => { load(); }, [page]);
-  useEffect(() => { api.get('/suppliers').then(r => setSuppliers(r.data?.data || r.data || [])).catch(() => {}); }, []);
+  useEffect(() => { api.get('/suppliers').then(r => setSuppliers(r.data?.data || r.data || [])).catch(e => console.error('Suppliers load failed:', e.message)); }, []);
 
   const addItem = () => setForm(f => ({ ...f, items: [...f.items, { product_description: '', quantity: 1, unit_price: 0, reason: '' }] }));
   const removeItem = (i) => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));

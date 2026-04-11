@@ -19,7 +19,7 @@ export default function ImportWizard() {
   const [jobStatus, setJobStatus] = useState(null);
 
   useEffect(() => {
-    api.get('/import/templates').then(r => setTemplates(r.data || [])).catch(() => {});
+    api.get('/import/templates').then(r => setTemplates(r.data || [])).catch(e => console.error('Import templates failed:', e.message));
   }, []);
 
   // Poll job progress

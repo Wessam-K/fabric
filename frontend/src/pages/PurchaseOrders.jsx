@@ -40,6 +40,8 @@ export default function PurchaseOrders() {
   // Receive workflow
   const [showReceive, setShowReceive] = useState(null);
   const [receiveItems, setReceiveItems] = useState([]);
+  const [showPayment, setShowPayment] = useState(null);
+  const [payForm, setPayForm] = useState({ amount: '', payment_method: 'bank_transfer', reference: '', notes: '' });
 
   const load = async () => {
     setLoading(true);
@@ -55,7 +57,7 @@ export default function PurchaseOrders() {
   };
 
   useEffect(() => { load(); }, [search, statusFilter]);
-  useEffect(() => { api.get('/settings').then(r => { const t = r.data?.tax_rate; if (t) setDefaultTax(String(t)); }).catch(() => {}); }, []);
+  useEffect(() => { api.get('/settings').then(r => { const t = r.data?.tax_rate; if (t) setDefaultTax(String(t)); }).catch(e => console.error('Settings load failed:', e.message)); }, []);
 
   const openCreate = async () => {
     try {
@@ -232,6 +234,7 @@ export default function PurchaseOrders() {
                   <th className="px-4 py-3 text-right text-xs text-gray-500">المورد</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">الحالة</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">الإجمالي</th>
+                  <th className="px-4 py-3 text-center text-xs text-gray-500">المدفوع</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">التوصيل المتوقع</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">التاريخ</th>
                   <th className="px-4 py-3 text-center text-xs text-gray-500">إجراءات</th>
@@ -253,6 +256,15 @@ export default function PurchaseOrders() {
                       <span className={`text-[10px] px-2 py-1 rounded-full ${STATUS_MAP[po.status]?.color}`}>{STATUS_MAP[po.status]?.label}</span>
                     </td>
                     <td className="px-4 py-3 text-center font-mono font-bold text-[#c9a84c]">{fmt(po.total_amount)} ج</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`font-mono text-xs ${(po.paid_amount || 0) >= po.total_amount ? 'text-green-600 font-bold' : (po.paid_amount || 0) > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                        {fmt(po.paid_amount || 0)} ج
+                      </span>
+                      {(po.paid_amount || 0) < po.total_amount && po.status !== 'cancelled' && po.status !== 'draft' && can('purchase_orders', 'edit') && (
+                        <button onClick={() => { setShowPayment(po); setPayForm({ amount: String(Math.round((po.total_amount - (po.paid_amount || 0)) * 100) / 100), payment_method: 'bank_transfer', reference: '', notes: '' }); }}
+                          className="text-[9px] px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded mr-1 hover:bg-purple-100">دفع</button>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-center text-xs text-gray-400">{po.expected_date ? fmtDateTime(po.expected_date) : '—'}</td>
                     <td className="px-4 py-3 text-center text-xs text-gray-400">{fmtDateTime(po.created_at)}</td>
                     <td className="px-4 py-3 text-center">
@@ -402,6 +414,61 @@ export default function PurchaseOrders() {
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowReceive(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
               <button onClick={handleReceive} className="px-5 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-bold flex items-center gap-1.5"><Package size={14} /> تأكيد الاستلام</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPayment && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowPayment(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-[#1a1a2e]">تسجيل دفعة — {showPayment.po_number}</h2>
+            <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
+              <div className="flex justify-between"><span className="text-gray-500">الإجمالي:</span><span className="font-mono font-bold">{fmt(showPayment.total_amount)} ج</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">المدفوع:</span><span className="font-mono text-green-600">{fmt(showPayment.paid_amount || 0)} ج</span></div>
+              <div className="flex justify-between font-bold"><span className="text-gray-700">المتبقي:</span><span className="font-mono text-red-600">{fmt(showPayment.total_amount - (showPayment.paid_amount || 0))} ج</span></div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">المبلغ</label>
+                <input type="number" step="0.01" min="0.01" max={showPayment.total_amount - (showPayment.paid_amount || 0)} value={payForm.amount}
+                  onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} className="form-input w-full font-mono" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">طريقة الدفع</label>
+                <select value={payForm.payment_method} onChange={e => setPayForm(f => ({ ...f, payment_method: e.target.value }))} className="form-input w-full">
+                  <option value="bank_transfer">تحويل بنكي</option>
+                  <option value="cash">نقدي</option>
+                  <option value="check">شيك</option>
+                  <option value="credit_card">بطاقة ائتمان</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">رقم المرجع</label>
+                <input type="text" value={payForm.reference} onChange={e => setPayForm(f => ({ ...f, reference: e.target.value }))} className="form-input w-full" placeholder="اختياري" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">ملاحظات</label>
+                <input type="text" value={payForm.notes} onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))} className="form-input w-full" placeholder="اختياري" />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowPayment(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">إلغاء</button>
+              <button onClick={async () => {
+                const amt = parseFloat(payForm.amount);
+                if (!amt || amt <= 0) return toast.error('المبلغ غير صحيح');
+                const balance = showPayment.total_amount - (showPayment.paid_amount || 0);
+                if (amt > balance + 0.01) return toast.error('المبلغ أكبر من المتبقي');
+                try {
+                  await api.post(`/purchase-orders/${showPayment.id}/payments`, { amount: amt, payment_method: payForm.payment_method, reference: payForm.reference, notes: payForm.notes });
+                  toast.success('تم تسجيل الدفعة بنجاح');
+                  setShowPayment(null);
+                  load();
+                } catch (err) { toast.error(err.response?.data?.error || 'فشل تسجيل الدفعة'); }
+              }} className="px-5 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-bold flex items-center gap-1.5">
+                <DollarSign size={14} /> تأكيد الدفع
+              </button>
             </div>
           </div>
         </div>

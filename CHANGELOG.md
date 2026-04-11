@@ -8,6 +8,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Comprehensive ERP Overhaul (2026-04-11)
+- **Financial Statements**: Income Statement, Balance Sheet, Cash Flow Statement — full frontend pages with KPI cards, date filtering, and Excel export
+- **Cash Flow Backend**: `GET /api/accounting/cash-flow` endpoint — indirect method with operating, investing, and financing activity sections
+- **Work Orders Pagination**: Full server-side pagination with numbered page controls (50 per page)
+- **Work Order QC Tab**: New quality control tab with acceptance rate cards, per-stage QC table, and rejection log
+- **Purchase Order Payments**: Inline payment column, payment modal with amount/method/reference/notes, calls `POST /:id/payments`
+- **Export Buttons**: Added to SalesOrders and Quotations pages (using enterprise exportExcel utility)
+- **Chart of Accounts Expansion**: Seed CoA expanded from 8 to 21 accounts (cash, bank, prepaid, equipment, vehicles, deferred revenue, VAT payable, equity, retained earnings, service revenue, salary/rent/maintenance expenses)
+- **Operating Expense JEs**: 10 monthly expense journal entries (rent ×3, salaries ×3, maintenance ×1, admin ×3) plus capital injection JE (500,000 EGP)
+- **Enterprise Excel Export**: Rewritten `exportExcel.js` — dark blue headers, gold font, auto-width columns, alternating row colors, freeze panes, auto-filter
+- **Export Translations**: New `exportTranslations.js` — 150+ Arabic column translations, status/priority mappings
+- **Sidebar Links**: Added Income Statement (قائمة الدخل), Balance Sheet (الميزانية العمومية), Cash Flow (التدفقات النقدية) under accounting section
+
+### Fixed — Comprehensive ERP Overhaul (2026-04-11)
+- **Auth logging**: `console.log` → `console.warn` for JWT secret generation (auth.js line 16)
+- **Seed JE references**: Fixed journal entry account codes to use correct CoA codes (inventory accounts for POs, AR+Revenue for invoices, Cash+AR for payments)
+
+### Added — V59 Security & Production Hardening (2026-04-10)
+- **Export RBAC**: 13 export permission definitions with granular per-module control (10 sub-modules), row bounding (EXPORT_MAX_ROWS), date filter defaults
+- **Delete RBAC**: 16 delete permission definitions with role-based assignments
+- **SSRF Protection**: `validateWebhookUrl()` with DNS resolution and private IP blocking (9 pattern categories)
+- **Data Integrity**: `PRAGMA quick_check` at startup; backup integrity verification after copy
+- **Server Timeouts**: Express 30s socket timeout, keepAlive 65s; Nginx proxy timeouts on API (30s) and WebSocket (300s)
+- **Structured Logging**: `console.error/warn` routed through Winston in production
+- **Observability**: Webhook log cleanup (30-day retention), WebSocket per-client message rate limiting (30/min), Docker resource limits
+- **V59 Security Tests**: 31 new tests for SSRF, bcrypt 2FA, export/delete permissions, backup integrity, cleanup
+
+### Fixed
+- **2FA Backup Codes**: Now hashed with bcrypt (was stored plaintext)
+- **WebSocket Auth**: Removed dev/test plaintext userId fallback — all connections require JWT
+- **Silent Catch Blocks**: Fixed 25+ `.catch(() => {})` across frontend pages with error logging
+- **ErrorBoundary**: Stack traces no longer leaked in production console
+- **PO Totals**: Replaced JS `.reduce()` with SQL `GROUP BY` aggregation
+- **getFullWO**: Cached prepared statements, consolidated 3 SUM queries → 1
+- **API Error Logging**: Centralized error logging in axios response interceptor
+
 ### Added
 - **Dependency-aware deactivation**: DELETE endpoints for fabrics, accessories, customers, suppliers, models, HR, and stage templates now check for active work orders, open POs, and pending invoices before deactivating; return 409 with `blocking_count` on conflict
 - **Frontend deactivation UX**: Fabrics, Accessories, and Models pages updated to use "تعطيل" (deactivate) wording and handle 409 dependency errors with user-friendly messages

@@ -1,7 +1,7 @@
 /**
  * WK-Hub Comprehensive Export Routes
  * Supports CSV and Excel (XLSX) exports for all major entities and reports.
- * All exports are permission-gated.
+ * All exports are permission-gated with granular export permissions (V59).
  */
 const express = require('express');
 const router = express.Router();
@@ -10,6 +10,12 @@ const db = require('../database');
 const ExcelJS = require('exceljs');
 const { requirePermission } = require('../middleware/auth');
 const { round2, safeSubtract } = require('../utils/money');
+
+// V59: All export routes require base export permission
+router.use(requirePermission('exports', 'execute'));
+
+// V59: Configurable row limit for exports — prevents memory DoS
+const EXPORT_MAX_ROWS = parseInt(process.env.EXPORT_MAX_ROWS) || 10000;
 
 // ─── HELPERS ────────────────────────────────────
 const BOM = '\uFEFF';
@@ -29,14 +35,16 @@ function toCSVString(rows, columns, headerLabels) {
 }
 
 function sendCSV(res, filename, rows, columns, headerLabels) {
+  const bounded = boundRows(rows, res);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.send(BOM + toCSVString(rows, columns, headerLabels));
+  res.send(BOM + toCSVString(bounded, columns, headerLabels));
 }
 
 // 1.1: Rewritten sendExcel using exceljs (replacing vulnerable xlsx library)
 async function sendExcel(res, filename, sheets) {
   const workbook = new ExcelJS.Workbook();
+  let totalRows = 0;
   for (const { name, data, columns, headerLabels } of sheets) {
     const ws = workbook.addWorksheet(name.slice(0, 31), { views: [{ rightToLeft: true }] });
     const labels = headerLabels || columns;
@@ -46,11 +54,14 @@ async function sendExcel(res, filename, sheets) {
     ws.getRow(1).font = { bold: true };
     // Set column widths
     ws.columns = labels.map((label, i) => ({ width: Math.max(label.length + 4, 12) }));
-    // Add data rows
-    for (const row of data) {
+    // Add data rows (bounded)
+    const bounded = data.slice(0, EXPORT_MAX_ROWS - totalRows);
+    for (const row of bounded) {
       ws.addRow(columns.map(col => row[col] ?? ''));
     }
+    totalRows += bounded.length;
   }
+  if (totalRows >= EXPORT_MAX_ROWS) res.setHeader('X-Export-Truncated', 'true');
   const buf = await workbook.xlsx.writeBuffer();
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -62,15 +73,26 @@ function getFormat(req) {
 }
 
 function dateFilter(req) {
-  const from = req.query.from || '2000-01-01';
-  const to = req.query.to || '2099-12-31';
+  const now = new Date();
+  const defaultFrom = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+  const from = req.query.from || defaultFrom;
+  const to = req.query.to || now.toISOString().slice(0, 10);
   return { from, to };
+}
+
+// V59: Truncate result set and flag truncation in response header
+function boundRows(rows, res) {
+  if (rows.length >= EXPORT_MAX_ROWS) {
+    res.setHeader('X-Export-Truncated', 'true');
+    return rows.slice(0, EXPORT_MAX_ROWS);
+  }
+  return rows;
 }
 
 // ═══════════════════════════════════════════════
 // 1. SUPPLIERS REPORT (by supplier: POs, spending, fabric types)
 // ═══════════════════════════════════════════════
-router.get('/suppliers', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/suppliers', requirePermission('exports_suppliers', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -104,7 +126,7 @@ router.get('/suppliers', requirePermission('reports', 'view'), async (req, res) 
 // ═══════════════════════════════════════════════
 // 2. FABRIC USAGE REPORT (by fabric: consumption, batches, WOs)
 // ═══════════════════════════════════════════════
-router.get('/fabric-usage', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/fabric-usage', requirePermission('exports_fabrics', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -157,7 +179,7 @@ router.get('/fabric-usage', requirePermission('reports', 'view'), async (req, re
 // ═══════════════════════════════════════════════
 // 3. ACCESSORY USAGE REPORT
 // ═══════════════════════════════════════════════
-router.get('/accessory-usage', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/accessory-usage', requirePermission('exports_accessories', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -208,7 +230,7 @@ router.get('/accessory-usage', requirePermission('reports', 'view'), async (req,
 // ═══════════════════════════════════════════════
 // 4. WORK ORDER COST BREAKDOWN (by WO with full cost math)
 // ═══════════════════════════════════════════════
-router.get('/wo-cost-breakdown', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/wo-cost-breakdown', requirePermission('exports_workorders', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -246,7 +268,7 @@ router.get('/wo-cost-breakdown', requirePermission('reports', 'view'), async (re
 // ═══════════════════════════════════════════════
 // 5. MODEL PROFITABILITY REPORT
 // ═══════════════════════════════════════════════
-router.get('/model-profitability', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/model-profitability', requirePermission('exports_reports', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -287,7 +309,7 @@ router.get('/model-profitability', requirePermission('reports', 'view'), async (
 // ═══════════════════════════════════════════════
 // 6. PURCHASE ORDER DETAIL BY SUPPLIER (costs, items)
 // ═══════════════════════════════════════════════
-router.get('/po-by-supplier', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/po-by-supplier', requirePermission('exports_purchaseorders', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -320,7 +342,7 @@ router.get('/po-by-supplier', requirePermission('reports', 'view'), async (req, 
 // ═══════════════════════════════════════════════
 // 7. INVENTORY VALUATION (fabric + accessories)
 // ═══════════════════════════════════════════════
-router.get('/inventory-valuation', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/inventory-valuation', requirePermission('exports_fabrics', 'execute'), async (req, res) => {
   try {
     const fabrics = db.prepare(`
       SELECT f.code, f.name, 'fabric' as item_type, f.fabric_type as sub_type,
@@ -364,7 +386,7 @@ router.get('/inventory-valuation', requirePermission('reports', 'view'), async (
 // ═══════════════════════════════════════════════
 // 8. WASTE ANALYSIS REPORT
 // ═══════════════════════════════════════════════
-router.get('/waste-analysis', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/waste-analysis', requirePermission('exports_workorders', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -398,7 +420,7 @@ router.get('/waste-analysis', requirePermission('reports', 'view'), async (req, 
 // ═══════════════════════════════════════════════
 // 9. FINANCIAL SUMMARY (revenue, costs, profit by month)
 // ═══════════════════════════════════════════════
-router.get('/financial-summary', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/financial-summary', requirePermission('exports_accounting', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
 
@@ -464,7 +486,7 @@ router.get('/financial-summary', requirePermission('reports', 'view'), async (re
 // ═══════════════════════════════════════════════
 // 10. CUSTOMER REPORT (sales, payments, balances)
 // ═══════════════════════════════════════════════
-router.get('/customers', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/customers', requirePermission('exports_customers', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -503,7 +525,7 @@ router.get('/customers', requirePermission('reports', 'view'), async (req, res) 
 // ═══════════════════════════════════════════════
 // 11. PRODUCTION QUALITY REPORT (QC inspections)
 // ═══════════════════════════════════════════════
-router.get('/quality-report', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/quality-report', requirePermission('exports_reports', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -533,7 +555,7 @@ router.get('/quality-report', requirePermission('reports', 'view'), async (req, 
 // ═══════════════════════════════════════════════
 // 12. HR/PAYROLL REPORT
 // ═══════════════════════════════════════════════
-router.get('/payroll', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/payroll', requirePermission('exports_payroll', 'execute'), async (req, res) => {
   try {
     const period = req.query.period; // e.g. "2026-01"
     let rows;
@@ -579,7 +601,7 @@ router.get('/payroll', requirePermission('reports', 'view'), async (req, res) =>
 // ═══════════════════════════════════════════════
 // 13. COMPREHENSIVE MULTI-SHEET EXCEL EXPORT
 // ═══════════════════════════════════════════════
-router.get('/full-export', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/full-export', requirePermission('exports_accounting', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
 
@@ -606,7 +628,7 @@ router.get('/full-export', requirePermission('reports', 'view'), async (req, res
 // ═══════════════════════════════════════════════
 // 14. EMPLOYEES EXPORT
 // ═══════════════════════════════════════════════
-router.get('/employees', requirePermission('hr', 'view'), async (req, res) => {
+router.get('/employees', requirePermission('exports_hr', 'execute'), async (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT e.emp_code, e.full_name, e.department, e.job_title, e.employment_type,
@@ -628,7 +650,7 @@ router.get('/employees', requirePermission('hr', 'view'), async (req, res) => {
 // ═══════════════════════════════════════════════
 // 15. MACHINES EXPORT
 // ═══════════════════════════════════════════════
-router.get('/machines', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/machines', requirePermission('exports_reports', 'execute'), async (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT mc.code, mc.name, mc.machine_type, mc.brand, mc.model_number,
@@ -651,7 +673,7 @@ router.get('/machines', requirePermission('reports', 'view'), async (req, res) =
 // ═══════════════════════════════════════════════
 // 16. STAGE PROGRESS EXPORT
 // ═══════════════════════════════════════════════
-router.get('/stage-progress', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/stage-progress', requirePermission('exports_workorders', 'execute'), async (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT ws.id, wo.wo_number, m.model_code, ws.stage_name, ws.sort_order,
@@ -678,7 +700,7 @@ router.get('/stage-progress', requirePermission('reports', 'view'), async (req, 
 // ═══════════════════════════════════════════════
 // 17. PRODUCTION TIMELINE EXPORT
 // ═══════════════════════════════════════════════
-router.get('/production-timeline', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/production-timeline', requirePermission('exports_workorders', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -708,7 +730,7 @@ router.get('/production-timeline', requirePermission('reports', 'view'), async (
 // ═══════════════════════════════════════════════
 // 18. PURCHASE SUMMARY BY TYPE
 // ═══════════════════════════════════════════════
-router.get('/purchase-summary', requirePermission('reports', 'view'), async (req, res) => {
+router.get('/purchase-summary', requirePermission('exports_purchaseorders', 'execute'), async (req, res) => {
   try {
     const { from, to } = dateFilter(req);
     const rows = db.prepare(`
@@ -738,7 +760,7 @@ router.get('/purchase-summary', requirePermission('reports', 'view'), async (req
 // ═══════════════════════════════════════════════
 // 19. EXPORT CATALOG (lists available exports)
 // ═══════════════════════════════════════════════
-router.get('/catalog', requirePermission('reports', 'view'), (req, res) => {
+router.get('/catalog', (req, res) => {
   res.json([
     { key: 'suppliers', label: 'الموردين', icon: 'Users', description: 'بيانات الموردين وإحصائيات الشراء' },
     { key: 'fabric-usage', label: 'استهلاك الأقمشة', icon: 'Scissors', description: 'تحليل استخدام الأقمشة والمخزون' },

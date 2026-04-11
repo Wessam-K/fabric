@@ -32,6 +32,11 @@ const MODULE_LABELS = {
   inventory: 'المخزون', reports: 'التقارير', hr: 'الموارد البشرية', payroll: 'الرواتب',
   users: 'المستخدمين', audit: 'سجل المراجعة', settings: 'الإعدادات', machines: 'الماكينات',
   maintenance: 'الصيانة', expenses: 'المصروفات', accounting: 'المحاسبة', customers: 'العملاء',
+  exports: 'التصدير العام', exports_customers: 'تصدير العملاء', exports_suppliers: 'تصدير الموردين',
+  exports_fabrics: 'تصدير الأقمشة', exports_accessories: 'تصدير الاكسسوارات', exports_workorders: 'تصدير الإنتاج',
+  exports_invoices: 'تصدير الفواتير', exports_purchaseorders: 'تصدير المشتريات', exports_hr: 'تصدير الموارد البشرية',
+  exports_payroll: 'تصدير الرواتب', exports_accounting: 'تصدير المحاسبة', exports_reports: 'تصدير التقارير',
+  exports_auditlog: 'تصدير المراجعة', sales_orders: 'أوامر البيع',
 };
 
 const MODULE_ICONS = {
@@ -40,9 +45,14 @@ const MODULE_ICONS = {
   inventory: '📦', reports: '📈', hr: '👥', payroll: '💰',
   users: '🛡️', audit: '📋', settings: '⚙️', machines: '⚡',
   maintenance: '🔧', expenses: '💸', accounting: '📒', customers: '🤝',
+  exports: '📤', exports_customers: '📤', exports_suppliers: '📤',
+  exports_fabrics: '📤', exports_accessories: '📤', exports_workorders: '📤',
+  exports_invoices: '📤', exports_purchaseorders: '📤', exports_hr: '📤',
+  exports_payroll: '📤', exports_accounting: '📤', exports_reports: '📤',
+  exports_auditlog: '📤', sales_orders: '🛍️',
 };
 
-const ACTION_LABELS = { view: 'عرض', create: 'إنشاء', edit: 'تعديل', delete: 'حذف', export: 'تصدير', manage: 'إدارة', approve: 'موافقة' };
+const ACTION_LABELS = { view: 'عرض', create: 'إنشاء', edit: 'تعديل', delete: 'حذف', export: 'تصدير', manage: 'إدارة', approve: 'موافقة', execute: 'تنفيذ', post: 'ترحيل' };
 
 export default function Permissions() {
   const { user } = useAuth();

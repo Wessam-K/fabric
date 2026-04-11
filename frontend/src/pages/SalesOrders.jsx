@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, ShoppingCart, Eye, X, Factory, ArrowLeftRight } from 'lucide-react';
+import { Search, ShoppingCart, Eye, X, Factory, ArrowLeftRight, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -9,6 +9,7 @@ import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
 import HelpButton from '../components/HelpButton';
+import { exportToExcel } from '../utils/exportExcel';
 
 const STATUS_COLORS = { confirmed: 'bg-blue-100 text-blue-700', in_production: 'bg-yellow-100 text-yellow-700', shipped: 'bg-purple-100 text-purple-700', delivered: 'bg-green-100 text-green-700', cancelled: 'bg-red-100 text-red-700' };
 const STATUS_LABELS = { confirmed: 'مؤكد', in_production: 'قيد الإنتاج', shipped: 'تم الشحن', delivered: 'تم التسليم', cancelled: 'ملغي' };
@@ -69,6 +70,8 @@ export default function SalesOrders() {
           <option value="">كل الحالات</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
+        <div className="flex-1" />
+        <button onClick={() => exportToExcel(orders.map(o => ({ 'رقم الأمر': o.so_number, 'العميل': o.customer_name, 'الحالة': STATUS_LABELS[o.status] || o.status, 'الإجمالي': o.total, 'تاريخ الطلب': o.order_date, 'تاريخ التسليم': o.delivery_date })), 'أوامر البيع')} className="btn btn-ghost text-xs flex items-center gap-1"><Download size={14} /> تصدير</button>
       </div>
 
       {loading ? <div className="text-center py-12 text-gray-400">جاري التحميل...</div> : orders.length === 0 ? (

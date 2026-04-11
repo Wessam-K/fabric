@@ -34,14 +34,14 @@ export default function Payroll() {
   useEffect(() => { loadPeriods(); }, []);
 
   function loadPeriods() {
-    api.get('/hr/payroll').then(r => setPeriods(r.data)).catch(() => {});
+    api.get('/hr/payroll').then(r => setPeriods(r.data)).catch(e => console.error('Payroll load failed:', e.message));
   }
 
   function loadRecords(periodId) {
     api.get(`/hr/payroll/${periodId}`).then(r => {
       setRecords(r.data.records);
       setSelectedPeriod(r.data.period);
-    }).catch(() => {});
+    }).catch(e => console.error('Payroll records load failed:', e.message));
   }
 
   async function createPeriod() {

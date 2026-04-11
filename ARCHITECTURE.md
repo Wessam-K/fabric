@@ -1,5 +1,5 @@
 # WK-Factory Architecture Document
-> Updated: April 6, 2026 — Production Audit v8
+> Updated: April 11, 2026 — Comprehensive ERP Overhaul
 
 ## 1. System Overview
 
@@ -26,7 +26,7 @@
 
 **Electron 41.0.2** → React 19 + Vite 6 → Express 4 → SQLite (WAL mode)
 
-## 2. Database Schema Map (94 Tables, Schema V35)
+## 2. Database Schema Map (101 Tables, Schema V59)
 
 ### Auth & Users (7 tables)
 | Table | PK | Key Columns | Notes |
@@ -131,7 +131,7 @@
 | ncr_reports | id | ncr_number, wo_id |
 | ncr_actions | id | ncr_id FK |
 
-### Accounting (5 tables)
+### Accounting (6 tables)
 | Table | PK | Key Columns |
 |-------|-----|------------|
 | chart_of_accounts | id | account_code (UNIQUE) |
@@ -139,6 +139,7 @@
 | journal_entry_lines | id | journal_entry_id FK (CASCADE) |
 | expenses | id | description, amount, status |
 | auto_journal_config | id | event_type (UNIQUE) |
+| fiscal_periods | id | period_start, period_end, status |
 
 ### Shipping (3 tables)
 | Table | PK | Key Columns |
@@ -199,7 +200,7 @@
 | /api/samples | 7 | samples |
 | /api/returns | 8 | returns |
 | /api/shipping | 8 | shipping |
-| /api/accounting | 8 | accounting |
+| /api/accounting | 12 | accounting |
 | /api/auto-journal | 5 | accounting |
 | /api/notifications | 6 | (self-access) |
 | /api/documents | 5 | documents |
@@ -241,6 +242,9 @@
 | /settings | Settings | settings:view | Superadmin |
 | /backups | Backups | backups:view | Superadmin |
 | /audit-log | AuditLog | audit:view | Manager+ |
+| /accounting/income-statement | IncomeStatement | accounting:view | Accountant+ |
+| /accounting/balance-sheet | BalanceSheet | accounting:view | Accountant+ |
+| /accounting/cash-flow | CashFlowStatement | accounting:view | Accountant+ |
 | (+ 31 more pages) | | | |
 
 ## 5. Authentication & Authorization Flow
@@ -326,7 +330,7 @@ Draft → Sent → Overdue → Paid (partial/full)
 | react | 19.x | UI framework | Low |
 | axios | 1.x | HTTP client | Low |
 | chart.js | 4.x | Charts | Low |
-| xlsx | * | Excel export (client-side) | **HIGH** — migrate to exceljs |
+| exceljs | 4.x | Excel export (client-side) | Low |
 | react-router-dom | 7.x | Routing | Low |
 
 ### Electron
@@ -372,7 +376,8 @@ Running `node seed.js` produces:
 | Purchase Orders | 12 | 8 received, 2 partial, 1 sent, 1 draft-range |
 | Work Orders | 18 | 5 completed, 10 in-progress, 3 pending |
 | Invoices | 10 | 5 paid, 1 partially_paid, 2 sent, 2 draft |
-| Journal Entries | 26 | PO receipts, invoices, payments |
+| Chart of Accounts | 21 | Cash, Bank, Inventory, AR, AP, Equipment, Revenue, Expenses, Equity |
+| Journal Entries | 37 | PO receipts, invoices, payments, operating expenses, capital injection |
 | Employees | 6 | EMP-001–006 with 384 attendance records |
 | Machines | 4 | MACH-001–004, 1 under maintenance |
 | QC Checks | 22 | Per-stage pass/fail records |

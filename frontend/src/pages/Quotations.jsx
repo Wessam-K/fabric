@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, FileText, ShoppingCart, Eye, X, ArrowLeftRight } from 'lucide-react';
+import { Plus, Search, FileText, ShoppingCart, Eye, X, ArrowLeftRight, Download } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import api from '../utils/api';
 import { useToast } from '../components/Toast';
@@ -8,6 +8,7 @@ import Tooltip from '../components/Tooltip';
 import Pagination from '../components/Pagination';
 import PermissionGuard from '../components/PermissionGuard';
 import { useAuth } from '../context/AuthContext';
+import { exportToExcel } from '../utils/exportExcel';
 
 const STATUS_COLORS = { draft: 'bg-gray-100 text-gray-700', sent: 'bg-blue-100 text-blue-700', accepted: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700', expired: 'bg-orange-100 text-orange-700', cancelled: 'bg-red-100 text-red-700' };
 const STATUS_LABELS = { draft: 'مسودة', sent: 'مرسل', accepted: 'مقبول', rejected: 'مرفوض', expired: 'منتهي', cancelled: 'ملغي' };
@@ -41,8 +42,8 @@ export default function Quotations() {
 
   useEffect(() => { load(); }, [page, statusFilter, search]);
   useEffect(() => {
-    api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(() => {});
-    api.get('/settings').then(r => { const tax = parseFloat(r.data?.tax_rate) || 0; setDefaultTax(tax); }).catch(() => {});
+    api.get('/customers').then(r => setCustomers(r.data?.data || r.data || [])).catch(e => console.error('Customers load failed:', e.message));
+    api.get('/settings').then(r => { const tax = parseFloat(r.data?.tax_rate) || 0; setDefaultTax(tax); }).catch(e => console.error('Settings load failed:', e.message));
   }, []);
 
   const openNew = async () => {
@@ -115,6 +116,7 @@ export default function Quotations() {
           <option value="">كل الحالات</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
+        <button onClick={() => exportToExcel(quotations.map(q => ({ 'رقم العرض': q.quotation_number, 'العميل': q.customer_name, 'الحالة': STATUS_LABELS[q.status] || q.status, 'الإجمالي': q.total, 'صالح حتى': q.valid_until })), 'عروض الأسعار')} className="btn btn-ghost text-xs flex items-center gap-1"><Download size={14} /> تصدير</button>
         <PermissionGuard module="quotations" action="create">
           <button onClick={openNew} className="flex items-center gap-2 bg-[#c9a84c] text-[#1a1a2e] px-4 py-2 rounded-lg font-bold hover:bg-[#b8973f]">
             <Plus size={18} /> عرض سعر جديد

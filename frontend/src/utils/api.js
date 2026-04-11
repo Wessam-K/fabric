@@ -17,6 +17,10 @@ let isRedirecting = false;
 api.interceptors.response.use(
   res => res,
   err => {
+    // V59: Log all API errors centrally (fixes silent catch blocks)
+    if (import.meta.env.DEV) {
+      console.error(`[API ${err.config?.method?.toUpperCase()} ${err.config?.url}]`, err.response?.status || 'network', err.message);
+    }
     if (err.response?.status === 401 && !isRedirecting && !window.location.hash?.includes('login') && !window.location.pathname?.endsWith('/login')) {
       isRedirecting = true;
       localStorage.removeItem('wk_user');

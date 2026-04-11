@@ -25,7 +25,7 @@ export default function InvoiceView() {
   useEffect(() => {
     api.get(`/invoices/${id}`)
       .then(r => setInvoice(r.data))
-      .catch(() => {})
+      .catch(e => console.error('Invoice load failed:', e.message))
       .finally(() => setLoading(false));
   }, [id]);
 

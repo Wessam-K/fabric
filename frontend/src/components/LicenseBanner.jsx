@@ -9,7 +9,7 @@ export default function LicenseBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    api.get('/license/status').then(r => setLicense(r.data)).catch(() => {});
+    api.get('/license/status').then(r => setLicense(r.data)).catch(e => console.error('License check failed:', e.message));
   }, []);
 
   if (!license || dismissed) return null;

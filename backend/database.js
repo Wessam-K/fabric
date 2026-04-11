@@ -11,6 +11,18 @@ db.pragma('synchronous = NORMAL');
 db.pragma('cache_size = -32000');
 db.pragma('temp_store = MEMORY');
 
+// V59: Startup integrity check
+try {
+  const intCheck = db.pragma('quick_check');
+  if (!intCheck || !intCheck.length || intCheck[0].quick_check !== 'ok') {
+    console.error('DATABASE INTEGRITY CHECK FAILED — database may be corrupt');
+    process.exit(1);
+  }
+} catch (err) {
+  console.error('Database integrity check error:', err.message);
+  process.exit(1);
+}
+
 function initializeDatabase() {
   // ═══════════════════════════════════════════════
   // LAYER 1: MODELS (Simple master data catalog)
@@ -3066,6 +3078,105 @@ function runMigrations() {
     addCol('attendance', 'check_in', 'TEXT');
     addCol('attendance', 'check_out', 'TEXT');
     db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (58)`);
+  }
+
+  // ═══ V59: Export permissions, delete permission seeding, RBAC hardening ═══
+  const v59 = db.prepare('SELECT 1 FROM schema_migrations WHERE version = 59').get();
+  if (!v59) {
+    const insPD59 = db.prepare('INSERT OR IGNORE INTO permission_definitions (module, action, label_ar, description_ar, sort_order) VALUES (?,?,?,?,?)');
+    const insRP59 = db.prepare('INSERT OR IGNORE INTO role_permissions (role, module, action, allowed) VALUES (?,?,?,?)');
+
+    // ── 59.1: Export permission definitions ──
+    const exportPerms = [
+      ['exports',              'execute', 'التصدير العام',               'الوصول لمركز التصدير',                   200],
+      ['exports_customers',    'execute', 'تصدير العملاء',              'تصدير بيانات العملاء',                   201],
+      ['exports_suppliers',    'execute', 'تصدير الموردين',             'تصدير بيانات الموردين',                  202],
+      ['exports_fabrics',      'execute', 'تصدير الأقمشة',             'تصدير بيانات الأقمشة والمخزون',          203],
+      ['exports_accessories',  'execute', 'تصدير الاكسسوارات',         'تصدير بيانات الاكسسوارات',               204],
+      ['exports_workorders',   'execute', 'تصدير أوامر الإنتاج',       'تصدير بيانات أوامر الإنتاج والتكاليف',   205],
+      ['exports_invoices',     'execute', 'تصدير الفواتير',            'تصدير بيانات الفواتير والمبيعات',         206],
+      ['exports_purchaseorders','execute','تصدير أوامر الشراء',        'تصدير بيانات أوامر الشراء',              207],
+      ['exports_hr',           'execute', 'تصدير الموارد البشرية',     'تصدير بيانات الموظفين',                  208],
+      ['exports_payroll',      'execute', 'تصدير الرواتب',             'تصدير كشوف الرواتب والبدلات',            209],
+      ['exports_accounting',   'execute', 'تصدير المحاسبة',            'تصدير البيانات المالية والمحاسبية',       210],
+      ['exports_reports',      'execute', 'تصدير التقارير',            'تصدير التقارير العامة',                   211],
+      ['exports_auditlog',     'execute', 'تصدير سجل المراجعة',       'تصدير سجل المراجعة الكامل',              212],
+    ];
+    for (const p of exportPerms) { insPD59.run(...p); }
+
+    // ── 59.2: Export role-permission assignments ──
+    // admin: ALL exports
+    for (const ep of exportPerms) { insRP59.run('superadmin', ep[0], 'execute', 1); }
+    // manager: all except payroll details and audit log
+    for (const ep of exportPerms) {
+      if (ep[0] !== 'exports_payroll' && ep[0] !== 'exports_auditlog') {
+        insRP59.run('manager', ep[0], 'execute', 1);
+      }
+    }
+    // accountant: accounting, invoices, suppliers, purchase orders + base
+    for (const mod of ['exports', 'exports_accounting', 'exports_invoices', 'exports_suppliers', 'exports_purchaseorders']) {
+      insRP59.run('accountant', mod, 'execute', 1);
+    }
+    // warehouse (production role in this system): fabrics, accessories, workorders + base
+    for (const mod of ['exports', 'exports_fabrics', 'exports_accessories', 'exports_workorders']) {
+      insRP59.run('production', mod, 'execute', 1);
+    }
+    // hr: hr + payroll + base
+    for (const mod of ['exports', 'exports_hr', 'exports_payroll']) {
+      insRP59.run('hr', mod, 'execute', 1);
+    }
+    // viewer: NO export permissions
+
+    // ── 59.3: Ensure delete permission definitions exist for all major modules ──
+    const deleteModules = [
+      ['customers',       'delete', 'حذف عميل',           'حذف بيانات العملاء',        68],
+      ['suppliers',       'delete', 'حذف مورد',           'حذف بيانات الموردين',        38],
+      ['work_orders',     'delete', 'حذف أمر إنتاج',     'حذف أوامر الإنتاج',          24],
+      ['invoices',        'delete', 'حذف فاتورة',         'حذف الفواتير',               44],
+      ['purchase_orders', 'delete', 'حذف أمر شراء',      'حذف أوامر الشراء',           54],
+      ['inventory',       'delete', 'حذف مخزون',         'حذف سجلات المخزون',          84],
+      ['hr',              'delete', 'حذف موظف',          'حذف بيانات الموظفين',         104],
+      ['accounting',      'delete', 'حذف قيد محاسبي',    'حذف القيود المحاسبية',        114],
+      ['reports',         'delete', 'حذف تقرير',         'حذف جداول التقارير',          94],
+      ['users',           'delete', 'حذف مستخدم',        'حذف حسابات المستخدمين',      134],
+      ['audit',           'delete', 'حذف سجل مراجعة',   'حذف سجلات المراجعة',          144],
+      ['quotations',      'delete', 'حذف عرض سعر',      'حذف عروض الأسعار',            154],
+      ['samples',         'delete', 'حذف عينة',          'حذف العينات',                 164],
+      ['quality',         'delete', 'حذف فحص جودة',     'حذف سجلات الجودة',            174],
+      ['expenses',        'delete', 'حذف مصروف',        'حذف المصروفات',               184],
+      ['maintenance',     'delete', 'حذف أمر صيانة',    'حذف أوامر الصيانة',            194],
+    ];
+    for (const p of deleteModules) { insPD59.run(...p); }
+
+    // ── 59.4: Delete role-permission assignments ──
+    // superadmin: can delete everything
+    for (const dm of deleteModules) { insRP59.run('superadmin', dm[0], 'delete', 1); }
+    // manager: most deletes except hr, accounting, users, audit
+    for (const mod of ['customers', 'suppliers', 'work_orders', 'invoices', 'purchase_orders', 'inventory', 'reports', 'quotations', 'samples', 'quality', 'expenses', 'maintenance']) {
+      insRP59.run('manager', mod, 'delete', 1);
+    }
+    // accountant: invoices, purchase_orders, accounting, expenses
+    for (const mod of ['invoices', 'purchase_orders', 'accounting', 'expenses']) {
+      insRP59.run('accountant', mod, 'delete', 1);
+    }
+    // production: inventory only
+    insRP59.run('production', 'inventory', 'delete', 1);
+    // hr: hr only
+    insRP59.run('hr', 'hr', 'delete', 1);
+    // viewer: NO delete permissions
+
+    // ── 59.5: Ensure sales_orders permissions exist ──
+    insPD59.run('sales_orders', 'view',   'عرض أوامر البيع',   'عرض قائمة أوامر البيع',   215);
+    insPD59.run('sales_orders', 'create', 'إنشاء أمر بيع',    'إنشاء أوامر بيع جديدة',   216);
+    insPD59.run('sales_orders', 'edit',   'تعديل أمر بيع',    'تعديل أوامر البيع',        217);
+    insPD59.run('sales_orders', 'delete', 'حذف أمر بيع',     'حذف أوامر البيع',          218);
+    for (const role of ['superadmin', 'manager', 'accountant']) {
+      for (const act of ['view', 'create', 'edit', 'delete']) { insRP59.run(role, 'sales_orders', act, 1); }
+    }
+    insRP59.run('production', 'sales_orders', 'view', 1);
+    insRP59.run('viewer', 'sales_orders', 'view', 1);
+
+    db.exec(`INSERT OR IGNORE INTO schema_migrations (version) VALUES (59)`);
   }
 }
 

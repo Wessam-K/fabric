@@ -14,6 +14,21 @@
             "date": 1775512800007,
             "name": "C:\\msn3\\fabric\\backend\\logs\\wk-backend-2026-04-07.log",
             "hash": "c699e0b0eec1ab4a38675fd7c81ccec4ead8b11f439573a209e91d143aa90a97"
+        },
+        {
+            "date": 1775687543969,
+            "name": "C:\\msn3\\fabric\\backend\\logs\\wk-backend-2026-04-09.log",
+            "hash": "ca9992686b954804306d22e6e2b08f0b3ffb3252046b87f0312a2603885d1173"
+        },
+        {
+            "date": 1775854280859,
+            "name": "C:\\msn3\\fabric\\backend\\logs\\wk-backend-2026-04-10.log",
+            "hash": "067702319e15dae9d4445675fa114426e858ce4dc4afd7deac18d6388632ef53"
+        },
+        {
+            "date": 1775915613514,
+            "name": "C:\\msn3\\fabric\\backend\\logs\\wk-backend-2026-04-11.log",
+            "hash": "65996491d5bc468a2dda9f9b3b385c6606fa4e3dadc0708e784b98d8bca6bf1b"
         }
     ],
     "hashType": "sha256"

@@ -171,6 +171,9 @@ router.get('/:id/ledger', requirePermission('suppliers', 'view'), (req, res) => 
   try {
     const supplier = db.prepare('SELECT * FROM suppliers WHERE id = ?').get(req.params.id);
     if (!supplier) return res.status(404).json({ error: 'المورد غير موجود' });
+    // V59: Pagination support (default max 1000 entries)
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit) || 200));
     // Get all POs as debits
     const pos = db.prepare(`SELECT id, po_number, total_amount, paid_amount, status, order_date, received_date
       FROM purchase_orders WHERE supplier_id=? AND status NOT IN ('cancelled','draft') ORDER BY order_date DESC`).all(supplier.id);
@@ -195,7 +198,10 @@ router.get('/:id/ledger', requirePermission('suppliers', 'view'), (req, res) => 
     }
     const totalOrdered = pos.reduce((s, p) => s + (p.total_amount || 0), 0);
     const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
-    res.json({ supplier, entries, summary: { total_ordered: totalOrdered, total_paid: totalPaid, balance: totalOrdered - totalPaid } });
+    // V59: Paginate the entries
+    const total = entries.length;
+    const paged = entries.slice((page - 1) * limit, page * limit);
+    res.json({ supplier, entries: paged, total, page, pages: Math.ceil(total / limit), summary: { total_ordered: totalOrdered, total_paid: totalPaid, balance: totalOrdered - totalPaid } });
   } catch (err) { console.error(err); res.status(500).json({ error: 'حدث خطأ داخلي' }); }
 });
 

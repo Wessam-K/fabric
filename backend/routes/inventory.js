@@ -264,6 +264,8 @@ router.put('/transfers/:id/complete', requirePermission('inventory', 'edit'), (r
 // GET /api/inventory/stock-valuation — FIFO-based inventory valuation
 router.get('/stock-valuation', requirePermission('inventory', 'view'), (req, res) => {
   try {
+    // V59: LIMIT 500 per category to bound result set
+    const maxRows = Math.min(500, parseInt(req.query.limit) || 500);
     const fabricVal = db.prepare(`
       SELECT f.code, f.name, f.fabric_type,
         COALESCE(SUM(fib.received_meters - fib.used_meters - fib.wasted_meters), 0) as available_meters,
@@ -279,7 +281,8 @@ router.get('/stock-valuation', requirePermission('inventory', 'view'), (req, res
       GROUP BY f.code
       HAVING COALESCE(SUM(fib.received_meters - fib.used_meters - fib.wasted_meters), 0) > 0
       ORDER BY total_value DESC
-    `).all();
+      LIMIT ?
+    `).all(maxRows);
 
     const accessoryVal = db.prepare(`
       SELECT a.code, a.name, a.acc_type, a.unit,
@@ -294,7 +297,8 @@ router.get('/stock-valuation', requirePermission('inventory', 'view'), (req, res
       WHERE a.status = 'active' AND a.quantity_on_hand > 0
       GROUP BY a.code
       ORDER BY total_value DESC
-    `).all();
+      LIMIT ?
+    `).all(maxRows);
 
     const fabricTotal = fabricVal.reduce((s, r) => s + r.total_value, 0);
     const accessoryTotal = accessoryVal.reduce((s, r) => s + r.total_value, 0);

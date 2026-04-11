@@ -33,7 +33,7 @@ export default function AuditLog() {
     api.get('/audit-log', { params }).then(r => {
       setLogs(r.data.logs);
       setTotal(r.data.total);
-    }).catch(() => {});
+    }).catch(e => console.error('Audit log load failed:', e.message));
   }
 
   function handleExport() {

@@ -14,6 +14,21 @@
             "date": 1775548910552,
             "name": "C:\\msn3\\fabric\\backend\\logs\\error-2026-04-07.log",
             "hash": "673763dc32b5f4dabe55ab95294f137913f924c7cd051c72c0a2ce528ada03c6"
+        },
+        {
+            "date": 1775687543971,
+            "name": "C:\\msn3\\fabric\\backend\\logs\\error-2026-04-09.log",
+            "hash": "23dd6f85ab90b09c5244b6f199f271335f3d96d876ca876bba779dd99a936ab1"
+        },
+        {
+            "date": 1775854280880,
+            "name": "C:\\msn3\\fabric\\backend\\logs\\error-2026-04-10.log",
+            "hash": "6ddb765086cb2deb6630c394ed0bfa67f9db3a3c00c633f50eb01085fc8a1dfe"
+        },
+        {
+            "date": 1775915613516,
+            "name": "C:\\msn3\\fabric\\backend\\logs\\error-2026-04-11.log",
+            "hash": "b7a44c414e5fd912dc741da5f15af333e16b1f28cd6f3179b834e849541a26fd"
         }
     ],
     "hashType": "sha256"

@@ -13,6 +13,15 @@ const { apiKeyAuth } = require('./middleware/apiKey'); // Phase 3.5
 const { csrfProtection } = require('./middleware/csrf'); // Phase 1.1: CSRF
 const { contentTypeEnforcement } = require('./middleware/contentType'); // Phase 1.2: Content-Type enforcement
 const logger = require('./utils/logger'); // Phase 6.1: Structured logging
+
+// V59: Route stray console calls through Winston (non-test only)
+if (process.env.NODE_ENV !== 'test') {
+  const _origError = console.error;
+  const _origWarn = console.warn;
+  console.error = (...args) => { logger.error(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); };
+  console.warn = (...args) => { logger.warn(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')); };
+}
+
 const { migrate } = require('./migrate'); // Phase 2.1: Migration runner
 const { LicenseManager } = require('./lib/license'); // Phase 5.1: Licensing
 const { initWebSocket, getClientCount } = require('./utils/websocket'); // Phase 3.7: WebSocket
@@ -498,17 +507,24 @@ app.post('/api/setup/create-admin', (req, res) => {
 const { requireFeature, requireTier } = require('./middleware/licenseGuard');
 
 // Phase 3.6: Webhook management endpoints (superadmin only, requires professional+)
-const { createWebhook, updateWebhook, listWebhooks, deleteWebhook, getWebhookLogs } = require('./utils/webhooks');
+const { createWebhookSafe, updateWebhook, listWebhooks, deleteWebhook, getWebhookLogs } = require('./utils/webhooks');
 app.get('/api/webhooks', requireAuth, (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
   res.json(listWebhooks());
 });
-app.post('/api/webhooks', requireAuth, requireFeature('webhooks'), (req, res) => {
+app.post('/api/webhooks', requireAuth, requireFeature('webhooks'), async (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
   const { name, url, events, secret } = req.body;
   if (!name || !url || !events?.length) return res.status(400).json({ error: 'الاسم والرابط والأحداث مطلوبة' });
-  const id = createWebhook(name, url, events, secret, req.user.id);
-  res.status(201).json({ id });
+  try {
+    const id = await createWebhookSafe(name, url, events, secret, req.user.id);
+    res.status(201).json({ id });
+  } catch (err) {
+    if (err.message?.includes('SSRF') || err.message?.includes('blocked') || err.message?.includes('private')) {
+      return res.status(400).json({ error: 'عنوان URL غير مسموح به' });
+    }
+    throw err;
+  }
 });
 app.put('/api/webhooks/:id', requireAuth, (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'ممنوع' });
@@ -565,17 +581,9 @@ apiRouter.use('/report-schedules', reportSchedulesRouter);
 // Public invite endpoints (no auth required — must be before requireAuth router)
 app.use('/api/users/invite', require('./routes/users').inviteRouter || express.Router());
 
-// ── Production safety: block all DELETE requests (no data deletion allowed) ──
-if (process.env.NODE_ENV === 'production') {
-  app.use('/api', (req, res, next) => {
-    if (req.method === 'DELETE') {
-      // Allow session termination (security feature)
-      if (req.path.startsWith('/sessions')) return next();
-      return res.status(403).json({ error: 'الحذف غير مسموح — بيئة إنتاج' });
-    }
-    next();
-  });
-}
+// V59: Production delete blocking removed — delete access is now controlled by
+// requirePermission(module, 'delete') on each individual route endpoint.
+// Roles without delete permission are blocked at the RBAC level (V59 migration).
 
 app.use('/api', requireAuth, apiRouter);
 app.use('/api/v1', requireAuth, apiRouter);
@@ -1107,6 +1115,11 @@ app.use((err, req, res, _next) => {
 
 const server = app.listen(PORT, () => {
   logger.info(`WK-Factory API running on http://localhost:${PORT}`);
+
+  // V59: Set server-level timeouts
+  server.setTimeout(30000);       // 30s socket timeout
+  server.keepAliveTimeout = 65000; // > nginx's default 60s
+  server.headersTimeout = 66000;   // slightly above keepAliveTimeout
 
   // Phase 3.7: Initialize WebSocket server
   initWebSocket(server);

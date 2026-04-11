@@ -75,8 +75,8 @@ function InspectionsTab() {
 
   useEffect(() => { load(); }, [page, statusFilter]);
   useEffect(() => {
-    api.get('/quality/templates').then(r => { const d = r.data; setTemplates(Array.isArray(d) ? d : d.data || []); }).catch(() => {});
-    api.get('/work-orders', { params: { limit: 100 } }).then(r => setWorkOrders(r.data?.data || [])).catch(() => {});
+    api.get('/quality/templates').then(r => { const d = r.data; setTemplates(Array.isArray(d) ? d : d.data || []); }).catch(e => console.error('Quality templates failed:', e.message));
+    api.get('/work-orders', { params: { limit: 100 } }).then(r => setWorkOrders(r.data?.data || [])).catch(e => console.error('WO load failed:', e.message));
   }, []);
 
   const selectTemplate = async (tid) => {
@@ -392,7 +392,7 @@ function NCRTab() {
   };
 
   useEffect(() => { load(); }, [page]);
-  useEffect(() => { api.get('/work-orders', { params: { limit: 100 } }).then(r => setWorkOrders(r.data?.data || [])).catch(() => {}); }, []);
+  useEffect(() => { api.get('/work-orders', { params: { limit: 100 } }).then(r => setWorkOrders(r.data?.data || [])).catch(e => console.error('WO load failed:', e.message)); }, []);
 
   const save = async () => {
     try { await api.post('/quality/ncr', form); toast.success('تم إنشاء تقرير عدم المطابقة'); setShowModal(false); setForm({ work_order_id: '', inspection_id: '', severity: 'minor', description: '', corrective_action: '' }); load(); }

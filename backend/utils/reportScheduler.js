@@ -101,7 +101,8 @@ async function runScheduledReports() {
         const filePath = path.join(GENERATED_DIR, fileName);
 
         if (ext === 'csv') {
-          fs.writeFileSync(filePath, generateCSV(data), 'utf8');
+          try { fs.writeFileSync(filePath, generateCSV(data), 'utf8'); }
+          catch (writeErr) { console.error(`[ReportScheduler] Write failed (disk full?): ${writeErr.message}`); continue; }
         } else {
           await generateXLSX(data, filePath);
         }
@@ -121,11 +122,33 @@ async function runScheduledReports() {
 
 let intervalId = null;
 
+// V59: Clean up old generated report files
+function cleanOldReportFiles() {
+  try {
+    const maxAgeDays = parseInt(process.env.REPORT_RETENTION_DAYS || '30');
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    const files = fs.readdirSync(GENERATED_DIR);
+    let deleted = 0;
+    for (const file of files) {
+      const filePath = path.join(GENERATED_DIR, file);
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.mtimeMs < cutoff) { fs.unlinkSync(filePath); deleted++; }
+      } catch {}
+    }
+    if (deleted > 0) console.log(`[ReportScheduler] Cleaned ${deleted} old report files (>${maxAgeDays} days)`);
+  } catch (err) {
+    console.error('[ReportScheduler] Cleanup error:', err.message);
+  }
+}
+
 function startScheduler(intervalMs = 5 * 60 * 1000) {
   if (intervalId) return;
   // Run once on startup after short delay
-  setTimeout(() => runScheduledReports(), 10000);
+  setTimeout(() => { runScheduledReports(); cleanOldReportFiles(); }, 10000);
   intervalId = setInterval(runScheduledReports, intervalMs);
+  // V59: Run file cleanup daily
+  setInterval(cleanOldReportFiles, 24 * 60 * 60 * 1000);
   console.log('[ReportScheduler] Started (interval: ' + (intervalMs / 60000) + ' min)');
 }
 
